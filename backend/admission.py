@@ -415,46 +415,35 @@ def record_admission():
                 job_id = job_result.get('id')
                 print(f"✅ [DEBUG] 從 internship_jobs 獲取該公司的第一個職缺 job_id: {job_id}")
         
-        # 7. 在 internship_offers 表中記錄錄取結果 (新增的邏輯)
-        # 這是 get_my_admission API 優先讀取的資料來源
-        print(f"🔍 [DEBUG] record_admission - 準備寫入 internship_offers: student_id={student_id}, job_id={job_id}")
-        
-        # 檢查是否已存在於 internship_offers
+        # 7. 在 matching_results 表中記錄錄取結果（統一媒合結果來源，取代 internship_offers）
+        print(f"🔍 [DEBUG] record_admission - 準備寫入 matching_results: student_id={student_id}, job_id={job_id}")
+        job_title_val = ''
         if job_id:
+            cursor.execute("SELECT title FROM internship_jobs WHERE id = %s", (job_id,))
+            jrow = cursor.fetchone()
+            if jrow and jrow.get('title'):
+                job_title_val = jrow['title']
+        cursor.execute("""
+            SELECT id FROM matching_results
+            WHERE student_id = %s AND semester_id = %s
+            LIMIT 1
+        """, (student_id, current_semester_id))
+        existing_mr = cursor.fetchone()
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        if existing_mr:
             cursor.execute("""
-                SELECT id FROM internship_offers
-                WHERE student_id = %s AND job_id = %s
-            """, (student_id, job_id))
-        else:
-            # 如果 job_id 為 NULL，檢查是否有該學生的其他錄取記錄
-            cursor.execute("""
-                SELECT id FROM internship_offers
-                WHERE student_id = %s AND job_id IS NULL
-            """, (student_id,))
-        existing_offer = cursor.fetchone()
-        print(f"🔍 [DEBUG] existing_offer: {existing_offer}")
-
-        if existing_offer:
-            # 如果已存在，更新錄取狀態和時間（使用 'accepted' 狀態，與資料庫中的值一致）
-            cursor.execute("""
-                UPDATE internship_offers
-                SET status = 'accepted', offered_at = %s, responded_at = %s
+                UPDATE matching_results
+                SET company_id = %s, mentor_id = %s, job_id = %s, job_title = %s, matched_at = %s, status = 'accepted'
                 WHERE id = %s
-            """, (current_datetime_str, current_datetime_str, existing_offer['id']))
-            print(f"✅ [DEBUG] 更新 internship_offers 記錄: id={existing_offer['id']}")
+            """, (company_id, advisor_user_id, job_id, job_title_val or ' ', current_datetime_str, existing_mr['id']))
+            print(f"✅ [DEBUG] 更新 matching_results 記錄: id={existing_mr['id']}")
         else:
-            # 插入新的錄取記錄（使用 'accepted' 狀態）
             cursor.execute("""
-                INSERT INTO internship_offers 
-                (student_id, job_id, status, offered_at, responded_at)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (student_id, job_id, 'accepted', current_datetime_str, current_datetime_str))
-            inserted_id = cursor.lastrowid
-            print(f"✅ [DEBUG] 插入新 internship_offers 記錄: id={inserted_id}, student_id={student_id}, job_id={job_id}")
-        
-        # 如果 job_id 仍然為 NULL，記錄警告
-        if not job_id:
-            print(f"⚠️ [WARNING] internship_offers 記錄的 job_id 為 NULL，這可能導致 withdraw_intern_list 無法正確顯示")
+                INSERT INTO matching_results
+                (student_id, company_id, mentor_id, job_id, semester_id, job_title, internship_start_date, internship_end_date, matched_at, comment, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, 'accepted')
+            """, (student_id, company_id, advisor_user_id, job_id, current_semester_id, job_title_val or ' ', today_str, today_str, current_datetime_str))
+            print(f"✅ [DEBUG] 插入新 matching_results 記錄: student_id={student_id}, job_id={job_id}")
             
         # 8. 更新學生的志願序狀態
         if preference_order:
@@ -468,7 +457,7 @@ def record_admission():
         
         return jsonify({
             "success": True,
-            "message": f"錄取結果已記錄，已自動綁定指導老師 {advisor['name']} 與學生 {student['name']}。資料已寫入 internship_offers。",
+            "message": f"錄取結果已記錄，已自動綁定指導老師 {advisor['name']} 與學生 {student['name']}。資料已寫入 matching_results。",
             "teacher_id": advisor_user_id,
             "teacher_name": advisor['name'],
             "student_id": student_id,
@@ -487,7 +476,6 @@ def record_admission():
 
 # =========================================================
 # API: 獲取學生的錄取結果（我的實習成果）
-# (此處保持不變，因為它已經設計為優先讀取 internship_offers)
 # =========================================================
 @admission_bp.route("/api/get_my_admission", methods=["GET"])
 def get_my_admission():
@@ -514,18 +502,17 @@ def get_my_admission():
         except Exception:
             pass
         
-        # 從 internship_offers 表獲取錄取資料（正式錄取結果）
-        # 若已執行 migration 新增 semester_id，可於 SELECT 中加入 io.semester_id AS offer_semester_id，以對應實習學期
-        print(f"🔍 [DEBUG] 查詢 internship_offers，student_id={student_id}")
+        # 從 matching_results 表獲取錄取資料（統一媒合結果來源，取代 internship_offers）
+        print(f"🔍 [DEBUG] 查詢 matching_results，student_id={student_id}")
         cursor.execute("""
             SELECT 
-                io.id AS offer_id,
-                io.job_id,
-                io.status AS offer_status,
-                io.offered_at,
-                io.responded_at,
-                ij.company_id,
-                ij.title AS job_title,
+                mr.id AS offer_id,
+                mr.job_id,
+                'accepted' AS offer_status,
+                mr.matched_at AS offered_at,
+                mr.matched_at AS responded_at,
+                mr.company_id,
+                mr.job_title,
                 ij.description AS job_description,
                 ij.period AS internship_period,
                 ij.work_time AS internship_time,
@@ -535,38 +522,28 @@ def get_my_admission():
                 ic.contact_person AS contact_name,
                 ic.contact_email,
                 ic.contact_phone,
-                ic.advisor_user_id
-            FROM internship_offers io
-            LEFT JOIN internship_jobs ij ON io.job_id = ij.id
-            LEFT JOIN internship_companies ic ON ij.company_id = ic.id
-            WHERE io.student_id = %s
-              AND io.status IN ('offered', 'accepted', 'Approved')
-            ORDER BY io.offered_at DESC
+                mr.mentor_id AS advisor_user_id,
+                mr.semester_id,
+                mr.internship_start_date,
+                mr.internship_end_date
+            FROM matching_results mr
+            LEFT JOIN internship_jobs ij ON mr.job_id = ij.id
+            LEFT JOIN internship_companies ic ON mr.company_id = ic.id
+            WHERE mr.student_id = %s
+            ORDER BY mr.matched_at DESC
             LIMIT 1
         """, (student_id,))
         offer_info = cursor.fetchone()
+        if offer_info and offer_info.get('semester_id'):
+            offer_info['offer_semester_id'] = offer_info['semester_id']
         
-        # 如果沒找到，檢查是否有該學生的其他狀態記錄
         if not offer_info:
-            cursor.execute("""
-                SELECT id, student_id, job_id, status
-                FROM internship_offers
-                WHERE student_id = %s
-                LIMIT 5
-            """, (student_id,))
-            all_offers = cursor.fetchall()
-            if all_offers:
-                print(f"⚠️ [DEBUG] 找到 {len(all_offers)} 筆 internship_offers 記錄，但狀態不符合條件:")
-                for offer in all_offers:
-                    print(f"    id={offer.get('id')}, student_id={offer.get('student_id')}, job_id={offer.get('job_id')}, status={offer.get('status')}")
-            else:
-                print(f"⚠️ [DEBUG] 完全沒有找到 student_id={student_id} 的 internship_offers 記錄")
+            print(f"⚠️ [DEBUG] 沒有找到 student_id={student_id} 的 matching_results 記錄")
         
-        print(f"🔍 [DEBUG] offer_info from internship_offers: {offer_info}")
+        print(f"🔍 [DEBUG] offer_info from matching_results: {offer_info}")
         
-        # 如果從 internship_offers 獲取到資料，使用它
         if offer_info:
-            print(f"✅ [DEBUG] 找到 internship_offers 記錄")
+            print(f"✅ [DEBUG] 找到 matching_results 記錄")
             print(f"    job_id={offer_info.get('job_id')}, company_id={offer_info.get('company_id')}")
             
             # 如果 company_id 為 NULL，嘗試從 student_preferences 獲取公司資訊
@@ -637,10 +614,17 @@ def get_my_admission():
                     teacher_email = teacher_info.get('email')
             
             # 實習期間：依 internship_configs 取得（作業在 1131、實習在 1132，應顯示 1132 的實習起訖）
-            # 若有 internship_offers.semester_id 則用該實習學期；否則依學生屆別取一筆 config
+            # 若有 matching_results.semester_id 對應的學期則用該實習學期；否則依學生屆別取一筆 config
             semester_code = None
-            semester_start_date = None
-            semester_end_date = None
+            if offer_info.get('semester_id'):
+                cursor.execute("SELECT code FROM semesters WHERE id = %s LIMIT 1", (offer_info['semester_id'],))
+                srow = cursor.fetchone()
+                if srow:
+                    semester_code = srow.get('code')
+            _start = offer_info.get('internship_start_date')
+            _end = offer_info.get('internship_end_date')
+            semester_start_date = _start.strftime('%Y-%m-%d') if _start and hasattr(_start, 'strftime') else (str(_start)[:10] if _start else None)
+            semester_end_date = _end.strftime('%Y-%m-%d') if _end and hasattr(_end, 'strftime') else (str(_end)[:10] if _end else None)
             offer_semester_id = offer_info.get('offer_semester_id') if isinstance(offer_info.get('offer_semester_id'), int) else None
             cursor.execute("SELECT role, admission_year, username FROM users WHERE id = %s", (student_id,))
             user_row = cursor.fetchone()
@@ -824,12 +808,11 @@ def get_my_admission():
                                         admission['teacher_email'] = top_teacher.get('email')
                         print(f"✅ [DEBUG] 使用排名最前面的志願: preference_order={top_preference.get('preference_order')}")
             
-            # 標記已從 internship_offers 獲取到資料，跳過後續的 company_info 處理
+            # 標記已從 matching_results 獲取到資料，跳過後續的 company_info 處理
             company_info = None
-            print(f"✅ [DEBUG] 使用 internship_offers 資料，跳過舊邏輯")
+            print(f"✅ [DEBUG] 使用 matching_results 資料，跳過舊邏輯")
         else:
-            # 如果沒有從 internship_offers 獲取到，不顯示資料
-            print(f"⚠️ [DEBUG] 未找到 internship_offers 記錄，不顯示錄取資料")
+            print(f"⚠️ [DEBUG] 未找到 matching_results 記錄，不顯示錄取資料")
             admission = None
             final_preference = None
         
@@ -879,7 +862,7 @@ def get_my_admission():
             if isinstance(exp.get('created_at'), datetime):
                 exp['created_at'] = exp['created_at'].strftime("%Y-%m-%d %H:%M:%S")
         
-        # 錄取資料來源：internship_offers 表
+        # 錄取資料來源：matching_results 表
         
         # 清理 final_preference，移除所有 None 值
         if final_preference:
@@ -905,11 +888,11 @@ def get_my_admission():
         conn.close()
 
 # =========================================================
-# 臨時 API: 為現有錄取記錄補寫 internship_offers 資料
+# 臨時 API: 為現有錄取記錄補寫 matching_results 資料（已棄用 internship_offers）
 # =========================================================
 @admission_bp.route("/api/sync_internship_offers", methods=["POST"])
 def sync_internship_offers():
-    """為現有錄取記錄補寫 internship_offers 資料（一次性操作）"""
+    """為現有錄取記錄補寫 matching_results 資料（一次性操作）。保留路徑以相容舊呼叫。"""
     if 'user_id' not in session or session.get('role') not in ['admin', 'ta']:
         return jsonify({"success": False, "message": "未授權"}), 403
     
@@ -917,71 +900,71 @@ def sync_internship_offers():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 獲取所有有錄取關係但沒有 internship_offers 記錄的學生
+        current_semester_id = get_current_semester_id(cursor)
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        # 獲取有 approved 志願但尚無 matching_results 的學生（以 student_id + semester_id 為準）
         cursor.execute("""
             SELECT DISTINCT
                 tsr.student_id,
                 sp.job_id,
                 sp.company_id,
+                COALESCE(sp.semester_id, %s) AS semester_id,
                 tsr.created_at AS admitted_at
             FROM teacher_student_relations tsr
             INNER JOIN student_preferences sp ON tsr.student_id = sp.student_id
             WHERE sp.status = 'approved'
               AND NOT EXISTS (
-                  SELECT 1 FROM internship_offers io
-                  WHERE io.student_id = tsr.student_id
-                    AND (io.job_id = sp.job_id OR (io.job_id IS NULL AND sp.job_id IS NULL))
+                  SELECT 1 FROM matching_results mr
+                  WHERE mr.student_id = tsr.student_id
+                    AND mr.semester_id <=> sp.semester_id
               )
             ORDER BY tsr.student_id, sp.preference_order
-        """)
+        """, (current_semester_id,))
         missing_records = cursor.fetchall()
         
         inserted_count = 0
-        updated_count = 0
-        
         for record in missing_records:
             student_id = record['student_id']
-            job_id = record['job_id']
-            admitted_at = record['admitted_at']
-            
-            # 檢查是否已存在
+            job_id = record.get('job_id')
+            company_id = record.get('company_id')
+            semester_id = record.get('semester_id')
+            if not student_id or not company_id:
+                continue
+            cursor.execute("SELECT advisor_user_id FROM internship_companies WHERE id = %s LIMIT 1", (company_id,))
+            crow = cursor.fetchone()
+            mentor_id = (crow.get('advisor_user_id') or 0) if crow else 0
+            job_title_val = ' '
             if job_id:
-                cursor.execute("""
-                    SELECT id FROM internship_offers
-                    WHERE student_id = %s AND job_id = %s
-                """, (student_id, job_id))
+                cursor.execute("SELECT title FROM internship_jobs WHERE id = %s LIMIT 1", (job_id,))
+                jrow = cursor.fetchone()
+                if jrow and jrow.get('title'):
+                    job_title_val = jrow['title']
+            admitted_at = record.get('admitted_at') or datetime.now()
+            if hasattr(admitted_at, 'strftime'):
+                admitted_at = admitted_at.strftime("%Y-%m-%d %H:%M:%S")
             else:
-                cursor.execute("""
-                    SELECT id FROM internship_offers
-                    WHERE student_id = %s AND job_id IS NULL
-                """, (student_id,))
-            
-            existing = cursor.fetchone()
-            
-            if existing:
-                # 更新現有記錄
-                cursor.execute("""
-                    UPDATE internship_offers
-                    SET status = 'accepted', offered_at = %s, responded_at = %s
-                    WHERE id = %s
-                """, (admitted_at, admitted_at, existing['id']))
-                updated_count += 1
-            else:
-                # 插入新記錄
-                cursor.execute("""
-                    INSERT INTO internship_offers
-                    (student_id, job_id, status, offered_at, responded_at)
-                    VALUES (%s, %s, 'accepted', %s, %s)
-                """, (student_id, job_id, admitted_at, admitted_at))
-                inserted_count += 1
+                admitted_at = str(admitted_at)[:19]
+            cursor.execute("""
+                SELECT id FROM matching_results
+                WHERE student_id = %s AND semester_id <=> %s
+                LIMIT 1
+            """, (student_id, semester_id))
+            if cursor.fetchone():
+                continue
+            cursor.execute("""
+                INSERT INTO matching_results
+                (student_id, company_id, mentor_id, job_id, semester_id, job_title, internship_start_date, internship_end_date, matched_at, comment, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, 'accepted')
+            """, (student_id, company_id, mentor_id, job_id, semester_id, job_title_val, today_str, today_str, admitted_at))
+            inserted_count += 1
         
         conn.commit()
         
         return jsonify({
             "success": True,
-            "message": f"同步完成：新增 {inserted_count} 筆記錄，更新 {updated_count} 筆記錄",
+            "message": f"同步完成：新增 {inserted_count} 筆 matching_results 記錄",
             "inserted": inserted_count,
-            "updated": updated_count,
+            "updated": 0,
             "total_processed": len(missing_records)
         })
     
@@ -1183,18 +1166,17 @@ def withdraw_student():
 
 # =========================================================
 # API: 獲取所有學生的錄取結果列表（支援篩選）
-# 以 internship_offers 為單一真相來源，一學生一筆錄取結果
+# 以 matching_results 為單一真相來源，一學生一筆媒合結果
 # =========================================================
 @admission_bp.route("/api/get_all_admissions", methods=["GET"])
 def get_all_admissions():
-    """獲取所有學生的錄取結果列表，支援按班級、學期、公司等篩選。資料來源：internship_offers（一學生一筆）。"""
+    """獲取所有學生的錄取結果列表，支援按班級、學期、公司等篩選。資料來源：matching_results（一學生一筆）。"""
     if 'user_id' not in session:
         return jsonify({"success": False, "message": "未授權"}), 403
     
     user_id = session.get('user_id')
     user_role = session.get('role')
     
-    # 獲取篩選參數
     class_id = request.args.get('class_id', type=int)
     semester = request.args.get('semester', '').strip()
     company_id = request.args.get('company_id', type=int)
@@ -1204,12 +1186,11 @@ def get_all_admissions():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 以 internship_offers 為主表，一學生一筆錄取；學期由 student_preferences 取得（同學生同職缺取一筆，避免重複）
         base_query = """
             SELECT 
-                io.id AS relation_id,
-                COALESCE(s.code, '') AS semester,
-                io.offered_at AS admitted_at,
+                mr.id AS relation_id,
+                COALESCE(sem.code, '') AS semester,
+                mr.matched_at AS admitted_at,
                 u_student.id AS student_id,
                 u_student.name AS student_name,
                 u_student.username AS student_number,
@@ -1218,18 +1199,19 @@ def get_all_admissions():
                 c.department,
                 ic.id AS company_id,
                 ic.company_name,
-                ij.id AS job_id,
-                ij.title AS job_title,
+                COALESCE(mr.job_id, ij.id) AS job_id,
+                COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
                 u_teacher.id AS teacher_id,
                 u_teacher.name AS teacher_name,
                 sp.preference_order,
                 COALESCE(sp.status, 'approved') AS preference_status
-            FROM internship_offers io
-            JOIN users u_student ON io.student_id = u_student.id
+            FROM matching_results mr
+            LEFT JOIN semesters sem ON sem.id = mr.semester_id
+            JOIN users u_student ON mr.student_id = u_student.id
             LEFT JOIN classes c ON u_student.class_id = c.id
-            JOIN internship_jobs ij ON io.job_id = ij.id
-            JOIN internship_companies ic ON ij.company_id = ic.id
-            LEFT JOIN users u_teacher ON ic.advisor_user_id = u_teacher.id
+            LEFT JOIN internship_jobs ij ON mr.job_id = ij.id
+            JOIN internship_companies ic ON mr.company_id = ic.id
+            LEFT JOIN users u_teacher ON mr.mentor_id = u_teacher.id
             LEFT JOIN (
                 SELECT sp0.student_id, sp0.job_id, sp0.semester_id, sp0.preference_order, sp0.status
                 FROM student_preferences sp0
@@ -1238,15 +1220,12 @@ def get_all_admissions():
                     FROM student_preferences
                     GROUP BY student_id, job_id
                 ) sp1 ON sp0.student_id = sp1.student_id AND sp0.job_id = sp1.job_id AND sp0.semester_id = sp1.semester_id
-            ) sp ON sp.student_id = io.student_id AND sp.job_id = io.job_id
-            LEFT JOIN semesters s ON s.id = sp.semester_id
+            ) sp ON sp.student_id = mr.student_id AND sp.job_id = mr.job_id
             WHERE 1=1
         """
         params = []
         
-        # 根據角色限制查詢範圍
         if user_role == 'class_teacher':
-            # 班導只能看到自己管理的班級的學生
             cursor.execute("""
                 SELECT class_id FROM classes_teacher 
                 WHERE teacher_id = %s
@@ -1264,11 +1243,9 @@ def get_all_admissions():
                     "count": 0
                 })
         elif user_role == 'teacher':
-            # 指導老師只能看到「錄取公司」為自己擔任顧問的公司（該公司 advisor_user_id = 當前老師）
-            base_query += " AND ic.advisor_user_id = %s"
+            base_query += " AND mr.mentor_id = %s"
             params.append(user_id)
         elif user_role == 'director':
-            # 主任可以看到自己科系的學生
             cursor.execute("""
                 SELECT DISTINCT c.department
                 FROM classes c
@@ -1280,15 +1257,13 @@ def get_all_admissions():
             if dept_result and dept_result.get('department'):
                 base_query += " AND c.department = %s"
                 params.append(dept_result['department'])
-        # ta 和 admin 不額外限制
         
-        # 應用篩選條件
         if class_id:
             base_query += " AND u_student.class_id = %s"
             params.append(class_id)
         
         if semester:
-            base_query += " AND EXISTS (SELECT 1 FROM student_preferences sp2 WHERE sp2.student_id = io.student_id AND sp2.job_id = io.job_id AND sp2.semester_id = (SELECT id FROM semesters WHERE code = %s LIMIT 1))"
+            base_query += " AND mr.semester_id = (SELECT id FROM semesters WHERE code = %s LIMIT 1)"
             params.append(semester)
         
         if company_id:
@@ -1300,7 +1275,7 @@ def get_all_admissions():
             keyword_pattern = f"%{keyword}%"
             params.extend([keyword_pattern, keyword_pattern, keyword_pattern, keyword_pattern])
         
-        base_query += " ORDER BY io.offered_at DESC, u_student.name ASC"
+        base_query += " ORDER BY mr.matched_at DESC, u_student.name ASC"
         
         cursor.execute(base_query, params)
         students = cursor.fetchall()
@@ -1702,8 +1677,7 @@ def vendor_matching_results():
                 "message": "您尚未上傳任何公司或沒有關聯的公司"
             })
         
-        # 獲取科助確認後的媒合結果（從 internship_offers 表讀取，只有科助確認後才會寫入此表）
-        # 使用子查詢確保每個 (student_id, company_id, job_id) 組合只取一筆記錄
+        # 獲取科助確認後的媒合結果（從 matching_results 表讀取）
         placeholders = ','.join(['%s'] * len(company_ids))
         try:
             cursor.execute(f"""
@@ -1716,19 +1690,20 @@ def vendor_matching_results():
                     c.department AS class_department,
                     ic.id AS company_id,
                     ic.company_name,
-                    COALESCE(ij.id, ra.job_id) AS job_id,
-                    COALESCE(ij.title, '未指定職缺') AS job_title,
+                    COALESCE(mr.job_id, ij.id) AS job_id,
+                    COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title, '未指定職缺') AS job_title,
                     sp.preference_order,
                     sp.submitted_at AS preference_submitted_at,
-                    ra.apply_status AS preference_status,
-                    COALESCE(io.offered_at, tsr.created_at, ra.updated_at, CURDATE()) AS admitted_at,
-                    '1132' AS semester,
+                    COALESCE(ra.apply_status, 'approved') AS preference_status,
+                        COALESCE(mr.matched_at, tsr.created_at, ra.updated_at, CURDATE()) AS admitted_at,
+                    COALESCE(sem.code, '1132') AS semester,
                     ra.is_reserve,
                     ra.slot_index
-                FROM internship_offers io
-                INNER JOIN users u ON io.student_id = u.id
-                INNER JOIN student_job_applications sja ON u.id = sja.student_id AND io.job_id = sja.job_id
-                INNER JOIN (
+                FROM matching_results mr
+                LEFT JOIN semesters sem ON sem.id = mr.semester_id
+                INNER JOIN users u ON mr.student_id = u.id
+                LEFT JOIN student_job_applications sja ON u.id = sja.student_id AND mr.job_id = sja.job_id
+                LEFT JOIN (
                     SELECT ra1.*
                     FROM resume_applications ra1
                     INNER JOIN (
@@ -1741,8 +1716,8 @@ def vendor_matching_results():
                         AND ra1.apply_status = 'approved'
                 ) ra ON ra.application_id = sja.id
                 LEFT JOIN classes c ON u.class_id = c.id
-                INNER JOIN internship_companies ic ON sja.company_id = ic.id
-                LEFT JOIN internship_jobs ij ON COALESCE(ra.job_id, sja.job_id) = ij.id
+                INNER JOIN internship_companies ic ON mr.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON mr.job_id = ij.id
                 LEFT JOIN (
                     SELECT sp1.*
                     FROM student_preferences sp1
@@ -1754,9 +1729,9 @@ def vendor_matching_results():
                         AND sp1.company_id = sp2.company_id 
                         AND sp1.job_id = sp2.job_id
                         AND sp1.submitted_at = sp2.max_submitted_at
-                ) sp ON sja.student_id = sp.student_id 
-                    AND sja.company_id = sp.company_id 
-                    AND sja.job_id = sp.job_id
+                ) sp ON mr.student_id = sp.student_id 
+                    AND mr.company_id = sp.company_id 
+                    AND mr.job_id = sp.job_id
                 LEFT JOIN (
                     SELECT tsr1.*
                     FROM teacher_student_relations tsr1
@@ -1767,16 +1742,12 @@ def vendor_matching_results():
                     ) tsr2 ON tsr1.student_id = tsr2.student_id 
                         AND tsr1.created_at = tsr2.max_created_at
                 ) tsr ON tsr.student_id = u.id
-                WHERE sja.company_id IN ({placeholders})
-                  AND ra.apply_status = 'approved'
-                  AND io.status = 'accepted'
-                ORDER BY ic.company_name, COALESCE(ra.slot_index, 999), ra.is_reserve, sp.preference_order, u.name
+                WHERE mr.company_id IN ({placeholders})
+                ORDER BY ic.company_name, COALESCE(ra.slot_index, 999), COALESCE(ra.is_reserve, 0), sp.preference_order, u.name
             """, tuple(company_ids))
         except Exception as qerr:
             err_str = str(qerr).lower()
             if "unknown column" in err_str or "1054" in str(qerr) or "1146" in str(qerr):
-                # resume_applications 可能無 job_id / slot_index / is_reserve 或缺少 teacher_student_relations 等，改用精簡查詢
-                # 但仍需從 internship_offers 表讀取，確保只返回科助確認後的資料
                 cursor.execute(f"""
                     SELECT DISTINCT
                         u.id AS student_id,
@@ -1787,28 +1758,27 @@ def vendor_matching_results():
                         c.department AS class_department,
                         ic.id AS company_id,
                         ic.company_name,
-                        COALESCE(ij.id, sja.job_id) AS job_id,
-                        COALESCE(ij.title, '未指定職缺') AS job_title,
+                        COALESCE(mr.job_id, ij.id) AS job_id,
+                        COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title, '未指定職缺') AS job_title,
                         sp.preference_order,
                         sp.submitted_at AS preference_submitted_at,
-                        ra.apply_status AS preference_status,
-                        COALESCE(io.offered_at, ra.updated_at, CURDATE()) AS admitted_at,
-                        '1132' AS semester,
+                        'approved' AS preference_status,
+                        COALESCE(mr.matched_at, ra.updated_at, CURDATE()) AS admitted_at,
+                        COALESCE(sem.code, '1132') AS semester,
                         NULL AS is_reserve,
                         NULL AS slot_index
-                    FROM internship_offers io
-                    INNER JOIN users u ON io.student_id = u.id
-                    INNER JOIN student_job_applications sja ON u.id = sja.student_id AND io.job_id = sja.job_id
-                    INNER JOIN resume_applications ra ON ra.application_id = sja.id
+                    FROM matching_results mr
+                    LEFT JOIN semesters sem ON sem.id = mr.semester_id
+                    INNER JOIN users u ON mr.student_id = u.id
+                    LEFT JOIN student_job_applications sja ON u.id = sja.student_id AND mr.job_id = sja.job_id
+                    LEFT JOIN resume_applications ra ON ra.application_id = sja.id
                     LEFT JOIN classes c ON u.class_id = c.id
-                    INNER JOIN internship_companies ic ON sja.company_id = ic.id
-                    LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
-                    LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id 
-                        AND sja.company_id = sp.company_id 
-                        AND sja.job_id = sp.job_id
-                    WHERE sja.company_id IN ({placeholders})
-                      AND ra.apply_status = 'approved'
-                      AND io.status = 'accepted'
+                    INNER JOIN internship_companies ic ON mr.company_id = ic.id
+                    LEFT JOIN internship_jobs ij ON mr.job_id = ij.id
+                    LEFT JOIN student_preferences sp ON mr.student_id = sp.student_id 
+                        AND mr.company_id = sp.company_id 
+                        AND mr.job_id = sp.job_id
+                    WHERE mr.company_id IN ({placeholders})
                     ORDER BY ic.company_name, sp.preference_order, u.name
                 """, tuple(company_ids))
             else:
@@ -4084,56 +4054,63 @@ def director_confirm_matching():
                 link_url=link_url
             )
         
-        # 2. 將已確認的媒合結果寫入 internship_offers 表（主任確認時寫入，狀態為 accepted）
+        # 2. 將已確認的媒合結果寫入 matching_results 表（主任確認時寫入）
         cursor.execute("""
             SELECT DISTINCT
                 md.student_id,
-                md.vendor_id,
                 sja.job_id,
                 sja.company_id,
-                %s AS semester_id
+                %s AS semester_id,
+                ij.title AS job_title,
+                COALESCE(ic.advisor_user_id, 0) AS mentor_id
             FROM manage_director md
             INNER JOIN student_job_applications sja ON md.preference_id = sja.id
             INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
                 AND sja.company_id = sp.company_id
                 AND sja.job_id = sp.job_id
                 AND sp.semester_id = %s
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+            LEFT JOIN internship_companies ic ON sja.company_id = ic.id
             WHERE md.director_decision = 'Approved'
         """, (current_semester_id, current_semester_id))
         match_results = cursor.fetchall() or []
         
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         inserted_count = 0
         updated_count = 0
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for match_result in match_results:
             student_id = match_result.get('student_id')
             job_id = match_result.get('job_id')
-            if not student_id or not job_id:
+            company_id = match_result.get('company_id')
+            semester_id = match_result.get('semester_id') or current_semester_id
+            if not student_id or not company_id:
                 continue
+            mentor_id = match_result.get('mentor_id') or 0
+            job_title_val = (match_result.get('job_title') or '').strip() or ' '
 
             cursor.execute("""
-                SELECT id FROM internship_offers
-                WHERE student_id = %s AND job_id = %s
+                SELECT id FROM matching_results
+                WHERE student_id = %s AND semester_id <=> %s
                 LIMIT 1
-            """, (student_id, job_id))
+            """, (student_id, semester_id))
             existing = cursor.fetchone()
-            
             if existing:
                 cursor.execute("""
-                    UPDATE internship_offers
-                    SET status = 'accepted', offered_at = %s, responded_at = %s
+                    UPDATE matching_results
+                    SET company_id = %s, mentor_id = %s, job_id = %s, job_title = %s, matched_at = %s, status = 'accepted'
                     WHERE id = %s
-                """, (now_str, now_str, existing['id']))
+                """, (company_id, mentor_id, job_id, job_title_val, now_str, existing['id']))
                 updated_count += 1
             else:
                 cursor.execute("""
-                    INSERT INTO internship_offers
-                    (student_id, job_id, status, offered_at, responded_at)
-                    VALUES (%s, %s, 'accepted', %s, %s)
-                """, (student_id, job_id, now_str, now_str))
+                    INSERT INTO matching_results
+                    (student_id, company_id, mentor_id, job_id, semester_id, job_title, internship_start_date, internship_end_date, matched_at, comment, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, 'accepted')
+                """, (student_id, company_id, mentor_id, job_id, semester_id, job_title_val, today_str, today_str, now_str))
                 inserted_count += 1
         
-        print(f"✅ [DEBUG] 主任確認時寫入 internship_offers: 新增 {inserted_count} 筆，更新 {updated_count} 筆")
+        print(f"✅ [DEBUG] 主任確認時寫入 matching_results: 新增 {inserted_count} 筆，更新 {updated_count} 筆")
         
         # 6. 提交事務，確保所有更新都保存
         conn.commit()
@@ -4308,55 +4285,63 @@ def ta_confirm_matching():
                 link_url=admin_link_url
             )
         
-        # 5. 將已確認的媒合結果寫入 internship_offers 表
+        # 5. 將已確認的媒合結果寫入 matching_results 表
         cursor.execute("""
             SELECT DISTINCT
                 md.student_id,
-                md.vendor_id,
                 sja.job_id,
                 sja.company_id,
-                %s AS semester_id
+                %s AS semester_id,
+                ij.title AS job_title,
+                COALESCE(ic.advisor_user_id, 0) AS mentor_id
             FROM manage_director md
             INNER JOIN student_job_applications sja ON md.preference_id = sja.id
             INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
                 AND sja.company_id = sp.company_id
                 AND sja.job_id = sp.job_id
                 AND sp.semester_id = %s
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+            LEFT JOIN internship_companies ic ON sja.company_id = ic.id
             WHERE md.director_decision = 'Approved'
         """, (current_semester_id, current_semester_id))
         match_results = cursor.fetchall() or []
         
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         inserted_count = 0
         updated_count = 0
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for match_result in match_results:
             student_id = match_result.get('student_id')
             job_id = match_result.get('job_id')
-            if not student_id or not job_id:
+            company_id = match_result.get('company_id')
+            semester_id = match_result.get('semester_id') or current_semester_id
+            if not student_id or not company_id:
                 continue
-            
+            mentor_id = match_result.get('mentor_id') or 0
+            job_title_val = (match_result.get('job_title') or '').strip() or ' '
+
             cursor.execute("""
-                SELECT id FROM internship_offers
-                WHERE student_id = %s AND job_id = %s
-            """, (student_id, job_id))
+                SELECT id FROM matching_results
+                WHERE student_id = %s AND semester_id <=> %s
+                LIMIT 1
+            """, (student_id, semester_id))
             existing = cursor.fetchone()
-            
             if existing:
                 cursor.execute("""
-                    UPDATE internship_offers
-                    SET status = 'accepted', offered_at = %s, responded_at = %s
+                    UPDATE matching_results
+                    SET company_id = %s, mentor_id = %s, job_id = %s, job_title = %s, matched_at = %s, status = 'accepted'
                     WHERE id = %s
-                """, (now_str, now_str, existing['id']))
+                """, (company_id, mentor_id, job_id, job_title_val, now_str, existing['id']))
                 updated_count += 1
             else:
                 cursor.execute("""
-                    INSERT INTO internship_offers
-                    (student_id, job_id, status, offered_at, responded_at)
-                    VALUES (%s, %s, 'accepted', %s, %s)
-                """, (student_id, job_id, now_str, now_str))
+                    INSERT INTO matching_results
+                    (student_id, company_id, mentor_id, job_id, semester_id, job_title, internship_start_date, internship_end_date, matched_at, comment, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, 'accepted')
+                """, (student_id, company_id, mentor_id, job_id, semester_id, job_title_val, today_str, today_str, now_str))
                 inserted_count += 1
         
-        print(f"✅ [DEBUG] 寫入 internship_offers: 新增 {inserted_count} 筆，更新 {updated_count} 筆")
+        print(f"✅ [DEBUG] 寫入 matching_results: 新增 {inserted_count} 筆，更新 {updated_count} 筆")
         
         # 5.1 一併寫入 teacher_student_relations，讓「查看錄取結果」頁（班導／指導老師／主任／科助）有資料
         cursor.execute("""

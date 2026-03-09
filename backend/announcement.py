@@ -1,8 +1,10 @@
-from flask import Blueprint, request, jsonify, render_template, session
+from flask import Blueprint, request, jsonify, render_template, session, current_app
 from config import get_db
 from datetime import datetime, timedelta, date
+from werkzeug.utils import secure_filename
 import traceback
 import re
+import os
 from semester import get_current_semester_deadline
 
 
@@ -213,6 +215,19 @@ def get_announcement(ann_id):
             end_time_str = row.get('end_time')
             row['content'] = clean_announcement_content(row['content'], end_time_str)
         
+        # 附件：路徑存於 announcement_attachments（uploads/announcements）
+        try:
+            cursor.execute(
+                "SELECT file_path, file_name, file_type FROM announcement_attachments WHERE announcement_id = %s ORDER BY id",
+                (ann_id,)
+            )
+            row["attachments"] = [
+                {"file_path": r.get("file_path"), "file_name": r.get("file_name"), "file_type": r.get("file_type")}
+                for r in cursor.fetchall()
+            ]
+        except Exception:
+            row["attachments"] = []
+        
         cursor.close()
         conn.close()
         return jsonify({"success": True, "data": row})
@@ -265,6 +280,42 @@ def list_announcements():
         traceback.print_exc()
         return jsonify({"success": False, "message": "載入失敗"}), 500
 
+# --- API：上傳公告圖片/檔案（存放至 uploads/announcements） ---
+ALLOWED_ANN_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
+ALLOWED_ANN_FILE_EXT = {"pdf", "doc", "docx", "xls", "xlsx", "txt", "zip"}
+
+@announcement_bp.route("/api/upload", methods=["POST"])
+def upload_announcement_file():
+    """科助新增公告時上傳圖片或檔案，儲存至 good/uploads/announcements，回傳相對路徑供前端與 DB 使用。"""
+    try:
+        upload_base = current_app.config.get("UPLOAD_FOLDER")
+        if not upload_base:
+            return jsonify({"success": False, "message": "未設定上傳目錄"}), 500
+        ann_dir = os.path.join(upload_base, "announcements")
+        os.makedirs(ann_dir, exist_ok=True)
+
+        file = request.files.get("image") or request.files.get("file")
+        if not file or not file.filename:
+            return jsonify({"success": False, "message": "請選擇圖片或檔案"}), 400
+
+        ext = (file.filename.rsplit(".", 1)[-1] or "").lower()
+        is_image = request.files.get("image") is not None
+        allowed = ALLOWED_ANN_IMAGE_EXT if is_image else ALLOWED_ANN_FILE_EXT
+        if ext not in allowed:
+            return jsonify({"success": False, "message": f"不允許的副檔名: {ext}"}), 400
+
+        safe = secure_filename(file.filename) or "upload"
+        base, _ = os.path.splitext(safe)
+        ts = datetime.now().strftime("%Y%m%d%H%M%S")
+        save_name = f"{base[:30]}_{ts}.{ext}"
+        abs_path = os.path.join(ann_dir, save_name)
+        file.save(abs_path)
+        rel = os.path.join("announcements", save_name).replace("\\", "/")
+        return jsonify({"success": True, "url": rel, "filename": file.filename})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
 # --- API：新增公告 ---
 @announcement_bp.route("/api/create", methods=["POST"])
 def create_announcement():
@@ -295,8 +346,34 @@ def create_announcement():
         ann_id = cursor.lastrowid
         conn.commit()  # 先提交公告，確保公告已存在
 
+        # 公告附件：儲存至 announcement_attachments（路徑為 uploads/announcements 下）
+        attachments = data.get("attachments") or []
+        if attachments:
+            try:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS announcement_attachments (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        announcement_id INT NOT NULL,
+                        file_path VARCHAR(500) NOT NULL,
+                        file_name VARCHAR(255),
+                        file_type VARCHAR(50),
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        INDEX idx_ann (announcement_id)
+                    )
+                """)
+                conn.commit()
+                for att in attachments:
+                    fp = (att.get("file_path") or "").strip()
+                    if fp:
+                        cursor.execute(
+                            "INSERT INTO announcement_attachments (announcement_id, file_path, file_name, file_type) VALUES (%s, %s, %s, %s)",
+                            (ann_id, fp, att.get("file_name") or "", att.get("file_type") or "")
+                        )
+                conn.commit()
+            except Exception as e:
+                traceback.print_exc()
+
         # 【同步通知】如果已發布，立即同步到通知頁面（不等待時間）
-        # 這樣可以確保公告創建後立即出現在通知列表中
         if is_published:
             push_announcement_notifications(conn, title, content, ann_id, target_roles=target_roles)
 
@@ -339,6 +416,21 @@ def update_announcement(ann_id):
         """, (title, content, start_time, end_time, is_published, ann_id))
         
         conn.commit()
+
+        # 公告附件：先刪除舊的再寫入新的（路徑為 uploads/announcements）
+        attachments = data.get("attachments") or []
+        try:
+            cursor.execute("DELETE FROM announcement_attachments WHERE announcement_id = %s", (ann_id,))
+            for att in attachments:
+                fp = (att.get("file_path") or "").strip()
+                if fp:
+                    cursor.execute(
+                        "INSERT INTO announcement_attachments (announcement_id, file_path, file_name, file_type) VALUES (%s, %s, %s, %s)",
+                        (ann_id, fp, att.get("file_name") or "", att.get("file_type") or "")
+                    )
+            conn.commit()
+        except Exception as e:
+            traceback.print_exc()
         
         # 在調用 push_announcement_notifications 前關閉當前的 cursor，避免未讀結果衝突
         cursor.close()
@@ -360,10 +452,15 @@ def delete_announcement(ann_id):
         conn = get_db()
         cursor = conn.cursor()
         
-        # 1. 執行刪除 (公告表)
+        # 1. 刪除附件記錄（若表存在）
+        try:
+            cursor.execute("DELETE FROM announcement_attachments WHERE announcement_id = %s", (ann_id,))
+        except Exception:
+            pass
+        # 2. 執行刪除 (公告表)
         cursor.execute("DELETE FROM announcement WHERE id = %s", (ann_id,))
         
-        # 2. 同步刪除相關通知 (避免使用者點到已不存在的公告)
+        # 3. 同步刪除相關通知 (避免使用者點到已不存在的公告)
         link_url = f"/view_announcement/{ann_id}"
         cursor.execute("DELETE FROM notifications WHERE link_url = %s", (link_url,))
         

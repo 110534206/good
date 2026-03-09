@@ -536,6 +536,76 @@
     .btn-primary-green:hover {
       filter: brightness(1.02);
     }
+    /* 歷史紀錄區塊（與指導老師頁面一致的列表＋預覽） */
+    .history-card .table-wrap { overflow-x: auto; }
+    .history-card .data-table {
+      width: 100%; border-collapse: collapse; font-size: 0.9rem; background: #fff; min-width: 560px;
+    }
+    .history-card .data-table thead { background: #f8f9fa; }
+    .history-card .data-table th,
+    .history-card .data-table td {
+      padding: 12px 16px; border-bottom: 1px solid #dee2e6; vertical-align: middle;
+    }
+    .history-card .data-table th { font-weight: 600; color: #212529; text-align: left; border-top: 1px solid #dee2e6; }
+    .history-card .data-table td { color: #212529; text-align: left; }
+    .history-card .data-table th.col-status, .history-card .data-table td.col-status { text-align: center; }
+    .history-card .data-table th.col-action, .history-card .data-table td.col-action { text-align: center; }
+    .history-card .data-table tbody tr:hover td { background: #f8f9fa; }
+    .btn-view-history {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
+      border: none; background: #0454a3; color: #fff; font-size: 0.85rem; cursor: pointer; text-decoration: none;
+    }
+    .btn-view-history:hover { background: #0369a1; color: #fff; }
+    .badge-withdrawing { background: #fef3c7; color: #92400e; }
+    .badge-confirmed { background: #17a2b8; color: #fff; }
+    .history-card .badge { display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 500; }
+    .history-card .empty-msg { text-align: center; padding: 24px; color: #64748b; }
+    /* 歷史詳情 Modal */
+    .history-detail-backdrop {
+      position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); display: none; align-items: center; justify-content: center; z-index: 1400;
+    }
+    .history-detail-backdrop.show { display: flex; }
+    .history-detail-modal {
+      background: #fff; border-radius: 16px; max-width: 560px; width: 92vw; max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.25); border: 1px solid #e2e8f0;
+    }
+    .history-detail-header {
+      padding: 20px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;
+    }
+    .history-detail-header h3 { margin: 0; font-size: 1.2rem; color: #1e293b; }
+    .history-detail-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #64748b; padding: 0 4px; line-height: 1; }
+    .history-detail-close:hover { color: #1e293b; }
+    .history-detail-body { padding: 20px 24px 24px; }
+    .history-detail-block {
+      background: #f8fafc; border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; border: 1px solid #e2e8f0;
+    }
+    .history-detail-block h4 { font-size: 0.95rem; color: #334155; margin-bottom: 8px; }
+    .history-detail-block .label { color: #64748b; font-size: 0.9rem; }
+    .history-detail-block .value { color: #1e293b; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+    .history-attachment-list { list-style: none; padding: 0; margin: 0; }
+    .history-attachment-list li {
+      margin-bottom: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 12px;
+      background: #fff; border: 1px solid #cbd5e1; border-radius: 10px;
+    }
+    .history-attachment-list li:last-child { margin-bottom: 0; }
+    .history-attachment-list .attachment-img-wrap {
+      width: 80px; height: 60px; border-radius: 8px; overflow: hidden; cursor: pointer; flex-shrink: 0;
+      border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center;
+    }
+    .history-attachment-list .attachment-img-wrap img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .history-attachment-list a { color: #0454a3; text-decoration: none; }
+    .history-attachment-list a:hover { text-decoration: underline; }
+    .preview-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 1500;
+    }
+    .preview-backdrop.show { display: flex; }
+    .preview-content { position: relative; max-width: 90vw; max-height: 90vh; }
+    .preview-content img { max-width: 90vw; max-height: 90vh; display: block; }
+    .preview-close {
+      position: absolute; top: -40px; right: 0; background: #475569; color: #fff; border: none; width: 32px; height: 32px;
+      border-radius: 50%; cursor: pointer; font-size: 1.2rem; line-height: 1; padding: 0;
+    }
+    .preview-close:hover { background: #64748b; }
   </style>
 </head>
 <body>
@@ -630,6 +700,49 @@
           </tbody>
         </table>
       </div>
+    </div>
+  </div>
+
+  <!-- 退實習案件詳情 Modal（從本公司實習生表格「預覽」開啟） -->
+  <div id="historyDetailBackdrop" class="history-detail-backdrop" role="dialog" aria-modal="true" aria-label="退實習案件詳情">
+    <div class="history-detail-modal">
+      <div class="history-detail-header">
+        <h3><i class="bi bi-file-text" style="margin-right: 6px; color: #0454a3;"></i>退實習案件詳情</h3>
+        <button type="button" class="history-detail-close" id="historyDetailCloseBtn" aria-label="關閉">×</button>
+      </div>
+      <div class="history-detail-body">
+        <div class="history-detail-block">
+          <h4>解約報告</h4>
+          <p class="label">原因類別</p>
+          <p class="value" id="historyDetailReasonCategory">—</p>
+          <p class="label" style="margin-top: 10px;">具體說明</p>
+          <p class="value" id="historyDetailReasonDetail">—</p>
+        </div>
+        <div class="history-detail-block" id="historyDetailAttachmentsBlock" style="display: none;">
+          <h4>廠商佐證 (圖片/檔案)</h4>
+          <ul id="historyDetailAttachmentsList" class="history-attachment-list"></ul>
+        </div>
+        <div class="history-detail-block">
+          <h4>實習生資訊</h4>
+          <p class="label">學生姓名</p>
+          <p class="value" id="historyDetailStudentName">—</p>
+          <p class="label" style="margin-top: 8px;">學號</p>
+          <p class="value" id="historyDetailStudentNumber">—</p>
+          <p class="label" style="margin-top: 8px;">實習單位／職缺</p>
+          <p class="value" id="historyDetailCompanyJob">—</p>
+        </div>
+        <div class="history-detail-block" id="historyDetailMeetingBlock" style="display: none;">
+          <h4>與學生訪談紀錄（指導老師填寫）</h4>
+          <p class="value" id="historyDetailMeetingNotes" style="white-space: pre-wrap;">—</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- 圖片預覽彈窗 -->
+  <div id="previewBackdrop" class="preview-backdrop" role="dialog" aria-modal="true" aria-label="預覽圖片">
+    <div class="preview-content">
+      <button type="button" class="preview-close" id="previewCloseBtn" aria-label="關閉預覽">×</button>
+      <img id="previewImg" src="" alt="佐證圖片預覽">
     </div>
   </div>
 
@@ -732,9 +845,11 @@
           var statusInfo = statusMap[rawStatus] || { text: '實習中', class: 'intern-status-active' };
           const url = '/vendor_remove_intern?student_id=' + row.student_id;
           var showExitBtn = rawStatus !== 'withdrawing' && rawStatus !== 'confirmed' && rawStatus !== 'completed';
+          var recordId = row.record_id != null ? row.record_id : '';
+          var showPreviewBtn = (rawStatus === 'withdrawing' || rawStatus === 'confirmed') && recordId;
           var actionCell = showExitBtn
             ? '<a class="btn-link" href="' + url + '"><i class="bi bi-box-arrow-in-right"></i><span>申請退實習</span></a>'
-            : '—';
+            : (showPreviewBtn ? '<button type="button" class="btn-view-history btn-preview-intern" data-case-id="' + escapeHtml(String(recordId)) + '"><i class="bi bi-eye"></i> 預覽</button>' : '—');
           return '<tr>' +
             '<td>' + escapeHtml(name) + '</td>' +
             '<td>' + escapeHtml(num) + '</td>' +
@@ -767,6 +882,111 @@
       if (!studentId) {
         formCard.style.display = 'none';
         if (allInternCard) allInternCard.style.display = 'block';
+        var historyDetailBackdrop = document.getElementById('historyDetailBackdrop');
+        var historyDetailCloseBtn = document.getElementById('historyDetailCloseBtn');
+        var previewBackdrop = document.getElementById('previewBackdrop');
+        var previewImg = document.getElementById('previewImg');
+        var previewCloseBtn = document.getElementById('previewCloseBtn');
+
+        function openPreview(url) {
+          if (url && previewImg) previewImg.src = url.replace(/&amp;/g, '&');
+          if (previewBackdrop) { previewBackdrop.classList.add('show'); previewBackdrop.setAttribute('aria-hidden', 'false'); }
+        }
+        function closePreview() {
+          if (previewBackdrop) { previewBackdrop.classList.remove('show'); previewBackdrop.setAttribute('aria-hidden', 'true'); }
+        }
+
+        function openDetailModal(recordId) {
+          if (!recordId) return;
+          document.getElementById('historyDetailReasonCategory').textContent = '載入中…';
+          document.getElementById('historyDetailReasonDetail').textContent = '';
+          document.getElementById('historyDetailStudentName').textContent = '—';
+          document.getElementById('historyDetailStudentNumber').textContent = '—';
+          document.getElementById('historyDetailCompanyJob').textContent = '—';
+          document.getElementById('historyDetailMeetingNotes').textContent = '—';
+          var attBlock = document.getElementById('historyDetailAttachmentsBlock');
+          var attList = document.getElementById('historyDetailAttachmentsList');
+          var meetingBlock = document.getElementById('historyDetailMeetingBlock');
+          if (attBlock) attBlock.style.display = 'none';
+          if (meetingBlock) meetingBlock.style.display = 'none';
+
+          fetch('/vendor/api/withdraw_case_detail?id=' + encodeURIComponent(recordId), { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+              if (!res.success || !res.data) {
+                document.getElementById('historyDetailReasonCategory').textContent = '無法載入';
+                return;
+              }
+              var d = res.data;
+              document.getElementById('historyDetailReasonCategory').textContent = d.reason_category || '—';
+              document.getElementById('historyDetailReasonDetail').textContent = d.reason_detail || '—';
+              document.getElementById('historyDetailStudentName').textContent = d.student_name || '—';
+              document.getElementById('historyDetailStudentNumber').textContent = d.student_number || '—';
+              document.getElementById('historyDetailCompanyJob').textContent = ((d.company_name || '') + (d.job_title ? '／' + d.job_title : '')) || '—';
+              document.getElementById('historyDetailMeetingNotes').textContent = d.teacher_meeting_notes || '—';
+              if (d.teacher_meeting_notes && meetingBlock) meetingBlock.style.display = 'block';
+
+              if (d.attachments && d.attachments.length && attBlock && attList) {
+                attList.innerHTML = d.attachments.map(function (a) {
+                  var isImg = (a.file_type || '').toLowerCase() === 'image';
+                  var text = a.original_filename || '佐證檔案';
+                  var url = (a.url || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                  var rawUrl = (a.url || '').replace(/"/g, '&quot;');
+                  if (isImg) {
+                    return '<li class="attachment-item-image">' +
+                      '<div class="attachment-img-wrap" data-preview-url="' + url + '" role="button" tabindex="0" title="查看全圖">' +
+                      '<img src="' + rawUrl + '" alt="" loading="lazy">' +
+                      '</div>' +
+                      '<div><a href="' + rawUrl + '" target="_blank" rel="noopener" data-preview="image" data-preview-url="' + url + '">' + escapeHtml(text) + '</a></div></li>';
+                  }
+                  return '<li><a href="' + rawUrl + '" target="_blank" rel="noopener">' + escapeHtml(text) + '</a></li>';
+                }).join('');
+                attBlock.style.display = 'block';
+                attList.querySelectorAll('[data-preview="image"], .attachment-img-wrap').forEach(function (el) {
+                  el.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    var u = el.getAttribute('data-preview-url');
+                    if (u) openPreview(u.replace(/&amp;/g, '&'));
+                  });
+                });
+              }
+              if (historyDetailBackdrop) {
+                historyDetailBackdrop.classList.add('show');
+                historyDetailBackdrop.setAttribute('aria-hidden', 'false');
+              }
+            })
+            .catch(function () {
+              document.getElementById('historyDetailReasonCategory').textContent = '載入失敗';
+            });
+        }
+
+        if (allInternTbody) {
+          allInternTbody.addEventListener('click', function (e) {
+            var btn = e.target.closest('.btn-preview-intern');
+            if (btn && btn.dataset.caseId) openDetailModal(btn.dataset.caseId);
+          });
+        }
+        if (historyDetailCloseBtn && historyDetailBackdrop) {
+          historyDetailCloseBtn.addEventListener('click', function () {
+            historyDetailBackdrop.classList.remove('show');
+            historyDetailBackdrop.setAttribute('aria-hidden', 'true');
+          });
+        }
+        if (historyDetailBackdrop) {
+          historyDetailBackdrop.addEventListener('click', function (ev) {
+            if (ev.target === historyDetailBackdrop) {
+              historyDetailBackdrop.classList.remove('show');
+              historyDetailBackdrop.setAttribute('aria-hidden', 'true');
+            }
+          });
+        }
+        if (previewCloseBtn) previewCloseBtn.addEventListener('click', closePreview);
+        if (previewBackdrop) {
+          previewBackdrop.addEventListener('click', function (ev) {
+            if (ev.target === previewBackdrop) closePreview();
+          });
+        }
+
         (async function () {
           try {
             const res = await fetch('/vendor/api/withdraw_intern_list', { credentials: 'same-origin' });

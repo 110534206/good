@@ -6,6 +6,11 @@ import traceback
 from flask import Blueprint, current_app, jsonify, render_template, request, session
 from werkzeug.utils import secure_filename
 
+try:
+    from mysql.connector.errors import ProgrammingError as MySQL_ProgrammingError
+except ImportError:
+    MySQL_ProgrammingError = None
+
 from config import get_db
 from semester import get_current_semester_id, get_current_semester_code
 
@@ -4737,33 +4742,34 @@ def get_withdraw_intern_list():
         if current_semester_id is not None:
             args.insert(0, current_semester_id)
             status_sql = """
-            SELECT io.student_id,
+            SELECT mr.student_id,
                    u.name AS student_name, u.username AS student_number,
-                   ic.company_name, ij.title AS job_title,
-                   CASE WHEN ir.student_id IS NOT NULL THEN 'withdrawing' ELSE COALESCE(io.status, '') END AS status
-            FROM internship_offers io
-            JOIN users u ON u.id = io.student_id
-            JOIN internship_jobs ij ON ij.id = io.job_id
-            JOIN internship_companies ic ON ic.id = ij.company_id
+                   ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
+                   CASE WHEN ir.student_id IS NOT NULL THEN 'withdrawing' ELSE 'accepted' END AS status,
+                   ir.id AS record_id
+            FROM matching_results mr
+            JOIN users u ON u.id = mr.student_id
+            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+            JOIN internship_companies ic ON ic.id = mr.company_id
             LEFT JOIN internship_records ir
-                   ON ir.student_id = io.student_id
+                   ON ir.student_id = mr.student_id
                   AND ir.semester_id = %s
-                  AND ir.company_id = ic.id
-            WHERE io.status IN ('accepted', 'withdrawing', 'confirmed') AND ij.company_id IN (""" + placeholders + """)
-            ORDER BY ic.company_name, ij.title, u.name
+                  AND ir.company_id = mr.company_id
+            WHERE mr.company_id IN (""" + placeholders + """)
+            ORDER BY ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title), u.name
             """
         else:
             status_sql = """
-            SELECT io.student_id,
+            SELECT mr.student_id,
                    u.name AS student_name, u.username AS student_number,
-                   ic.company_name, ij.title AS job_title,
-                   COALESCE(io.status, '') AS status
-            FROM internship_offers io
-            JOIN users u ON u.id = io.student_id
-            JOIN internship_jobs ij ON ij.id = io.job_id
-            JOIN internship_companies ic ON ic.id = ij.company_id
-            WHERE io.status IN ('accepted', 'withdrawing', 'confirmed') AND ij.company_id IN (""" + placeholders + """)
-            ORDER BY ic.company_name, ij.title, u.name
+                   ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
+                   'accepted' AS status
+            FROM matching_results mr
+            JOIN users u ON u.id = mr.student_id
+            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+            JOIN internship_companies ic ON ic.id = mr.company_id
+            WHERE mr.company_id IN (""" + placeholders + """)
+            ORDER BY ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title), u.name
             """
         cursor.execute(status_sql, args)
         rows = cursor.fetchall()
@@ -4772,7 +4778,7 @@ def get_withdraw_intern_list():
         if current_semester_id is not None:
             try:
                 cursor.execute("""
-                    SELECT ir.student_id,
+                    SELECT ir.id AS record_id, ir.student_id,
                            u.name AS student_name, u.username AS student_number,
                            ic.company_name, ir.job_title,
                            ir.status AS status
@@ -4819,16 +4825,16 @@ def get_withdraw_intern_info():
             conn.close()
             return jsonify({"success": False, "message": "找不到廠商所屬的公司"}), 403
         placeholders = ",".join(["%s"] * len(company_ids))
-        # 查詢該學生是否為廠商旗下公司之錄取生（internship_offers）
+        # 查詢該學生是否為廠商旗下公司之錄取生（matching_results）
         cursor.execute("""
-            SELECT io.student_id, io.job_id,
+            SELECT mr.student_id, mr.job_id,
                    u.name AS student_name, u.username AS student_number,
-                   ic.company_name, ij.title AS job_title
-            FROM internship_offers io
-            JOIN users u ON u.id = io.student_id
-            JOIN internship_jobs ij ON ij.id = io.job_id
-            JOIN internship_companies ic ON ic.id = ij.company_id
-            WHERE io.student_id = %s AND ij.company_id IN (""" + placeholders + """)
+                   ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title
+            FROM matching_results mr
+            JOIN users u ON u.id = mr.student_id
+            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+            JOIN internship_companies ic ON ic.id = mr.company_id
+            WHERE mr.student_id = %s AND mr.company_id IN (""" + placeholders + """)
             LIMIT 1
         """, [int(student_id)] + company_ids)
         row = cursor.fetchone()
@@ -4899,14 +4905,14 @@ def submit_withdraw_intern():
             return jsonify({"success": False, "message": "找不到廠商所屬的公司"}), 403
         placeholders = ",".join(["%s"] * len(company_ids))
         cursor.execute("""
-            SELECT io.id AS offer_id,
-                   io.student_id,
-                   io.job_id,
-                   ij.company_id,
-                   ij.title AS job_title
-            FROM internship_offers io
-            JOIN internship_jobs ij ON ij.id = io.job_id
-            WHERE io.student_id = %s AND ij.company_id IN (""" + placeholders + """)
+            SELECT mr.id AS offer_id,
+                   mr.student_id,
+                   mr.job_id,
+                   mr.company_id,
+                   COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title
+            FROM matching_results mr
+            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+            WHERE mr.student_id = %s AND mr.company_id IN (""" + placeholders + """)
             LIMIT 1
         """, [int(student_id)] + company_ids)
         offer = cursor.fetchone()
@@ -4920,35 +4926,38 @@ def submit_withdraw_intern():
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "目前沒有設定當前學期，無法寫入退實習記錄"}), 400
-        # 儲存佐證檔（可選）
-        upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(__file__), "uploads")
-        subdir = "withdraw_evidence"
-        evidence_dir = os.path.join(upload_base, subdir, f"{current_semester_id}_{vendor_id}_{company_id}_{student_id}")
+        # 儲存佐證檔：圖片至 uploads/evidence_image，檔案至 uploads/evidence_file，路徑寫入資料表
+        upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+        evidence_image_dir = os.path.join(upload_base, "evidence_image")
+        evidence_file_dir = os.path.join(upload_base, "evidence_file")
         saved_paths = []
         ts = datetime.now().strftime("%Y%m%d%H%M%S")
         if evidence_image and evidence_image.filename:
             ext = (evidence_image.filename.rsplit(".", 1)[-1] or "").lower()
             if ext in WITHDRAW_EVIDENCE_IMAGE_EXT:
-                os.makedirs(evidence_dir, exist_ok=True)
+                os.makedirs(evidence_image_dir, exist_ok=True)
                 safe = secure_filename(evidence_image.filename) or "image"
                 base, _ = os.path.splitext(safe)
                 save_name = f"img_{ts}_{base[:20]}.{ext}"
-                abs_path = os.path.join(evidence_dir, save_name)
+                abs_path = os.path.join(evidence_image_dir, save_name)
                 evidence_image.save(abs_path)
-                rel = os.path.join(subdir, f"{current_semester_id}_{vendor_id}_{company_id}_{student_id}", save_name).replace("\\", "/")
+                rel = os.path.join("evidence_image", save_name).replace("\\", "/")
                 saved_paths.append(("image", rel, evidence_image.filename))
         if evidence_file and evidence_file.filename:
             ext = (evidence_file.filename.rsplit(".", 1)[-1] or "").lower()
             if ext in WITHDRAW_EVIDENCE_FILE_EXT:
-                os.makedirs(evidence_dir, exist_ok=True)
+                os.makedirs(evidence_file_dir, exist_ok=True)
                 safe = secure_filename(evidence_file.filename) or "file"
                 base, _ = os.path.splitext(safe)
                 save_name = f"file_{ts}_{base[:20]}.{ext}"
-                abs_path = os.path.join(evidence_dir, save_name)
+                abs_path = os.path.join(evidence_file_dir, save_name)
                 evidence_file.save(abs_path)
-                rel = os.path.join(subdir, f"{current_semester_id}_{vendor_id}_{company_id}_{student_id}", save_name).replace("\\", "/")
+                rel = os.path.join("evidence_file", save_name).replace("\\", "/")
                 saved_paths.append(("file", rel, evidence_file.filename))
-        # 寫入退實習記錄至 internship_records
+        # 佐證路徑：第一張圖片、第一個檔案，寫入 internship_records.evidence_image / evidence_file（若表有該欄位）
+        evidence_image_path = next((p for t, p, _ in saved_paths if t == "image"), None)
+        evidence_file_path = next((p for t, p, _ in saved_paths if t == "file"), None)
+        # 寫入退實習記錄至 internship_records（含佐證圖片/檔案路徑）
         insert_params = (
             current_semester_id,
             vendor_id,
@@ -4962,10 +4971,10 @@ def submit_withdraw_intern():
             cursor.execute("""
                 INSERT INTO internship_records
                 (semester_id, vendor_id, company_id, student_id, job_title, status,
-                 reason_category, reason_detail, created_at, updated_at)
+                 reason_category, reason_detail, evidence_image, evidence_file, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, 'withdrawing',
-                        %s, %s, NOW(), NOW())
-            """, insert_params)
+                        %s, %s, %s, %s, NOW(), NOW())
+            """, insert_params + (evidence_image_path, evidence_file_path))
             conn.commit()
         except Exception as create_err:
             err_str = str(create_err)
@@ -4976,21 +4985,15 @@ def submit_withdraw_intern():
                     "success": False,
                     "message": "系統尚未建立退實習記錄表（internship_records），請聯絡管理員。",
                 }), 500
-            if "1136" in err_str or "Column count doesn't match" in err_str:
+            if "1136" in err_str or "1054" in err_str or "Column count doesn't match" in err_str or "Unknown column" in err_str:
                 try:
                     cursor.execute("""
                         INSERT INTO internship_records
-                        (semester_id, vendor_id, company_id, student_id, status,
-                         reason_category, reason_detail)
-                        VALUES (%s, %s, %s, %s, 'withdrawing', %s, %s)
-                    """, (
-                        current_semester_id,
-                        vendor_id,
-                        company_id,
-                        int(student_id),
-                        reason_category,
-                        reason_detail,
-                    ))
+                        (semester_id, vendor_id, company_id, student_id, job_title, status,
+                         reason_category, reason_detail, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, 'withdrawing',
+                                %s, %s, NOW(), NOW())
+                    """, insert_params)
                     conn.commit()
                 except Exception as fallback_err:
                     cursor.close()
@@ -5001,7 +5004,7 @@ def submit_withdraw_intern():
                     }), 500
             else:
                 raise create_err
-        # 建立佐證附件表並寫入
+        # 建立佐證附件表並寫入（同一案件先刪除舊附件，避免重複送出產生多筆）
         try:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS internship_withdraw_attachments (
@@ -5018,6 +5021,11 @@ def submit_withdraw_intern():
                 )
             """)
             conn.commit()
+            cursor.execute("""
+                DELETE FROM internship_withdraw_attachments
+                WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
+            """, (current_semester_id, vendor_id, company_id, int(student_id)))
+            conn.commit()
             for ft, fp, orig in saved_paths:
                 cursor.execute("""
                     INSERT INTO internship_withdraw_attachments
@@ -5032,11 +5040,8 @@ def submit_withdraw_intern():
                 conn.rollback()
             except Exception:
                 pass
+        # 退實習狀態已寫入 internship_records，不再更新 internship_offers（已改用 matching_results）
         try:
-            cursor.execute("""
-                UPDATE internship_offers SET status = 'withdrawing'
-                WHERE student_id = %s AND id = %s
-            """, (int(student_id), offer["offer_id"]))
             conn.commit()
         except Exception:
             pass
@@ -5130,12 +5135,182 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
         raise
 
 
+# =========================================================
+# 廠商退實習：查看自己提交的歷史紀錄（列表 + 詳情）
+# =========================================================
+@vendor_bp.route("/vendor/api/withdraw_history", methods=["GET"])
+def vendor_get_withdraw_history():
+    """廠商：取得自己提交的退實習案件列表（歷史紀錄）"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    vendor_id = session.get("user_id")
+    conn = None
+    cursor = None
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        current_semester_id = get_current_semester_id(cursor)
+        cursor.execute("""
+            SELECT ir.id, ir.student_id, ir.company_id, ir.reason_category, ir.reason_detail,
+                   ir.status, ir.created_at,
+                   u.name AS student_name, u.username AS student_number,
+                   ic.company_name,
+                   (SELECT COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title)
+                    FROM matching_results mr
+                    LEFT JOIN internship_jobs ij ON ij.id = mr.job_id AND ij.company_id = ir.company_id
+                    WHERE mr.student_id = ir.student_id AND mr.company_id = ir.company_id
+                    LIMIT 1) AS job_title
+            FROM internship_records ir
+            JOIN internship_companies ic ON ic.id = ir.company_id
+            JOIN users u ON u.id = ir.student_id
+            WHERE ir.vendor_id = %s
+              AND (ir.status = 'withdrawing' OR ir.status = 'confirmed')
+              AND (%s IS NULL OR ir.semester_id = %s)
+            ORDER BY ir.created_at DESC
+        """, (vendor_id, current_semester_id, current_semester_id))
+        rows = cursor.fetchall()
+        return jsonify({"success": True, "data": rows or []})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _vendor_can_access_withdraw_case(cursor, case_id, vendor_id):
+    """廠商是否可存取該退實習案件（須為自己提交）"""
+    try:
+        cursor.execute("""
+            SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                   ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                   ir.teacher_meeting_notes, ic.company_name
+            FROM internship_records ir
+            JOIN internship_companies ic ON ic.id = ir.company_id
+            WHERE ir.id = %s AND ir.vendor_id = %s
+        """, (int(case_id), vendor_id))
+        return cursor.fetchone()
+    except Exception:
+        try:
+            cursor.execute("""
+                SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                       ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                       ic.company_name
+                FROM internship_records ir
+                JOIN internship_companies ic ON ic.id = ir.company_id
+                WHERE ir.id = %s AND ir.vendor_id = %s
+            """, (int(case_id), vendor_id))
+            row = cursor.fetchone()
+            if row:
+                row["teacher_meeting_notes"] = None
+            return row
+        except Exception:
+            return None
+
+
+@vendor_bp.route("/vendor/api/withdraw_case_detail", methods=["GET"])
+def vendor_get_withdraw_case_detail():
+    """廠商：取得單一退實習案件詳情（自己提交的，僅供預覽）"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    case_id = request.args.get("id") or request.args.get("case_id")
+    if not case_id:
+        return jsonify({"success": False, "message": "缺少案件 id"}), 400
+    vendor_id = session.get("user_id")
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        row = _vendor_can_access_withdraw_case(cursor, int(case_id) if (isinstance(case_id, str) and case_id.isdigit()) else case_id, vendor_id)
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "無權限或案件不存在"}), 404
+        cursor.execute("SELECT u.id, u.name AS student_name, u.username AS student_number FROM users u WHERE u.id = %s", (row["student_id"],))
+        student = cursor.fetchone()
+        cursor.execute("""
+            SELECT COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title, ic.company_name
+            FROM matching_results mr
+            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+            JOIN internship_companies ic ON ic.id = mr.company_id
+            WHERE mr.student_id = %s
+            ORDER BY mr.id DESC LIMIT 1
+        """, (row["student_id"],))
+        offer = cursor.fetchone()
+        attachments = []
+        sid, vid, cid, stid = row["semester_id"], row["vendor_id"], row["company_id"], row["student_id"]
+        try:
+            cursor.execute("""
+                SELECT file_type, file_path, original_filename
+                FROM internship_withdraw_attachments
+                WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
+                ORDER BY id
+            """, (sid, vid, cid, stid))
+            upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+            seen_paths = set()
+            for a in cursor.fetchall():
+                fp = (a.get("file_path") or "").lstrip("/")
+                if fp and fp in seen_paths:
+                    continue
+                if fp:
+                    seen_paths.add(fp)
+                url = "/uploads/" + fp
+                file_size_str = ""
+                if fp:
+                    try:
+                        full_path = os.path.join(upload_base, fp.replace("/", os.sep))
+                        if os.path.isfile(full_path):
+                            sz = os.path.getsize(full_path)
+                            file_size_str = f"{sz} B" if sz < 1024 else (f"{sz // 1024} KB" if sz < 1024 * 1024 else f"{sz / (1024 * 1024):.2f} MB")
+                    except Exception:
+                        pass
+                attachments.append({
+                    "file_type": a.get("file_type") or "file",
+                    "url": url,
+                    "original_filename": a.get("original_filename") or "",
+                    "file_size": file_size_str or None,
+                })
+        except Exception:
+            pass
+        cursor.close()
+        conn.close()
+        return jsonify({
+            "success": True,
+            "data": {
+                "id": row["id"],
+                "student_id": row["student_id"],
+                "student_name": student.get("student_name") if student else "",
+                "student_number": student.get("student_number") if student else "",
+                "company_name": offer.get("company_name") if offer else row.get("company_name"),
+                "job_title": offer.get("job_title") if offer else "",
+                "reason_category": row.get("reason_category") or "",
+                "reason_detail": row.get("reason_detail") or "",
+                "status": row.get("status") or "",
+                "created_at": row.get("created_at").isoformat() if row.get("created_at") else None,
+                "teacher_meeting_notes": (row.get("teacher_meeting_notes") or "").strip(),
+                "attachments": attachments,
+            },
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @vendor_bp.route("/teacher/api/withdraw_cases", methods=["GET"])
 def teacher_get_withdraw_cases():
-    """指導老師：取得待確認的退實習案件列表（僅自己擔任指導老師的公司）"""
+    """指導老師：取得待確認的退實習案件列表（僅自己擔任指導老師的公司）。資料來源：internship_records + matching_results。"""
     if "user_id" not in session or session.get("role") not in ("teacher", "director", "class_teacher"):
         return jsonify({"success": False, "message": "未授權"}), 403
     teacher_id = session.get("user_id")
+    conn = None
+    cursor = None
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
@@ -5146,10 +5321,10 @@ def teacher_get_withdraw_cases():
                        ir.status, ir.created_at,
                        u.name AS student_name, u.username AS student_number,
                        ic.company_name,
-                       (SELECT ij.title
-                        FROM internship_offers io
-                        JOIN internship_jobs ij ON ij.id = io.job_id AND ij.company_id = ir.company_id
-                        WHERE io.student_id = ir.student_id
+                       (SELECT COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title)
+                        FROM matching_results mr
+                        LEFT JOIN internship_jobs ij ON ij.id = mr.job_id AND ij.company_id = ir.company_id
+                        WHERE mr.student_id = ir.student_id AND mr.company_id = ir.company_id
                         LIMIT 1) AS job_title
                 FROM internship_records ir
                 JOIN internship_companies ic ON ic.id = ir.company_id
@@ -5169,10 +5344,10 @@ def teacher_get_withdraw_cases():
                            ir.status, ir.created_at,
                            u.name AS student_name, u.username AS student_number,
                            ic.company_name,
-                           (SELECT ij.title
-                            FROM internship_offers io
-                            JOIN internship_jobs ij ON ij.id = io.job_id AND ij.company_id = ir.company_id
-                            WHERE io.student_id = ir.student_id
+                           (SELECT COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title)
+                            FROM matching_results mr
+                            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id AND ij.company_id = ir.company_id
+                            WHERE mr.student_id = ir.student_id AND mr.company_id = ir.company_id
                             LIMIT 1) AS job_title
                     FROM internship_records ir
                     JOIN internship_companies ic ON ic.id = ir.company_id
@@ -5185,12 +5360,27 @@ def teacher_get_withdraw_cases():
                 rows = cursor.fetchall()
             else:
                 raise
-        cursor.close()
-        conn.close()
         return jsonify({"success": True, "data": rows or []})
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "message": str(e)}), 500
+        err_msg = str(e)
+        if MySQL_ProgrammingError and isinstance(e, MySQL_ProgrammingError) and "1146" in err_msg and "internship_offers" in err_msg:
+            return jsonify({
+                "success": False,
+                "message": "資料庫仍引用已刪除的 internship_offers 表（例如 VIEW 或 TRIGGER），請聯絡管理員檢查並移除後再試。"
+            }), 500
+        return jsonify({"success": False, "message": err_msg}), 500
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @vendor_bp.route("/teacher/api/withdraw_case_detail", methods=["GET"])
@@ -5216,19 +5406,19 @@ def teacher_get_withdraw_case_detail():
             FROM users u WHERE u.id = %s
         """, (row["student_id"],))
         student = cursor.fetchone()
-        # 職缺／公司（從 internship_offers 取該生目前錄取）
+        # 職缺／公司（從 matching_results 取該生目前錄取）
         cursor.execute("""
-            SELECT ij.title AS job_title, ic.company_name
-            FROM internship_offers io
-            JOIN internship_jobs ij ON ij.id = io.job_id
-            JOIN internship_companies ic ON ic.id = ij.company_id
-            WHERE io.student_id = %s
-            ORDER BY io.id DESC LIMIT 1
+            SELECT COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title, ic.company_name
+            FROM matching_results mr
+            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+            JOIN internship_companies ic ON ic.id = mr.company_id
+            WHERE mr.student_id = %s
+            ORDER BY mr.id DESC LIMIT 1
         """, (row["student_id"],))
         offer = cursor.fetchone()
         # 實習生日誌：若系統有日誌表可在此查詢；目前無則回傳空陣列
         logs = []
-        # 廠商上傳的退實習佐證（圖片/檔案）
+        # 廠商上傳的退實習佐證（圖片/檔案），依 file_path 去重避免重複顯示
         attachments = []
         sid, vid, cid, stid = row["semester_id"], row["vendor_id"], row["company_id"], row["student_id"]
         try:
@@ -5238,9 +5428,14 @@ def teacher_get_withdraw_case_detail():
                 WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
                 ORDER BY id
             """, (sid, vid, cid, stid))
-            upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(__file__), "uploads")
+            upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+            seen_paths = set()
             for a in cursor.fetchall():
                 fp = (a.get("file_path") or "").lstrip("/")
+                if fp and fp in seen_paths:
+                    continue
+                if fp:
+                    seen_paths.add(fp)
                 url = "/uploads/" + fp
                 file_size_str = ""
                 if fp:
@@ -5286,7 +5481,13 @@ def teacher_get_withdraw_case_detail():
         })
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"success": False, "message": str(e)}), 500
+        err_msg = str(e)
+        if MySQL_ProgrammingError and isinstance(e, MySQL_ProgrammingError) and "1146" in err_msg and "internship_offers" in err_msg:
+            return jsonify({
+                "success": False,
+                "message": "資料庫仍引用已刪除的 internship_offers 表（例如 VIEW 或 TRIGGER），請聯絡管理員檢查並移除後再試。"
+            }), 500
+        return jsonify({"success": False, "message": err_msg}), 500
 
 
 @vendor_bp.route("/teacher/api/withdraw_confirm", methods=["POST"])
@@ -5369,7 +5570,7 @@ def teacher_confirm_withdraw():
 @vendor_bp.route("/class_teacher/api/intern_status", methods=["GET"])
 def class_teacher_intern_status():
     """班導：取得所帶班級學生的實習狀況（實習中／退出／未實習）。
-    資料來源：users、classes、classes_teacher（帶班）、internship_offers（當前學期錄取）、internship_jobs / internship_companies、internship_records。僅顯示當前學期實習與退實習狀態。
+    資料來源：users、classes、classes_teacher（帶班）、matching_results（當前學期錄取）、internship_jobs / internship_companies、internship_records。僅顯示當前學期實習與退實習狀態。
     """
     if "user_id" not in session or session.get("role") != "class_teacher":
         return jsonify({"success": False, "message": "未授權"}), 403
@@ -5406,23 +5607,15 @@ def class_teacher_intern_status():
             cursor.execute("""
                 SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
                        c.name AS class_name, c.department, c.admission_year,
-                       io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
-                       ic.company_name, ij.title AS job_title,
+                       mr.id AS offer_id, 'accepted' AS offer_status,
+                       ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
                        vri.id AS withdraw_id
                 FROM users u
                 JOIN classes c ON c.id = u.class_id
                 JOIN classes_teacher ct ON ct.class_id = c.id AND ct.teacher_id = %s AND ct.role = 'classteacher'
-                LEFT JOIN (
-                    SELECT io1.* FROM internship_offers io1
-                    INNER JOIN (
-                        SELECT student_id, MAX(io0.id) AS max_id
-                        FROM internship_offers io0
-                        WHERE %s IS NULL OR io0.semester_id = %s
-                        GROUP BY student_id
-                    ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
-                ) io ON io.student_id = u.id
-                LEFT JOIN internship_jobs ij ON ij.id = io.job_id
-                LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                LEFT JOIN matching_results mr ON mr.student_id = u.id AND mr.semester_id <=> %s
+                LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+                LEFT JOIN internship_companies ic ON ic.id = mr.company_id
                 LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                 WHERE u.role = 'student'
                 AND EXISTS (
@@ -5431,26 +5624,21 @@ def class_teacher_intern_status():
                     AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
                 )
                 ORDER BY c.name, u.username
-            """, (teacher_id, current_semester_id, current_semester_id, current_semester_id, current_semester_id))
+            """, (teacher_id, current_semester_id, current_semester_id, current_semester_id))
         except Exception as sem_err:
             if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err) or "internship_configs" in str(sem_err):
                 cursor.execute("""
                     SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
                            c.name AS class_name, c.department, c.admission_year,
-                           io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
-                           ic.company_name, ij.title AS job_title,
+                           mr.id AS offer_id, 'accepted' AS offer_status,
+                           ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
                            vri.id AS withdraw_id
                     FROM users u
                     JOIN classes c ON c.id = u.class_id
                     JOIN classes_teacher ct ON ct.class_id = c.id AND ct.teacher_id = %s AND ct.role = 'classteacher'
-                    LEFT JOIN (
-                        SELECT io1.* FROM internship_offers io1
-                        INNER JOIN (
-                            SELECT student_id, MAX(id) AS max_id FROM internship_offers GROUP BY student_id
-                        ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
-                    ) io ON io.student_id = u.id
-                    LEFT JOIN internship_jobs ij ON ij.id = io.job_id
-                    LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                    LEFT JOIN matching_results mr ON mr.student_id = u.id AND mr.semester_id <=> %s
+                    LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+                    LEFT JOIN internship_companies ic ON ic.id = mr.company_id
                     LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                     WHERE u.role = 'student'
                     AND EXISTS (
@@ -5503,7 +5691,7 @@ def class_teacher_intern_status():
 @vendor_bp.route("/director/api/intern_status", methods=["GET"])
 def director_intern_status():
     """主任：取得全部學生的實習狀況（實習中／退出／未實習）。
-    資料來源：users（學生）、classes（班級）、internship_offers（當前學期錄取）、internship_jobs / internship_companies（職缺與實習單位）、internship_records（退實習紀錄）。僅顯示「當前學期」的實習與退實習狀態。
+    資料來源：users（學生）、classes（班級）、matching_results（當前學期錄取）、internship_jobs / internship_companies（職缺與實習單位）、internship_records（退實習紀錄）。僅顯示「當前學期」的實習與退實習狀態。
     """
     if "user_id" not in session or session.get("role") not in ("director", "ta", "admin"):
         return jsonify({"success": False, "message": "未授權"}), 403
@@ -5535,27 +5723,19 @@ def director_intern_status():
                 return base + " (" + str(ay).strip() + "屆)"
             return base or ""
 
-        # 每位學生只取一筆錄取（當前學期且 id 最大），避免多筆錄取造成錯誤顯示
+        # 每位學生只取一筆錄取（當前學期 matching_results），避免多筆錄取造成錯誤顯示
         try:
             cursor.execute("""
                 SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
                        c.name AS class_name, c.department, c.admission_year,
-                       io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
-                       ic.company_name, ij.title AS job_title,
+                       mr.id AS offer_id, 'accepted' AS offer_status,
+                       ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
                        vri.id AS withdraw_id
                 FROM users u
                 LEFT JOIN classes c ON c.id = u.class_id
-                LEFT JOIN (
-                    SELECT io1.* FROM internship_offers io1
-                    INNER JOIN (
-                        SELECT student_id, MAX(io0.id) AS max_id
-                        FROM internship_offers io0
-                        WHERE %s IS NULL OR io0.semester_id = %s OR io0.semester_id IS NULL
-                        GROUP BY student_id
-                    ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
-                ) io ON io.student_id = u.id
-                LEFT JOIN internship_jobs ij ON ij.id = io.job_id
-                LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                LEFT JOIN matching_results mr ON mr.student_id = u.id AND mr.semester_id <=> %s
+                LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+                LEFT JOIN internship_companies ic ON ic.id = mr.company_id
                 LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                 WHERE u.role = 'student'
                 AND EXISTS (
@@ -5564,26 +5744,22 @@ def director_intern_status():
                     AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
                 )
                 ORDER BY c.name, u.username
-            """, (current_semester_id, current_semester_id, current_semester_id, current_semester_id))
+            """, (current_semester_id, current_semester_id, current_semester_id))
         except Exception as sem_err:
             if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err) or "internship_configs" in str(sem_err):
-                # 無 semester_id 或 internship_configs 表時：每位學生只取一筆錄取（id 最大＝最新）
                 cursor.execute("""
                     SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
                            c.name AS class_name, c.department, c.admission_year,
-                           io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
-                           ic.company_name, ij.title AS job_title,
+                           mr.id AS offer_id, 'accepted' AS offer_status,
+                           ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
                            vri.id AS withdraw_id
                     FROM users u
                     LEFT JOIN classes c ON c.id = u.class_id
-                    LEFT JOIN (
-                        SELECT io1.* FROM internship_offers io1
-                        INNER JOIN (
-                            SELECT student_id, MAX(id) AS max_id FROM internship_offers GROUP BY student_id
-                        ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
-                    ) io ON io.student_id = u.id
-                    LEFT JOIN internship_jobs ij ON ij.id = io.job_id
-                    LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                    LEFT JOIN (SELECT mr1.* FROM matching_results mr1
+                        INNER JOIN (SELECT student_id, MAX(id) AS max_id FROM matching_results GROUP BY student_id) mr2
+                        ON mr1.student_id = mr2.student_id AND mr1.id = mr2.max_id) mr ON mr.student_id = u.id
+                    LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+                    LEFT JOIN internship_companies ic ON ic.id = mr.company_id
                     LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                     WHERE u.role = 'student'
                     ORDER BY c.name, u.username
@@ -5593,33 +5769,28 @@ def director_intern_status():
 
         rows = cursor.fetchall() or []
 
-        # 如果有 internship_configs 但沒有任何符合條件的學生，為了避免畫面完全沒資料，
-        # 再做一次「不依賴 internship_configs」的簡化查詢，至少顯示目前 internship_offers 的最新狀態。
+        # 若有 internship_configs 但無符合學生時，再做一次不依賴 internship_configs 的簡化查詢，顯示 matching_results 狀態
         if not rows:
             try:
                 cursor.execute("""
                     SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
                            c.name AS class_name, c.department, c.admission_year,
-                           io.id AS offer_id, COALESCE(io.status, '') AS offer_status,
-                           ic.company_name, ij.title AS job_title,
+                           mr.id AS offer_id, 'accepted' AS offer_status,
+                           ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
                            vri.id AS withdraw_id
                     FROM users u
                     LEFT JOIN classes c ON c.id = u.class_id
-                    LEFT JOIN (
-                        SELECT io1.* FROM internship_offers io1
-                        INNER JOIN (
-                            SELECT student_id, MAX(id) AS max_id FROM internship_offers GROUP BY student_id
-                        ) io2 ON io1.student_id = io2.student_id AND io1.id = io2.max_id
-                    ) io ON io.student_id = u.id
-                    LEFT JOIN internship_jobs ij ON ij.id = io.job_id
-                    LEFT JOIN internship_companies ic ON ic.id = ij.company_id
+                    LEFT JOIN (SELECT mr1.* FROM matching_results mr1
+                        INNER JOIN (SELECT student_id, MAX(id) AS max_id FROM matching_results GROUP BY student_id) mr2
+                        ON mr1.student_id = mr2.student_id AND mr1.id = mr2.max_id) mr ON mr.student_id = u.id
+                    LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+                    LEFT JOIN internship_companies ic ON ic.id = mr.company_id
                     LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                     WHERE u.role = 'student'
                     ORDER BY c.name, u.username
                 """, (current_semester_id,))
                 rows = cursor.fetchall() or []
             except Exception:
-                # fallback 查詢失敗時，維持原本 rows（可能為空），避免整個 API 失敗
                 pass
 
         cursor.close()

@@ -1115,6 +1115,14 @@
       return dt.toLocaleString('zh-TW', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
     }
 
+    // 公告/退實習附件：相對路徑（如 announcements/xxx.png、evidence_image/xxx.png）轉為可請求的 /uploads/ 網址
+    function uploadsUrl(p) {
+      const s = (p || '').trim();
+      if (!s) return '';
+      if (s.startsWith('/') || s.startsWith('http')) return s;
+      return '/uploads/' + s;
+    }
+
     // helper: 將類別轉換為中文顯示
     function getCategoryLabel(category, title = '') {
       // 如果標題包含「公告」，優先顯示為「公告」（兼容舊數據）
@@ -1806,7 +1814,7 @@
         if (imgAtt.length) {
           attachmentsBlock += '<div class="notif-attachments-imgs">';
           imgAtt.forEach(a => {
-            const path = (a.file_path || a.url || '').replace(/"/g, '&quot;');
+            const path = uploadsUrl(a.file_path || a.url || '').replace(/"/g, '&quot;');
             const name = (a.file_name || a.filename || '圖片').replace(/</g, '&lt;').replace(/"/g, '&quot;');
             attachmentsBlock += `<div class="notif-attach-img-wrap"><img src="${path}" alt="${name}" title="${name}"><a href="${path}" download="${name}" target="_blank" rel="noopener" class="notif-download-btn notif-download-img"><i class="bi bi-download"></i>${name}</a></div>`;
           });
@@ -1815,7 +1823,7 @@
         if (fileAtt.length) {
           attachmentsBlock += '<div class="notif-attachments-files">';
           fileAtt.forEach(a => {
-            const path = (a.file_path || a.url || '').replace(/"/g, '&quot;');
+            const path = uploadsUrl(a.file_path || a.url || '').replace(/"/g, '&quot;');
             const name = (a.file_name || a.filename || '下載檔案').replace(/</g, '&lt;').replace(/"/g, '&quot;');
             attachmentsBlock += `<a href="${path}" download="${name}" target="_blank" rel="noopener" class="notif-download-btn"><i class="bi bi-download"></i>${name}</a>`;
           });
@@ -2287,11 +2295,13 @@
         const files = annUploadedList.filter(x => !x.is_image);
         imageList.innerHTML = images.map((x, i) => {
           const idx = annUploadedList.indexOf(x);
-          return `<span class="d-inline-block position-relative"><img src="${x.url}" alt="" style="max-width:120px;max-height:80px;object-fit:contain;border:1px solid #ddd;border-radius:6px;"><button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0" style="transform:translate(50%,-50%);" data-remove-idx="${idx}" aria-label="移除">×</button></span>`;
+          const src = uploadsUrl(x.url);
+          return `<span class="d-inline-block position-relative"><img src="${src}" alt="" style="max-width:120px;max-height:80px;object-fit:contain;border:1px solid #ddd;border-radius:6px;"><button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0" style="transform:translate(50%,-50%);" data-remove-idx="${idx}" aria-label="移除">×</button></span>`;
         }).join('');
         fileList.innerHTML = files.map((x, i) => {
           const idx = annUploadedList.indexOf(x);
-          return `<span class="me-2"><a href="${x.url}" target="_blank">${x.filename}</a> <button type="button" class="btn btn-link btn-sm text-danger p-0" data-remove-idx="${idx}">移除</button></span>`;
+          const href = uploadsUrl(x.url);
+          return `<span class="me-2"><a href="${href}" target="_blank">${x.filename}</a> <button type="button" class="btn btn-link btn-sm text-danger p-0" data-remove-idx="${idx}">移除</button></span>`;
         }).join('');
         imageList.querySelectorAll('[data-remove-idx]').forEach(btn => {
           btn.addEventListener('click', () => { annUploadedList.splice(parseInt(btn.getAttribute('data-remove-idx')), 1); renderAnnUploadedList(); });
