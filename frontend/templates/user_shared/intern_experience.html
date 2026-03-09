@@ -17,14 +17,22 @@
       background: #f7f9fc;
       margin: 0;
       padding: 0;
+      padding-top: 4.5rem; /* 預留固定頂端列高度（與 look_company 一致） */
     }
 
     header {
       background: #0454a3;
       color: white;
       padding: 1rem 2rem;
-      text-align: center;
       font-size: 1.5rem;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .topbar {
@@ -37,11 +45,12 @@
       color: #fff;
     }
 
-    /* 三條線選單按鈕樣式 - 與 approve_company.html 一致 */
+    /* 三條線選單按鈕樣式 - 與 look_company.html 一致 */
     .top-bar-left {
-      position: fixed;
-      top: 1rem;
+      position: absolute;
+      top: 50%;
       left: 1rem;
+      transform: translateY(-50%);
       z-index: 1100;
     }
 
@@ -267,20 +276,28 @@ body {
   letter-spacing: 1px;
 }
 
+/* 實習心得分享主內容容器額外下移一些 */
+.intern-experience-container {
+  margin-top: 6rem;
+  margin-bottom: 3rem;
+}
+
 /* ===== 業界等級美化結束 ===== */
 
 </style>
 </head>
 
 <body class="p-0" data-user-id="{{ user_id or 0 }}" data-initial-company-id="{{ initial_company_id or '' }}">
-  <header>實習心得分享</header>
-  <div class="top-bar-left">
-    <div id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
-          <span></span><span></span><span></span>
+  <header>
+    <div class="top-bar-left">
+      <div id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
+        <span></span><span></span><span></span>
       </div>
     </div>
+    實習心得分享
+  </header>
 
-  <div class="container my-4">
+  <div class="container intern-experience-container">
     <!-- 分頁標籤 -->
     <ul class="nav nav-tabs" id="experienceTabs" role="tablist">
       <li class="nav-item" role="presentation">
