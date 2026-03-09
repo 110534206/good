@@ -2030,7 +2030,7 @@
         const selectedJobCategory = jobCategorySelect.value;
         const selectedLevel = levelSelect.value;
         const authorityId = authoritySelect.value;
-
+ㄊ
         if (selectedJobCategory && selectedLevel && authorityId && authorityId !== 'OTHER') {
           // 查找對應的證照代碼
           await findCertCodeByJobCategoryAndLevel(authorityId, selectedJobCategory, selectedLevel, codeInput, nameInput, categoryInput);
@@ -5041,15 +5041,38 @@
 
 
         function normalizeCompareText(value) {
-            return String(value || '').replace(/\s+/g, '').trim().toLowerCase();
+            const s = String(value || '').replace(/\s+/g, '').trim().toLowerCase();
+            const num = parseFloat(s);
+            if (!isNaN(num) && s !== '') return String(num);
+            return s;
         }
 
         function normalizeCompareCredits(value) {
             const raw = String(value || '').trim();
             if (!raw) return '';
             if (raw.includes('*')) return '0';
+            // 學分常為 "3" 或 "3/3"（實習學期制）：統一成數字比較，例如 3/3 → 3
+            if (raw.includes('/')) {
+                const parts = raw.split('/').map(p => p.replace(/[^\d.]/g, '').trim());
+                const a = parts[0] ? parseFloat(parts[0]) : NaN;
+                const b = parts[1] ? parseFloat(parts[1]) : NaN;
+                if (!isNaN(a)) return String(a);
+                if (!isNaN(b)) return String(b);
+            }
             const normalized = raw.replace(/[^\d.]/g, '');
             return normalized || raw;
+        }
+
+        function creditsAndGradeEqual(importedCourse, ocrCourse) {
+            const importedGrade = normalizeCompareText(importedCourse ? importedCourse.grade : '');
+            const ocrGrade = normalizeCompareText(ocrCourse.grade);
+            const importedCredits = normalizeCompareCredits(importedCourse ? importedCourse.credits : '');
+            const ocrCredits = normalizeCompareCredits(ocrCourse.credits);
+            const g1 = parseFloat(importedGrade), g2 = parseFloat(ocrGrade);
+            const gradeEq = importedGrade === ocrGrade || (!isNaN(g1) && !isNaN(g2) && g1 === g2);
+            const c1 = parseFloat(importedCredits), c2 = parseFloat(ocrCredits);
+            const credEq = importedCredits === ocrCredits || (!isNaN(c1) && !isNaN(c2) && c1 === c2);
+            return gradeEq && credEq;
         }
 
         function escapeHtml(value) {
@@ -5093,12 +5116,13 @@
                 const isMatch = bestMatchIndex > -1 && bestSimilarity >= SIMILARITY_THRESHOLD;
                 const importedCourse = isMatch ? allCoursesData[bestMatchIndex] : null;
                 const importedGrade = normalizeCompareText(importedCourse ? importedCourse.grade : '');
-                const importedCredits = normalizeCompareCredits(importedCourse ? importedCourse.credits : '');
                 const ocrGrade = normalizeCompareText(ocrCourse.grade);
+                const importedCredits = normalizeCompareCredits(importedCourse ? importedCourse.credits : '');
                 const ocrCredits = normalizeCompareCredits(ocrCourse.credits);
                 const gradeDiff = Boolean(importedCourse) && importedGrade !== ocrGrade;
                 const creditsDiff = Boolean(importedCourse) && importedCredits !== ocrCredits;
-                const action = !isMatch ? 'add' : (gradeDiff || creditsDiff ? 'update' : 'same');
+                const isSame = isMatch && creditsAndGradeEqual(importedCourse, ocrCourse);
+                const action = !isMatch ? 'add' : (isSame ? 'same' : 'update');
 
                 if (isMatch) {
                     matchedImportedIndices.add(bestMatchIndex);
@@ -5213,7 +5237,7 @@
                             <div class="border rounded p-2 bg-light">
                                 <div class="small text-muted">相符</div>
                                 <div class="fw-bold text-success">${sameCount}</div>
-                                <div class="small text-muted">筆</div>
+                                <div class="small text-muted">筆（與 Excel 一致）</div>
                             </div>
                         </div>
                         <div class="col-6 col-md-3">
@@ -5238,7 +5262,7 @@
                             </div>
                         </div>
                     </div>
-                    <p class="small text-muted mb-2">Excel 是正確答案，AI 只是幫忙比對。有不一樣的地方可以在下面課程表手動改，或按「套用」一次更新。</p>
+                    <p class="small text-muted mb-2">以<strong>當年實習學期</strong>的成績檔（Excel）為正確答案，AI 只辨識成績單上對應的課程與成績並比對。有不一樣的地方可以在下面課程表手動改，或按「套用」一次更新。</p>
                     ${totalDiffCount > 0 ? `
                         <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
                             <table class="table table-sm table-bordered align-middle">
@@ -5273,7 +5297,7 @@
             `;
 
             Swal.fire({
-                title: `AI 成績單比對結果`,
+                title: `AI 成績單比對結果（依實習學期成績檔）`,
                 html: previewHtml,
                 icon: 'info',
                 showCancelButton: true,
