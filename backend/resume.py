@@ -1672,10 +1672,9 @@ def get_resume_data():
                 ORDER BY CourseName
             """, (student_id,))
         courses = cursor.fetchall() or []
-        if mapping and mapping.get("course_grade_ids"):
-            raw_ids = [x.strip() for x in (mapping["course_grade_ids"] or "").split(",") if x.strip()]
+        if mapping is not None:
+            raw_ids = [x.strip() for x in (mapping.get("course_grade_ids") or "").split(",") if x and str(x).strip()]
             if raw_ids:
-                # 向後相容：若為數字則視為 course_grades.id，否則視為課程名稱
                 ids_are_int = all((x or "").replace("-", "").isdigit() for x in raw_ids)
                 if ids_are_int:
                     ids_set = set(int(x) for x in raw_ids)
@@ -1683,14 +1682,18 @@ def get_resume_data():
                 else:
                     ids_set = set(raw_ids)
                     courses = [c for c in courses if (c.get("name") or "").strip() in ids_set]
+            else:
+                courses = []
         
-        # 提取成績單路徑（從 ProofImage 欄位）
+        # 提取成績單路徑（從 ProofImage 欄位），並確保每筆課程都帶 proof_image 供編輯時保留
         transcript_path = ''
         for course in courses:
             tp = course.get('transcript_path')
             if tp:
                 transcript_path = tp
                 break
+        for c in courses:
+            c["proof_image"] = c.get("transcript_path") or transcript_path or ""
 
         # ===== 5. 證照資料 — 單一 SQL，不再三段重複 =====
 
@@ -1806,13 +1809,17 @@ def get_resume_data():
 
         cursor.execute(sql_cert, (student_id,))
         all_certifications = cursor.fetchall() or []
-        if mapping and mapping.get("certification_ids"):
-            try:
-                ids_set = set(int(x.strip()) for x in (mapping["certification_ids"] or "").split(",") if x.strip())
-                if ids_set:
+        if mapping is not None:
+            cert_ids_str = mapping.get("certification_ids") or ""
+            raw_cert_ids = [x.strip() for x in cert_ids_str.split(",") if x and str(x).strip()]
+            if raw_cert_ids:
+                try:
+                    ids_set = set(int(x) for x in raw_cert_ids)
                     all_certifications = [c for c in all_certifications if c.get("id") in ids_set]
-            except ValueError:
-                pass
+                except ValueError:
+                    pass
+            else:
+                all_certifications = []
         
         # 在處理證照分類時
         labor_certs = [c for c in all_certifications if c.get('category') == 'labor' or c.get('authority_id') == 1]
@@ -1823,35 +1830,23 @@ def get_resume_data():
         for idx, cert in enumerate(all_certifications[:3]):  # 只打印前3筆
             print(f"  證照 {idx+1}: id={cert.get('id')}, cert_code={cert.get('cert_code')}, job_category={cert.get('job_category')}, level={cert.get('level')}, authority_id={cert.get('authority_id')}")
 
-        # ===== 6. 取最新一批證照 =====
-
+        # ===== 6. 證照列表：有 mapping 時只顯示此履歷勾選的；無 mapping 時取最新一批 =====
         certifications = []
         if all_certifications:
-            latest_created_at = all_certifications[0]["CreatedAt"]
-            latest_id = all_certifications[0]["id"]
-
-            if latest_created_at:
-                certifications = [
-                    c for c in all_certifications
-                    if c["CreatedAt"] == latest_created_at
-                ]
+            if mapping is not None:
+                certifications = list(all_certifications)
             else:
-                max_id = latest_id
-                certifications = [
-                    c for c in all_certifications
-                    if c["id"] >= (max_id - 50)
-                ]
-
-            # 過濾空白資料
+                latest_created_at = all_certifications[0]["CreatedAt"]
+                latest_id = all_certifications[0]["id"]
+                if latest_created_at:
+                    certifications = [c for c in all_certifications if c["CreatedAt"] == latest_created_at]
+                else:
+                    max_id = latest_id
+                    certifications = [c for c in all_certifications if c["id"] >= (max_id - 50)]
             certifications = [
                 c for c in certifications
-                if (
-                    (c["job_category"] and c["level"]) or
-                    (c["CertName"]) or
-                    (c.get("cert_code") is not None)
-                )
+                if ((c.get("job_category") and c.get("level")) or c.get("CertName") or c.get("cert_code") is not None)
             ]
-            # 依 id 升序排列，使編輯時證照順序與使用者新增順序一致（先新增的在前）
             certifications.sort(key=lambda c: (c.get("id") or 0))
 
         # ===== 7. 語言能力 =====
@@ -2018,16 +2013,34 @@ def get_resume_data():
                 "AcquisitionDate": acquisition_date_str  # 轉換為字符串格式，確保 JSON 序列化正常
             })
 
-        # ===== 10. 回傳結果（路徑一律正斜線、不回傳 None）=====
+        # ===== 10. 回傳結果（路徑一律正斜線、相對路徑 uploads/... 供前端顯示）=====
         def norm_path(p):
             if p is None or (isinstance(p, str) and p.strip() == ""):
                 return ""
             return (p or "").replace("\\", "/").strip()
 
-        # 姓名、電子信箱、個人頭貼優先從 users 表帶入
+        def to_relative_upload_path(p):
+            """將絕對路徑或混合路徑轉為相對 uploads/ 開頭，供前端 imagePathToUrl 使用"""
+            s = norm_path(p)
+            if not s:
+                return ""
+            if "uploads" in s:
+                idx = s.find("uploads")
+                return s[idx:]
+            return s
+
+        for c in courses:
+            if c.get("proof_image"):
+                c["proof_image"] = to_relative_upload_path(c["proof_image"])
+        transcript_path_out = to_relative_upload_path(transcript_path)
+        absence_proof_path_out = to_relative_upload_path(absence_proof_path)
+        for fc in formatted_certs:
+            if fc.get("cert_path"):
+                fc["cert_path"] = to_relative_upload_path(fc["cert_path"])
+
         user_name = (user_result.get("name") or "").strip() or student_info.get("StuName", "")
         user_email = (user_result.get("email") or "").strip() or student_info.get("Email", "")
-        user_avatar = norm_path(user_result.get("avatar_url")) or norm_path(student_info.get("PhotoPath"))
+        user_avatar = to_relative_upload_path(user_result.get("avatar_url")) or to_relative_upload_path(student_info.get("PhotoPath"))
 
         return jsonify({
             "success": True,
@@ -2047,8 +2060,8 @@ def get_resume_data():
                 "courses": courses,
                 "certifications": formatted_certs,
                 "languages": languages,
-                "transcript_path": norm_path(transcript_path),
-                "absence_proof_path": norm_path(absence_proof_path),
+                "transcript_path": transcript_path_out,
+                "absence_proof_path": absence_proof_path_out,
                 "absence_data": absence_data
             }
         })
@@ -2559,9 +2572,7 @@ def submit_and_generate_api():
 
         # 解析文本證照資料（非圖片）
         structured_certifications = []
-        
-        # 優先從 JSON 字串解析（新格式）
-        structured_certifications_json = request.form.get('structured_certifications', '')
+        structured_certifications_json = (request.form.get('structured_certifications') or '').strip()
         if structured_certifications_json:
             try:
                 structured_certifications = json.loads(structured_certifications_json)
@@ -2569,7 +2580,12 @@ def submit_and_generate_api():
             except Exception as e:
                 print(f"⚠️ 解析 structured_certifications JSON 失敗: {e}")
                 structured_certifications = []
-        
+        if not structured_certifications and 'structured_certifications' in request.form:
+            try:
+                structured_certifications = json.loads(request.form.get('structured_certifications', '[]') or '[]')
+                print(f"✅ 重試解析證照 JSON，得到 {len(structured_certifications)} 項")
+            except Exception:
+                pass
         # 如果 JSON 解析失敗或為空，則使用舊格式（向後兼容）
         if not structured_certifications:
             cert_names_text = request.form.getlist('cert_name[]')
@@ -2621,8 +2637,8 @@ def submit_and_generate_api():
         cert_codes = request.form.getlist('cert_code[]')
         cert_issuers = request.form.getlist('cert_issuer[]')  # 新增：發證人列表
         
-        # 若未上傳新成績單，從資料庫取既有 ProofImage 寫回各課程（供 save_structured_data 使用）
-        if not transcript_path and result and student_id:
+        # 若未上傳新成績單，從資料庫取既有 ProofImage 寫回各課程（供 save_structured_data 使用，避免編輯時成績單被清空）
+        if not transcript_path and student_id:
             cursor.execute("SHOW COLUMNS FROM course_grades LIKE 'ProofImage'")
             if cursor.fetchone():
                 cursor.execute("""
@@ -5418,6 +5434,18 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
         cert_rows = []
         processed_certs = set() # 用於去重 (job_category, level)
 
+        # 編輯時保留既有證照圖片路徑：若表單未傳 cert_path 則從 DB 帶入，避免編輯後證照圖被清空
+        existing_cert_paths = {}
+        if resume_id:
+            try:
+                cursor.execute("SELECT cert_code, level, CertPath FROM student_certifications WHERE StuID=%s", (student_id,))
+                for r in cursor.fetchall() or []:
+                    key = (r.get("cert_code"), r.get("level"))
+                    if r.get("CertPath"):
+                        existing_cert_paths[key] = (r["CertPath"] or "").replace("\\", "/")
+            except Exception as e:
+                print(f"⚠️ 查詢既有證照路徑失敗: {e}")
+
         # (3) 處理結構化的證照資料 (structured_certifications)
         struct_certs = data.get("structured_certifications", [])
         print(f"📋 收到 structured_certifications: {len(struct_certs)} 筆")
@@ -5428,17 +5456,20 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
             db_authority_id = None
 
             # student_certifications.cert_code 存 certificate_codes.id（整數）
-            raw = (cert.get("cert_code") or "").strip() if cert.get("cert_code") is not None else ""
-            raw_upper = raw.upper() if isinstance(raw, str) else str(raw)
+            raw = cert.get("cert_code")
+            if raw is None:
+                raw = ""
+            raw = str(raw).strip()
+            raw_upper = raw.upper() if raw else ""
             cert_code_id = None  # 要寫入 DB 的 certificate_codes.id
 
             if not raw or raw_upper == 'OTHER':
-                # 其他證照：cert_code 存 NULL
-                if not cert.get("name"):
-                    continue
+                # 其他證照：cert_code 存 NULL；至少有名稱或職類/級別才寫入
                 cert_code_id = None
                 db_job_category = (cert.get("job_category") or "").strip() or None
                 db_level = (cert.get("level") or "").strip() or None
+                if not cert.get("name") and not db_job_category and not db_level:
+                    continue
             elif raw.isdigit():
                 # 數字可能是 id（如 2）或 code（如 14901、11800）。先查 id 是否存在，否則當 code 查
                 try:
@@ -5494,6 +5525,43 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                 except Exception as e:
                     print(f"⚠️ 查詢 certificate_codes 失敗: {e}")
 
+            # 若尚未解析到 cert_code_id，用前端傳的 job_category + level 查 certificate_codes（職類/級別選單會對應到同一張表）
+            if cert_code_id is None:
+                jc = (cert.get("job_category") or "").strip()
+                lv = (cert.get("level") or "").strip()
+                if jc or lv:
+                    try:
+                        if jc and lv:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id FROM certificate_codes
+                                WHERE TRIM(COALESCE(job_category,'')) = %s AND (TRIM(COALESCE(level,'')) = %s OR level IS NULL OR level = '')
+                                LIMIT 1
+                            """, (jc, lv))
+                        elif jc:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id FROM certificate_codes
+                                WHERE TRIM(COALESCE(job_category,'')) = %s
+                                LIMIT 1
+                            """, (jc,))
+                        else:
+                            cursor.execute("""
+                                SELECT id, job_category, level, authority_id FROM certificate_codes
+                                WHERE TRIM(COALESCE(level,'')) = %s
+                                LIMIT 1
+                            """, (lv,))
+                        fc = cursor.fetchone()
+                        if fc and fc.get("id"):
+                            cert_code_id = fc["id"]
+                            if not db_job_category:
+                                db_job_category = (fc.get("job_category") or "").strip() or jc
+                            if not db_level:
+                                db_level = (fc.get("level") or "").strip() or lv
+                            if not db_authority_id and fc.get("authority_id"):
+                                db_authority_id = fc["authority_id"]
+                            print(f"✅ 依職類/級別解析到 cert_code_id: {cert_code_id}")
+                    except Exception as e:
+                        print(f"⚠️ 依 job_category/level 查 certificate_codes 失敗: {e}")
+
             # 編輯時若表單未帶 cert_code（或為 OTHER/空），保留既有 student_certifications 的 cert_code，避免日文等證照被誤存為「其他」
             existing_cert_id = cert.get("id")
             if (cert_code_id is None or cert_code_id == 0) and existing_cert_id and str(existing_cert_id).strip():
@@ -5537,20 +5605,27 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
             if cert.get("authority_id") == 'OTHER' or (cert.get("authority_name") and not db_authority_id):
                 db_authority_id = None
 
-            # 證照名稱：優先使用前端傳來的 name（確保不因 DB 查不到而跳過），否則用 DB 職類+級別
-            cert_name = (cert.get("name") or "").strip()
+            # 證照名稱：前端 name / CertName，或 DB 職類+級別，或 job_category+level 字串
+            cert_name = (cert.get("name") or cert.get("CertName") or "").strip()
             if not cert_name and db_job_category and db_level:
                 cert_name = f"{db_job_category}{db_level}"
+            if not cert_name and (cert.get("job_category") or cert.get("level")):
+                cert_name = f"{cert.get('job_category') or ''}{cert.get('level') or ''}".strip() or "其他證照"
 
             if not cert_name:
                 print(f"⚠️ 忽略無名稱證照記錄: {cert}")
                 continue
 
-            # 檢查是否重複（使用 job_category, level 作為唯一標識）
-            if db_job_category and db_level:
+            # 檢查是否重複：有 cert_code 時用 (job_category, level)；其他證照用 (cert_name, level) 避免不同「其他」被併成一筆
+            if cert_code_id is not None and db_job_category and db_level:
                 cert_identifier = (db_job_category, db_level)
                 if cert_identifier in processed_certs:
                     print(f"⚠️ 跳過重複的結構化證照記錄: cert_code_id={cert_code_id}")
+                    continue
+                processed_certs.add(cert_identifier)
+            elif cert_code_id is None:
+                cert_identifier = (cert_name, db_level or cert.get("level"))
+                if cert_identifier in processed_certs:
                     continue
                 processed_certs.add(cert_identifier)
 
@@ -5578,16 +5653,15 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                 except:
                     row["AcquisitionDate"] = cert["acquire_date"] # 保持原樣
             
-            # 處理路徑
-            path = cert.get("cert_path")
+            # 處理路徑：表單有傳則用，編輯時未傳則保留 DB 既有 CertPath，避免證照圖被清空
+            path = (cert.get("cert_path") or "").strip()
             if "CertPath" in known_columns and path:
                 # 將 Windows 路徑格式（反斜杠）轉換為 Web 路徑格式（正斜杠）
-                normalized_path = path.replace("\\", "/") 
+                normalized_path = path.replace("\\", "/")
                 # 確保路徑是相對路徑格式
                 if normalized_path.startswith("uploads/"):
                     row["CertPath"] = normalized_path
                 else:
-                    # 如果路徑包含絕對路徑，提取相對路徑部分
                     parts = normalized_path.split("/")
                     if "uploads" in parts:
                         idx_uploads = parts.index("uploads")
@@ -5596,12 +5670,18 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                         row["CertPath"] = normalized_path
             else:
                 row["CertPath"] = None
-            
+                if resume_id and existing_cert_paths:
+                    level_val = db_level or (cert.get("level") or "").strip() or None
+                    key = (cert_code_id, level_val)
+                    if key in existing_cert_paths:
+                        row["CertPath"] = existing_cert_paths[key]
+
             cert_rows.append(row)
 
         # (4) 處理上傳證照圖片（舊的圖片上傳方式，向後兼容） - 這裡為了程式碼完整性省略，因為前端應主要傳遞 structured_certifications
 
         # (5) 實際寫入資料庫；有 resume_id 時不刪除既有證照，僅新增或更新（ON DUPLICATE KEY UPDATE 避免重複鍵）
+        cert_ids_saved = []
         if cert_rows:
             print(f"📋 準備寫入 student_certifications: {len(cert_rows)} 筆")
             if not resume_id:
@@ -5614,19 +5694,29 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                 placeholders = ", ".join(["%s"] * (len(values) + 1))
                 sql = f"INSERT INTO student_certifications ({','.join(cols)}) VALUES ({placeholders})"
                 if resume_id:
-                    # 唯一鍵 (StuID, cert_code, level)：重複時只更新可變欄位
                     update_cols = [c for c in cols if c not in ('StuID', 'cert_code', 'level', 'CreatedAt')]
                     if update_cols:
                         sql += " ON DUPLICATE KEY UPDATE " + ", ".join(f"{c}=VALUES({c})" for c in update_cols)
                 try:
                     cursor.execute(sql, (*values, datetime.now()))
+                    rid = cursor.lastrowid
+                    if not rid:
+                        cursor.execute(
+                            "SELECT id FROM student_certifications WHERE StuID=%s AND (cert_code<=>%s) AND (level<=>%s) ORDER BY id DESC LIMIT 1",
+                            (student_id, row.get("cert_code"), row.get("level"))
+                        )
+                        r = cursor.fetchone()
+                        if r and r.get("id"):
+                            rid = r["id"]
+                    if rid:
+                        cert_ids_saved.append(rid)
                 except Exception as e:
                     print(f"⚠️ 插入證照記錄失敗: {e}")
                     print(f" 記錄內容: {row}")
                     insert_failed = True
                     raise
             if not insert_failed:
-                print(f"✅ student_certifications 已寫入 {len(cert_rows)} 筆")
+                print(f"✅ student_certifications 已寫入 {len(cert_rows)} 筆，mapping 用 id: {cert_ids_saved}")
         else:
             if struct_certs:
                 print(f"⚠️ 有 {len(struct_certs)} 筆證照但 cert_rows 為空（可能全部被跳過），不刪除既存證照")
@@ -5644,20 +5734,10 @@ def save_structured_data(cursor, student_id, data, semester_id=None, resume_id=N
                 """, (student_id, row["language"], row["level"]))
                 lang_ids_saved.append(cursor.lastrowid)
 
-        # 一律計算 mapping 用的 ID（course_grades.id、證照 id、語文 id），供呼叫端寫入 resume_content_mapping
+        # 一律計算 mapping 用的 ID（course_grades.id、證照 id、語文 id），供寫入 resume_content_mapping
         course_ids = course_grade_ids_saved if course_grade_ids_saved else None
         data["selected_course_grade_ids"] = course_ids
-        cert_ids_for_mapping = data.get("selected_certification_ids")
-        if cert_rows:
-            cursor.execute("SELECT id, cert_code, level FROM student_certifications WHERE StuID=%s", (student_id,))
-            db_certs = {(r.get("cert_code"), r.get("level")): r.get("id") for r in cursor.fetchall()}
-            ids_in_order = []
-            for r in cert_rows:
-                key = (r.get("cert_code"), r.get("level"))
-                if key in db_certs and db_certs[key]:
-                    ids_in_order.append(db_certs[key])
-            if ids_in_order:
-                cert_ids_for_mapping = ids_in_order
+        cert_ids_for_mapping = cert_ids_saved if cert_ids_saved else (data.get("selected_certification_ids") or [])
         lang_ids_for_mapping = data.get("selected_language_skill_ids")
         if lang_ids_saved:
             lang_ids_for_mapping = lang_ids_saved
@@ -5834,6 +5914,86 @@ def get_student_info_for_doc(cursor, student_id, semester_id=None, resume_id=Non
         print(f"⚠️ 查詢缺勤佐證圖片失敗: {e}")
         traceback.print_exc()
     data['absence_proof_path'] = absence_proof_path
+
+    # 依學生入學學期取得實習期間與查詢區間（internship_configs + semesters）
+    try:
+        admission_year = None
+        if student_id and len(str(student_id).strip()) >= 3:
+            try:
+                admission_year = int(str(student_id).strip()[:3])
+            except (ValueError, TypeError):
+                pass
+        user_id = None
+        cursor.execute("SELECT id FROM users WHERE username=%s LIMIT 1", (student_id,))
+        urow = cursor.fetchone()
+        if urow:
+            user_id = urow.get("id")
+        intern_start_date = None
+        intern_end_date = None
+        internship_semester_code = None
+        if admission_year is not None:
+            # 優先該生專用設定 (user_id = 學生)，否則用該屆預設 (user_id IS NULL)
+            cursor.execute("""
+                SELECT ic.intern_start_date, ic.intern_end_date, ic.semester_id, s.code AS semester_code
+                FROM internship_configs ic
+                JOIN semesters s ON s.id = ic.semester_id
+                WHERE ic.admission_year = %s AND (ic.user_id = %s OR ic.user_id IS NULL)
+                ORDER BY (ic.user_id IS NOT NULL) DESC, ic.id DESC
+                LIMIT 1
+            """, (admission_year, user_id))
+            iconf = cursor.fetchone()
+            if iconf:
+                intern_start_date = iconf.get("intern_start_date")
+                intern_end_date = iconf.get("intern_end_date")
+                internship_semester_code = (iconf.get("semester_code") or "").strip()
+        # 實習期間：民國年、月、日
+        if intern_start_date:
+            d = intern_start_date
+            if hasattr(d, 'year'):
+                data['InternStartYear_TW'] = str(d.year - 1911)
+                data['InternStartMonth'] = str(d.month)
+                data['InternStartDay'] = str(d.day)
+            else:
+                data['InternStartYear_TW'] = data['InternStartMonth'] = data['InternStartDay'] = ''
+        else:
+            data['InternStartYear_TW'] = data['InternStartMonth'] = data['InternStartDay'] = ''
+        if intern_end_date:
+            d = intern_end_date
+            if hasattr(d, 'year'):
+                data['InternEndMonth'] = str(d.month)
+                data['InternEndDay'] = str(d.day)
+            else:
+                data['InternEndMonth'] = data['InternEndDay'] = ''
+        else:
+            data['InternEndMonth'] = data['InternEndDay'] = ''
+        # 查詢區間：實習學期的前兩個學期（例：實習 1132 → 1122 至 1131）
+        PrevSemester_1 = ''
+        PrevSemester_2 = ''
+        if internship_semester_code:
+            cursor.execute("SELECT id, code FROM semesters WHERE code IS NOT NULL AND TRIM(code) != '' ORDER BY code")
+            all_sem = cursor.fetchall() or []
+            codes = [row.get("code", "").strip() for row in all_sem if row.get("code")]
+            try:
+                idx = codes.index(internship_semester_code)
+                if idx >= 2:
+                    PrevSemester_1 = codes[idx - 2]
+                    PrevSemester_2 = codes[idx - 1]
+                elif idx >= 1:
+                    PrevSemester_1 = codes[idx - 1]
+                    PrevSemester_2 = internship_semester_code
+                else:
+                    PrevSemester_1 = internship_semester_code
+                    PrevSemester_2 = internship_semester_code
+            except (ValueError, IndexError):
+                pass
+        data['PrevSemester_1'] = PrevSemester_1
+        data['PrevSemester_2'] = PrevSemester_2
+    except Exception as e:
+        print(f"⚠️ 取得實習期間/查詢區間失敗: {e}")
+        traceback.print_exc()
+        data['InternStartYear_TW'] = data['InternStartMonth'] = data['InternStartDay'] = ''
+        data['InternEndMonth'] = data['InternEndDay'] = ''
+        data['PrevSemester_1'] = data['PrevSemester_2'] = ''
 
     return data
 
@@ -6104,6 +6264,15 @@ def generate_application_form_docx(student_data, output_path):
             'ConductScoreNumeric': (info.get('ConductScoreNumeric') or ''),
             'ConductScore': conduct_score,
             'Autobiography': (autobiography or ''),
+            # 實習期間（依學生入學學期從 internship_configs 帶入）
+            'InternStartYear_TW': (student_data.get('InternStartYear_TW') or ''),
+            'InternStartMonth': (student_data.get('InternStartMonth') or ''),
+            'InternStartDay': (student_data.get('InternStartDay') or ''),
+            'InternEndMonth': (student_data.get('InternEndMonth') or ''),
+            'InternEndDay': (student_data.get('InternEndDay') or ''),
+            # 查詢區間（缺曠查詢學期，實習學期前兩學期）
+            'PrevSemester_1': (student_data.get('PrevSemester_1') or ''),
+            'PrevSemester_2': (student_data.get('PrevSemester_2') or ''),
         }
         if image_obj:
             context['Image_1'] = image_obj
