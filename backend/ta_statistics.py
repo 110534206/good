@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session,render_template,redirect, send_file
 from config import get_db
 from datetime import datetime
-from semester import get_current_semester_code, get_current_semester_id, get_current_semester_deadline
+from semester import get_current_semester_code, get_current_semester_id, get_current_semester_deadline, get_flow_semester_id, get_flow_semester_code
 from werkzeug.utils import secure_filename
 from openpyxl import Workbook, load_workbook
 import traceback
@@ -1968,18 +1968,17 @@ def manage_students():
 # --------------------------------
 @ta_statistics_bp.route('/api/internship_flows/current', methods=['GET'])
 def get_internship_flows_current():
-    """取得當前學期的實習流程期限（履歷/志願序/指導老師/廠商截止），科助、管理員可呼叫"""
+    """取得流程學期的實習流程期限（履歷/志願序/指導老師/廠商截止）；1132 時沿用 1131 的紀錄，科助、管理員可呼叫"""
     if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
         return jsonify({"success": False, "message": "未授權"}), 403
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        current_semester_id = get_current_semester_id(cursor)
+        # 使用流程學期（1132 時讀取 1131 的時間管理，避免清空）
+        current_semester_id = get_flow_semester_id(cursor)
         if not current_semester_id:
             return jsonify({"success": True, "semester_id": None, "semester_code": None, "flow": None, "message": "尚未設定當前學期"})
-        cursor.execute("SELECT code FROM semesters WHERE id = %s", (current_semester_id,))
-        row = cursor.fetchone()
-        semester_code = row['code'] if row else None
+        semester_code = get_flow_semester_code(cursor)
         cursor.execute("""
             SELECT id, semester_id, resume_deadline, preference_deadline, advisor_deadline, vendor_deadline, updated_at
             FROM internship_flows
@@ -2012,14 +2011,14 @@ def get_internship_flows_current():
 
 @ta_statistics_bp.route('/api/internship_flows/current', methods=['PUT'])
 def save_internship_flows_current():
-    """儲存當前學期的實習流程期限，科助、管理員可呼叫"""
+    """儲存流程學期的實習流程期限（1132 時寫入 1131），科助、管理員可呼叫"""
     if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
         return jsonify({"success": False, "message": "未授權"}), 403
     data = request.get_json() or {}
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        current_semester_id = get_current_semester_id(cursor)
+        current_semester_id = get_flow_semester_id(cursor)
         if not current_semester_id:
             return jsonify({"success": False, "message": "尚未設定當前學期"}), 400
         resume_deadline = data.get('resume_deadline')

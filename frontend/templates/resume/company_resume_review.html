@@ -8,25 +8,70 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    header {
-      background: linear-gradient(135deg, #0055a8 0%, #006acb 50%, #004f94 100%);
-      border-bottom: none; position: sticky; top: 0; z-index: 10;
-      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+    
+    .container {
+      width: 100%;
+      max-width: 1800px;
+      margin: 0 auto;
+      padding: 0 1rem;
     }
-    .topbar {
-      max-width: 1800px; margin: 0 auto; padding: 18px 24px;
-      display: flex; align-items: center; justify-content: space-between; color: #fff;
+    
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 60px;
+      background-color: #0454a3;
+      z-index: 1200;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
     }
-    .topbar-left { display: flex; align-items: center; }
-    .topbar-left #menu-btn {
-      width: 30px; height: 22px; cursor: pointer; display: flex; flex-direction: column;
-      justify-content: space-between; background: none; border: none; padding: 0;
+
+    .top-bar>.container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 24px;
+      height: 100%;
+      padding: 0 1rem;
     }
-    .topbar-left #menu-btn span {
-      display: block; width: 100%; height: 3px; background-color: white; border-radius: 2px; transition: all 0.3s ease;
+
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
-    .topbar h1 { font-size: 1.5rem; margin: 0; text-align: center; color: #fff; flex: 1; }
-    body { font-family: "Noto Sans TC", sans-serif; background: #ffffff; margin: 0; padding: 0; }
+
+    .top-bar-left #menu-btn {
+      width: 30px;
+      height: 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .top-bar-left #menu-btn span {
+      display: block;
+      width: 100%;
+      height: 3px;
+      background-color: white;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+    }
+    
+    body { 
+      font-family: "Noto Sans TC", sans-serif; 
+      background: #ffffff; 
+      margin: 0; 
+      padding: 0;
+      padding-top: 60px;
+    }
     main { max-width: 1800px; margin: 24px auto 60px; padding: 0 24px; display: flex; flex-direction: column; gap: 24px; }
     .panel {
       background: #ffffff; border-radius: 16px; padding: 24px;
@@ -135,55 +180,93 @@
     }
     
     #side-menu {
-      position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6); padding: 2rem 1.5rem;
-      transform: translateX(-100%); transition: transform 0.3s ease-in-out; z-index: 1300;
-      display: flex; flex-direction: column; align-items: flex-start; color: #fff; user-select: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      width: 320px;
+      max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(6px);
+      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      padding: 2rem 1.5rem;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 1300;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      color: #fff;
+      user-select: none;
     }
-    #side-menu.open { transform: translateX(0); }
+
+    #side-menu.open {
+      transform: translateX(0);
+    }
+
     #side-menu h2 {
-      margin: 0.5rem 0 1.5rem;
+      margin: 0 0 1.5rem 0;
       font-weight: 700;
       font-size: 1.6rem;
+      color: #fff;
+      padding: 0;
+      line-height: 2.4rem;
+      height: 2.4rem;
+      display: flex;
+      align-items: center;
     }
 
     #close-btn {
       position: absolute;
       top: 2rem;
       right: 1.6rem;
-      font-size: 2.2rem;
+      font-size: 2rem;
       background: none;
       border: none;
       color: #fff;
       cursor: pointer;
       line-height: 1;
-      width: 2.4rem;
-      height: 2.4rem;
+      height: 2rem;
+      width: 2rem;
       display: flex;
       align-items: center;
       justify-content: center;
+      z-index: 10;
     }
+
     #side-menu a {
-      display: block; width: 100%; padding: 0.6rem 0; font-size: 1.1rem; color: #e2e8f0;
-      text-decoration: none; border-radius: 4px; transition: background-color 0.2s ease;
+      display: block;
+      width: 100%;
+      padding: 0.6rem 0;
+      font-size: 1.1rem;
+      color: #e2e8f0;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
     }
-    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.18); color: #fff; }
+
+    #side-menu a:hover {
+      background-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
+    }
   </style>
 </head>
 
 <body>
-  <header>
-    <div class="topbar">
-      <div class="topbar-left">
+  <!-- 頂部欄 -->
+  <div class="top-bar">
+    <div class="container">
+      <div class="top-bar-left">
         <button id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
-          <span></span><span></span><span></span>
+          <span></span>
+          <span></span>
+          <span></span>
         </button>
       </div>
-      <h1 id="pageTitle">公司履歷審查</h1>
-      <div style="width: 30px;"></div>
+      <div style="flex: 1; text-align: center; color: white; font-size: 1.5rem; font-weight: 600;" id="pageTitle">公司履歷審查</div>
+      <div style="width: 30px;"></div> <!-- 佔位元素，保持標題置中 -->
     </div>
-  </header>
+  </div>
   <main>
     <section class="panel" aria-label="履歷列表">
       <div class="panel-header">
@@ -383,17 +466,20 @@
     </div>
   </div>
 
+  <!-- 側邊選單 -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
     <a href="/teacher_home">首頁</a>
     <a href="/profile">個人資料</a>
+    <a href="/notifications">公告</a>
     <a href="/upload_company">建立實習機會</a>
-    <a href="/admission_results">查看錄取結果</a>
-    <a href="/manage_vendor">實習廠商管理</a>
-    <a href="/notifications">查看公告</a>
     <a href="/review_resume">學生履歷審核</a>
-    <a href="/logout">登出</a>
+    <a href="/manage_vendor">實習廠商管理</a>
+    <a href="/interview_schedule">行事曆</a>
+    <a href="/admission_results">查看錄取結果</a>
+    <a href="/review_experience">審核實習心得</a>
+    <a href="/login">登出</a>
   </nav>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

@@ -21,6 +21,7 @@
             overflow-x: hidden;
             min-height: 100vh;
             font-size: 1.05rem;
+            padding-top: 4.5rem; /* 預留固定頂端列高度 */
         }
 
         header {
@@ -30,6 +31,11 @@
             text-align: center;
             font-size: 1.5rem;
             box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
         }
 
         /* 三條線選單按鈕樣式 */

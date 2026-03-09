@@ -28,6 +28,7 @@
                         radial-gradient(circle at 85% 0%, rgba(4,84,163,0.15), transparent 35%),
                         linear-gradient(180deg, #f9fbff 0%, #eef3fb 40%, #f6f7fb 100%);
             color: var(--text);
+            padding-top: 4.5rem; /* 預留固定頂端列高度 */
         }
 
         .page-bg-pattern {
@@ -52,7 +53,11 @@
             font-weight: 600;
             border-radius: 0;
             box-shadow: none;
-            position: relative;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
             overflow: visible;
             display: flex;
             align-items: center;

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>智慧實習平台 | 生／未錄取名單管理</title>
+  <title>智慧實習平台 | 實習生／未錄取名單管理</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <style>
     :root {
@@ -607,11 +607,14 @@
       tableContainer.innerHTML = '<table><thead><tr><th>姓名</th><th>學號</th><th>班級</th><th>狀態</th></tr></thead><tbody>' + rows + '</tbody></table>';
     }
 
-    function updateStats(students) {
-      const list = students || [];
-      const unadmitted = list.filter(function(s) { return s && !s.is_matched; });
-      statTotal.textContent = list.length;
-      statUnadmitted.textContent = unadmitted.length;
+    function updateStats(displayedList, totalUnadmittedInSemester) {
+      const list = displayedList || [];
+      if (totalUnadmittedInSemester !== undefined) {
+        statTotal.textContent = totalUnadmittedInSemester;
+      } else {
+        statTotal.textContent = list.length;
+      }
+      statUnadmitted.textContent = list.length;
     }
 
     function applyFilter() {
@@ -619,7 +622,8 @@
       const lower = q.toLowerCase();
       const classId = (classSelect && classSelect.value) ? String(classSelect.value) : '';
 
-      let filtered = allStudents;
+      // 未錄取名單只顯示「未錄取」學生（未媒合），排除已錄取
+      let filtered = allStudents.filter(s => s && !s.is_matched);
       if (classId) {
         filtered = filtered.filter(s => String((s && s.class_id) || '') === classId);
       }
@@ -631,7 +635,8 @@
         });
       }
 
-      updateStats(filtered);
+      const totalUnadmittedInSemester = allStudents.filter(s => s && !s.is_matched).length;
+      updateStats(filtered, totalUnadmittedInSemester);
       renderTable(filtered);
     }
 
@@ -693,7 +698,9 @@
         allStudents = data.students || [];
         currentSemesterId = data.semester_id || null;
         currentSemesterCode = semesterCode; // 保存當前學期代碼
-        populateClassOptions(allStudents);
+        // 班級選項只依未錄取學生產生
+        const unadmittedOnly = (allStudents || []).filter(s => s && !s.is_matched);
+        populateClassOptions(unadmittedOnly);
 
         applyFilter();
       } catch (err) {

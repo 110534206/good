@@ -170,6 +170,11 @@
       border: none; background: #0454a3; color: #fff; font-size: 0.85rem; cursor: pointer; text-decoration: none;
     }
     .btn-view:hover { background: #0369a1; color: #fff; }
+    .btn-confirm-case {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
+      border: none; background: #dc2626; color: #fff; font-size: 0.85rem; cursor: pointer; text-decoration: none;
+    }
+    .btn-confirm-case:hover { background: #b91c1c; color: #fff; }
     .badge { display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 500; }
     .badge-withdrawing { background: #fecaca; color: #b91c1c; }
     .badge-confirmed { background: #17a2b8; color: #fff; }
@@ -178,6 +183,7 @@
       border: 1px solid #e2e8f0;
     }
     .detail-block h3 { font-size: 1rem; color: #334155; margin-bottom: 10px; }
+    .required-mark { color: #dc2626; font-weight: normal; margin-left: 2px; }
     .detail-block .label { color: #64748b; font-size: 0.9rem; }
     .detail-block .value { color: #1e293b; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
     .meeting-notes-input {
@@ -200,7 +206,7 @@
     #successMessage, #errorMessage { display: none; }
     #successMessage.show, #errorMessage.show { display: block; }
     .attachment-card {
-      background: #f8fafc;
+      background: #fff;
       border-radius: 12px;
       box-shadow: 0 2px 12px rgba(0,0,0,0.06);
       border: 1px solid #e2e8f0;
@@ -228,20 +234,21 @@
     .attachment-download-btn {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 6px 14px;
-      border-radius: 6px;
-      border: 1px solid #3b82f6;
-      background: transparent;
+      gap: 4px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1px solid #2563eb;
+      background: #fff;
       color: #2563eb;
-      font-size: 0.85rem;
-      font-weight: 500;
+      font-size: 0.8rem;
+      font-weight: 600;
       text-decoration: none;
-      transition: color 0.2s, background 0.2s;
+      transition: color 0.2s, background 0.2s, border-color 0.2s;
     }
     .attachment-download-btn:hover {
-      color: #1d4ed8;
-      background: rgba(59, 130, 246, 0.08);
+      background: #2563eb;
+      color: #fff;
+      border-color: #2563eb;
     }
     .attachment-file-size {
       font-size: 0.85rem;
@@ -258,43 +265,62 @@
     .attachment-file-row .file-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
     .attachment-file-row .file-info a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .attachment-links { list-style: none; padding: 0; margin: 0; }
-    .attachment-links li {
-      margin-bottom: 16px;
-      padding: 14px 16px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      background: #fff;
-      border: 1px solid #cbd5e1;
-      border-radius: 10px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-    }
-    .attachment-links li:last-child { margin-bottom: 0; }
-    .attachment-links li.attachment-item-file-excel {
-      background: rgba(33, 115, 70, 0.05);
-    }
     .attachment-links li.attachment-item-image {
       flex-direction: column;
       align-items: stretch;
+      margin-bottom: 20px;
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+    }
+    .attachment-img-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 0;
+      max-width: 50%;
+      margin-left: 0;
+      margin-right: auto;
+    }
+    .attachment-links li.attachment-item-file {
+      margin-bottom: 0;
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+    }
+    .attachment-files-section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin-top: 4px;
+    }
+    .attachment-files-section .attachment-file-row {
+      padding: 10px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .attachment-files-section .attachment-file-row:last-child { border-bottom: none; }
+    .attachment-links li.attachment-item-file-excel {
+      background: transparent;
     }
     .attachment-img-wrap {
       position: relative;
       height: 250px;
       width: 100%;
       overflow: hidden;
-      border-radius: 14px;
-      background: linear-gradient(145deg, #fafbfc 0%, #f1f5f9 100%);
+      border-radius: 10px;
+      background: #fafbfc;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
-      border: 1px solid rgba(226, 232, 240, 0.8);
-      transition: box-shadow 0.25s ease, transform 0.2s ease;
+      border: 1px solid #e2e8f0;
+      transition: box-shadow 0.2s ease;
     }
     .attachment-img-wrap:hover {
-      box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.08);
-      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
     .attachment-img-wrap img {
       max-height: 250px;
@@ -304,33 +330,42 @@
       display: block;
       border-radius: 12px;
     }
-    .attachment-img-pill {
-      position: absolute;
-      right: 14px;
-      bottom: 14px;
-      padding: 8px 16px;
-      border-radius: 999px;
-      font-size: 0.85rem;
+    .attachment-img-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1px solid #2563eb;
+      background: #fff;
+      color: #2563eb;
+      font-size: 0.8rem;
       font-weight: 600;
-      letter-spacing: 0.02em;
-      color: #1e40af;
-      background: rgba(255,255,255,0.88);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255,255,255,0.95);
-      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-      pointer-events: none;
+      text-decoration: none;
+      flex-shrink: 0;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+    .attachment-img-download:hover {
+      background: #2563eb;
+      color: #fff;
+      border-color: #2563eb;
     }
     .attachment-img-caption {
       margin-top: 12px;
-      padding-left: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
-    .attachment-img-caption a {
-      color: #475569;
+    .attachment-img-caption .caption-filename {
+      color: #2563eb;
       font-size: 0.9rem;
+      text-decoration: none;
+      min-width: 0;
     }
-    .attachment-img-caption a:hover {
-      color: #0454a3;
+    .attachment-img-caption .caption-filename:hover {
+      color: #1d4ed8;
+      text-decoration: underline;
     }
     .file-type-icon {
       display: inline-flex;
@@ -367,7 +402,7 @@
     }
     .preview-backdrop.show { display: flex; }
     .preview-content {
-      max-width: min(720px, 88vw); max-height: 82vh; background: #fff; border-radius: 14px;
+      max-width: 50vw; max-height: 82vh; background: #fff; border-radius: 14px;
       box-shadow: 0 16px 48px rgba(0,0,0,0.2); position: relative;
       display: flex; align-items: center; justify-content: center;
     }
@@ -480,9 +515,10 @@
       </div>
 
       <div class="detail-block" id="detailMeetingBlock">
-        <h3>與學生訪談紀錄</h3>
+        <h3>與學生訪談紀錄 <span class="required-mark" aria-label="必填">*</span></h3>
         <p class="label" id="detailMeetingLabel">請填寫與該學生的訪談紀錄。</p>
-        <textarea id="teacherMeetingNotes" class="meeting-notes-input" rows="6" placeholder="請輸入與學生面談的內容。"></textarea>
+        <textarea id="teacherMeetingNotes" class="meeting-notes-input" rows="6" placeholder="請輸入與學生面談的內容。" aria-required="true"></textarea>
+        <div id="meetingNotesError" class="alert alert-danger meeting-notes-error" role="alert" style="display: none; margin-top: 10px;"></div>
       </div>
 
       <div class="detail-actions">
@@ -522,9 +558,25 @@
         successMessage.classList.add('show');
         errorMessage.classList.remove('show');
       }
+      var meetingNotesErrorEl = document.getElementById('meetingNotesError');
+      var teacherMeetingNotesEl = document.getElementById('teacherMeetingNotes');
+      if (teacherMeetingNotesEl && meetingNotesErrorEl) {
+        teacherMeetingNotesEl.addEventListener('input', function () {
+          meetingNotesErrorEl.style.display = 'none';
+          meetingNotesErrorEl.textContent = '';
+        });
+      }
       function hideMessages() {
         successMessage.classList.remove('show');
         errorMessage.classList.remove('show');
+        if (meetingNotesErrorEl) { meetingNotesErrorEl.style.display = 'none'; meetingNotesErrorEl.textContent = ''; }
+      }
+      function showMeetingNotesError(msg) {
+        hideMessages();
+        if (meetingNotesErrorEl) {
+          meetingNotesErrorEl.textContent = msg || '請填寫與學生訪談紀錄';
+          meetingNotesErrorEl.style.display = 'block';
+        }
       }
 
       function escapeHtml(s) {
@@ -555,6 +607,10 @@
               var statusClass = (row.status || '') === 'confirmed' ? 'badge-confirmed' : 'badge-withdrawing';
               var statusText = (row.status || '') === 'confirmed' ? '已確認' : '待確認';
               var viewUrl = '/teacher_remove_intern?id=' + row.id;
+              var isConfirmed = (row.status || '') === 'confirmed';
+              var actionBtn = isConfirmed
+                ? '<a class="btn-view" href="' + viewUrl + '"><i class="bi bi-eye"></i> 查看</a>'
+                : '<a class="btn-confirm-case" href="' + viewUrl + '"><i class="bi bi-check-circle"></i> 確認案件</a>';
               return '<tr>' +
                 '<td>' + escapeHtml(row.student_name || '—') + '</td>' +
                 '<td>' + escapeHtml(row.student_number || '—') + '</td>' +
@@ -562,7 +618,7 @@
                 '<td>' + escapeHtml(row.job_title || '—') + '</td>' +
                 '<td>' + escapeHtml(row.reason_category || '—') + '</td>' +
                 '<td class="col-status"><span class="badge ' + statusClass + '">' + escapeHtml(statusText) + '</span></td>' +
-                '<td class="col-action"><a class="btn-view" href="' + viewUrl + '"><i class="bi bi-eye"></i> 查看</a></td>' +
+                '<td class="col-action">' + actionBtn + '</td>' +
                 '</tr>';
             }).join('');
           })
@@ -600,31 +656,36 @@
             var attBlock = document.getElementById('detailAttachmentsBlock');
             var attList = document.getElementById('detailAttachmentsList');
             if (d.attachments && d.attachments.length && attBlock && attList) {
-              var subEl = document.getElementById('attachmentSubtitle');
-              if (subEl) subEl.textContent = '您可以檢視圖片與下載檔案佐證 (總計: ' + d.attachments.length + ' 個檔案)';
-              attList.innerHTML = d.attachments.map(function (a) {
+              var images = [];
+              var fileRows = [];
+              d.attachments.forEach(function (a) {
                 var isImg = (a.file_type || '') === 'image';
                 var text = a.original_filename || '佐證檔案';
                 var url = (a.url || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
                 var rawUrl = (a.url || '').replace(/"/g, '&quot;');
                 if (isImg) {
-                  return '<li class="attachment-item-image">' +
-                    '<div class="attachment-img-wrap" data-preview-url="' + url + '" role="button" tabindex="0" title="查看全圖">' +
+                  images.push('<li class="attachment-item-image">' +
+                    '<div class="attachment-img-card">' +
+                    '<div class="attachment-img-wrap" data-preview-url="' + url + '" role="button" tabindex="0" title="點擊查看全圖">' +
                     '<img src="' + rawUrl + '" alt="" loading="lazy">' +
-                    '<span class="attachment-img-pill">🔍 查看全圖</span></div>' +
-                    '<div class="attachment-img-caption"><a href="' + url + '" target="_blank" rel="noopener" data-preview="image" data-preview-url="' + url + '">' + escapeHtml(text) + '</a></div></li>';
+                    '</div>' +
+                    '<div class="attachment-img-caption">' +
+                    '<a href="' + url + '" target="_blank" rel="noopener" class="caption-filename" data-preview="image" data-preview-url="' + url + '">' + escapeHtml(text) + '</a>' +
+                    '<a href="' + url + '" download class="attachment-img-download" title="下載圖片"><i class="bi bi-download"></i>下載</a>' +
+                    '</div></div></li>');
+                } else {
+                  var ext = (a.original_filename || '').split('.').pop().toLowerCase();
+                  var iconClass = 'file-type-icon other';
+                  var iconBi = 'bi-file-earmark';
+                  if (ext === 'pdf') { iconClass = 'file-type-icon pdf'; iconBi = 'bi-file-earmark-pdf'; }
+                  else if (ext === 'xls' || ext === 'xlsx') { iconClass = 'file-type-icon excel'; iconBi = 'bi-file-earmark-excel'; }
+                  var sizeHtml = (a.file_size ? ' <span class="attachment-file-size">(' + escapeHtml(a.file_size) + ')</span>' : '');
+                  fileRows.push('<div class="attachment-file-row">' +
+                    '<div class="file-info"><span class="' + iconClass + '" aria-hidden="true"><i class="bi ' + iconBi + '"></i></span> <a href="' + url + '" target="_blank" rel="noopener">' + escapeHtml(text) + '</a>' + sizeHtml + '</div>' +
+                    '<a href="' + url + '" target="_blank" rel="noopener" download class="attachment-download-btn"><i class="bi bi-download"></i>下載檔案</a></div>');
                 }
-                var ext = (a.original_filename || '').split('.').pop().toLowerCase();
-                var iconClass = 'file-type-icon other';
-                var iconBi = 'bi-file-earmark';
-                var liClass = '';
-                if (ext === 'pdf') { iconClass = 'file-type-icon pdf'; iconBi = 'bi-file-earmark-pdf'; }
-                else if (ext === 'xls' || ext === 'xlsx') { iconClass = 'file-type-icon excel'; iconBi = 'bi-file-earmark-excel'; liClass = 'attachment-item-file-excel'; }
-                var sizeHtml = (a.file_size ? ' <span class="attachment-file-size">(' + escapeHtml(a.file_size) + ')</span>' : '');
-                return '<li class="' + liClass + '"><div class="attachment-file-row">' +
-                  '<div class="file-info"><span class="' + iconClass + '" aria-hidden="true"><i class="bi ' + iconBi + '"></i></span> <a href="' + url + '" target="_blank" rel="noopener">' + escapeHtml(text) + '</a>' + sizeHtml + '</div>' +
-                  '<a href="' + url + '" target="_blank" rel="noopener" download class="attachment-download-btn"><i class="bi bi-download"></i>下載檔案</a></div></li>';
-              }).join('');
+              });
+              attList.innerHTML = images.join('') + (fileRows.length ? '<li class="attachment-item-file"><div class="attachment-files-section">' + fileRows.join('') + '</div></li>' : '');
               attBlock.style.display = 'block';
               // 圖片點擊展開即時預覽
               var previewBackdrop = document.getElementById('previewBackdrop');
@@ -659,7 +720,7 @@
               notesEl.readOnly = isConfirmed;
               notesEl.classList.toggle('meeting-notes-readonly', isConfirmed);
             }
-            if (meetingLabel) meetingLabel.textContent = isConfirmed ? '（已確認，以下為指導老師當時填寫的訪談紀錄，僅供檢視）' : '請填寫與該生的面談／訪談紀錄，確認異動時一併儲存。';
+            if (meetingLabel) meetingLabel.textContent = isConfirmed ? '' : '請填寫與該學生的面談紀錄，確認異動時一併儲存。';
           })
           .catch(function () {
             document.getElementById('detailReasonCategory').textContent = '載入失敗';
@@ -681,9 +742,13 @@
         var id = confirmBtn.getAttribute('data-case-id');
         if (!id) return;
         hideMessages();
-        confirmBtn.disabled = true;
         var notesEl = document.getElementById('teacherMeetingNotes');
         var notes = notesEl ? notesEl.value.trim() : '';
+        if (!notes) {
+          showMeetingNotesError('請填寫與學生訪談紀錄');
+          return;
+        }
+        confirmBtn.disabled = true;
         fetch('/teacher/api/withdraw_confirm', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
