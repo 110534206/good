@@ -4933,7 +4933,6 @@ def submit_withdraw_intern():
         evidence_file_dir = os.path.join(upload_base, "evidence_file")
         saved_paths = []
         ts = datetime.now().strftime("%Y%m%d%H%M%S")
-        os.makedirs(evidence_dir, exist_ok=True)
         for i, evidence_image in enumerate(evidence_images or []):
             if not evidence_image or not getattr(evidence_image, "filename", None):
                 continue
