@@ -2544,7 +2544,8 @@
       console.log('📋 履歷資料數量：', allResumes.length);
       
       // 0. 先載入已保存的媒合排序資料
-      let savedSortMap = new Map(); // key: job_id, value: { regulars: [{student_id, slot_index}], reserves: [{student_id}] }
+      // key: job_id, value: { regulars: [{student_id, slot_index}], reserves: [{student_id, slot_index}] }
+      let savedSortMap = new Map();
       try {
         const res = await fetch('/vendor/api/get_matching_sort');
         const data = await res.json();
@@ -2560,16 +2561,22 @@
               });
             }
             const jobData = savedSortMap.get(jobId);
-            if (item.is_reserve === 0 || item.is_reserve === false) {
+            const isReserveFlag =
+              item.is_reserve === 1 ||
+              item.is_reserve === true ||
+              item.is_reserve === '1';
+            
+            if (isReserveFlag) {
+              // 候補學生
+              jobData.reserves.push({
+                student_id: item.student_id,
+                slot_index: item.slot_index ?? null
+              });
+            } else {
               // 正取學生
               jobData.regulars.push({
                 student_id: item.student_id,
-                slot_index: item.slot_index
-              });
-            } else {
-              // 候補學生
-              jobData.reserves.push({
-                student_id: item.student_id
+                slot_index: item.slot_index ?? null
               });
             }
           });
@@ -2810,11 +2817,16 @@
         
         lettersContainer.appendChild(reserveContainer);
         
-        // 根據已保存的資料載入候補學生
+        // 根據已保存的資料載入候補學生（依 slot_index 排序）
         const savedJobData = savedSortMap.get(jobKey);
         if (savedJobData && savedJobData.reserves && savedJobData.reserves.length > 0) {
-          console.log(`📋 載入已保存的候補學生: 職缺=${jobTitle}, 數量=${savedJobData.reserves.length}`);
-          savedJobData.reserves.forEach((reserve, reserveIndex) => {
+          const sortedReserves = [...savedJobData.reserves].sort((a, b) => {
+            const aIndex = a.slot_index ?? Number.MAX_SAFE_INTEGER;
+            const bIndex = b.slot_index ?? Number.MAX_SAFE_INTEGER;
+            return aIndex - bIndex;
+          });
+          console.log(`📋 載入已保存的候補學生: 職缺=${jobTitle}, 數量=${sortedReserves.length}`);
+          sortedReserves.forEach(reserve => {
             // 為每個候補學生創建下拉選單
             addReserveStudent(jobKey, reserve.student_id);
           });
@@ -2886,8 +2898,11 @@
                 }
                 const preferenceId = resume.preference_id || resume.preferenceId || null;
                 const preferenceOrder = resume.preference_order || resume.preferenceOrder || null;
+                // 備取順位：依候補列的順序從 1 開始
+                const reserveIndex = parseInt(dropdown.dataset.reserveIndex || '0');
+                const reserveSlotIndex = reserveIndex + 1;
                 selectedStudents.push({
-                  slot_index: null,
+                  slot_index: reserveSlotIndex,
                   job_title: jobData.job_title,
                   job_id: jobData.job_id,
                   student_id: studentId,
