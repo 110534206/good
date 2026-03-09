@@ -421,32 +421,91 @@ def record_admission():
         
         # 7. 在 matching_results 表中記錄錄取結果（統一媒合結果來源，取代 internship_offers）
         print(f"🔍 [DEBUG] record_admission - 準備寫入 matching_results: student_id={student_id}, job_id={job_id}")
+        cursor.execute("""
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'matching_results'
+        """)
+        mr_cols = {row['COLUMN_NAME'] for row in cursor.fetchall()}
+        mr_has_semester_id = 'semester_id' in mr_cols
+        mr_has_job_id = 'job_id' in mr_cols
+        mr_has_job_title = 'job_title' in mr_cols
+        mr_has_mentor_id = 'mentor_id' in mr_cols
+        mr_has_matched_at = 'matched_at' in mr_cols
+        mr_has_status = 'status' in mr_cols
+        mr_has_internship_dates = 'internship_start_date' in mr_cols and 'internship_end_date' in mr_cols
         job_title_val = ''
-        if job_id:
+        if job_id and mr_has_job_id:
             cursor.execute("SELECT title FROM internship_jobs WHERE id = %s", (job_id,))
             jrow = cursor.fetchone()
             if jrow and jrow.get('title'):
                 job_title_val = jrow['title']
-        cursor.execute("""
-            SELECT id FROM matching_results
-            WHERE student_id = %s AND semester_id = %s
-            LIMIT 1
-        """, (student_id, current_semester_id))
+        if mr_has_semester_id:
+            cursor.execute("""
+                SELECT id FROM matching_results
+                WHERE student_id = %s AND semester_id = %s
+                LIMIT 1
+            """, (student_id, current_semester_id))
+        else:
+            cursor.execute("""
+                SELECT id FROM matching_results
+                WHERE student_id = %s
+                LIMIT 1
+            """, (student_id,))
         existing_mr = cursor.fetchone()
         today_str = datetime.now().strftime('%Y-%m-%d')
         if existing_mr:
-            cursor.execute("""
-                UPDATE matching_results
-                SET company_id = %s, mentor_id = %s, job_id = %s, job_title = %s, matched_at = %s, status = 'accepted'
-                WHERE id = %s
-            """, (company_id, advisor_user_id, job_id, job_title_val or ' ', current_datetime_str, existing_mr['id']))
+            set_parts, set_args = [], []
+            set_parts.append("company_id = %s")
+            set_args.append(company_id)
+            if mr_has_mentor_id:
+                set_parts.append("mentor_id = %s")
+                set_args.append(advisor_user_id)
+            if mr_has_job_id:
+                set_parts.append("job_id = %s")
+                set_args.append(job_id)
+            if mr_has_job_title:
+                set_parts.append("job_title = %s")
+                set_args.append(job_title_val or ' ')
+            if mr_has_matched_at:
+                set_parts.append("matched_at = %s")
+                set_args.append(current_datetime_str)
+            if mr_has_status:
+                set_parts.append("status = 'accepted'")
+            set_args.append(existing_mr['id'])
+            cursor.execute(
+                "UPDATE matching_results SET " + ", ".join(set_parts) + " WHERE id = %s",
+                set_args
+            )
             print(f"✅ [DEBUG] 更新 matching_results 記錄: id={existing_mr['id']}")
         else:
-            cursor.execute("""
-                INSERT INTO matching_results
-                (student_id, company_id, mentor_id, job_id, semester_id, job_title, internship_start_date, internship_end_date, matched_at, comment, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, 'accepted')
-            """, (student_id, company_id, advisor_user_id, job_id, current_semester_id, job_title_val or ' ', today_str, today_str, current_datetime_str))
+            ins_cols = ["student_id", "company_id"]
+            ins_vals = [student_id, company_id]
+            if mr_has_mentor_id:
+                ins_cols.append("mentor_id")
+                ins_vals.append(advisor_user_id)
+            if mr_has_job_id:
+                ins_cols.append("job_id")
+                ins_vals.append(job_id)
+            if mr_has_semester_id:
+                ins_cols.append("semester_id")
+                ins_vals.append(current_semester_id)
+            if mr_has_job_title:
+                ins_cols.append("job_title")
+                ins_vals.append(job_title_val or ' ')
+            if mr_has_internship_dates:
+                ins_cols.extend(["internship_start_date", "internship_end_date"])
+                ins_vals.extend([today_str, today_str])
+            if mr_has_matched_at:
+                ins_cols.append("matched_at")
+                ins_vals.append(current_datetime_str)
+            if mr_has_status:
+                ins_cols.append("status")
+                ins_vals.append("accepted")
+            placeholders = ", ".join(["%s"] * len(ins_vals))
+            cursor.execute(
+                "INSERT INTO matching_results (" + ", ".join(ins_cols) + ") VALUES (" + placeholders + ")",
+                ins_vals
+            )
             print(f"✅ [DEBUG] 插入新 matching_results 記錄: student_id={student_id}, job_id={job_id}")
             
         # 8. 更新學生的志願序狀態
@@ -1193,7 +1252,7 @@ def get_all_admissions():
         base_query = """
             SELECT 
                 mr.id AS relation_id,
-                COALESCE(sem.code, '') AS semester,
+                COALESCE((SELECT code FROM semesters WHERE is_active = 1 LIMIT 1), '') AS semester,
                 mr.matched_at AS admitted_at,
                 u_student.id AS student_id,
                 u_student.name AS student_name,
@@ -1203,28 +1262,25 @@ def get_all_admissions():
                 c.department,
                 ic.id AS company_id,
                 ic.company_name,
-                COALESCE(mr.job_id, ij.id) AS job_id,
-                COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
+                (SELECT sja.job_id FROM student_job_applications sja
+                 WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id LIMIT 1) AS job_id,
+                COALESCE((SELECT ij.title FROM student_job_applications sja
+                         JOIN internship_jobs ij ON ij.id = sja.job_id
+                         WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id LIMIT 1),
+                        '') AS job_title,
                 u_teacher.id AS teacher_id,
                 u_teacher.name AS teacher_name,
-                sp.preference_order,
-                COALESCE(sp.status, 'approved') AS preference_status
+                (SELECT sp0.preference_order FROM student_preferences sp0
+                 WHERE sp0.student_id = mr.student_id AND sp0.company_id = mr.company_id
+                 ORDER BY sp0.submitted_at DESC LIMIT 1) AS preference_order,
+                COALESCE((SELECT sp0.status FROM student_preferences sp0
+                         WHERE sp0.student_id = mr.student_id AND sp0.company_id = mr.company_id
+                         ORDER BY sp0.submitted_at DESC LIMIT 1), 'approved') AS preference_status
             FROM matching_results mr
-            LEFT JOIN semesters sem ON sem.id = mr.semester_id
             JOIN users u_student ON mr.student_id = u_student.id
             LEFT JOIN classes c ON u_student.class_id = c.id
-            LEFT JOIN internship_jobs ij ON mr.job_id = ij.id
             JOIN internship_companies ic ON mr.company_id = ic.id
             LEFT JOIN users u_teacher ON mr.mentor_id = u_teacher.id
-            LEFT JOIN (
-                SELECT sp0.student_id, sp0.job_id, sp0.semester_id, sp0.preference_order, sp0.status
-                FROM student_preferences sp0
-                INNER JOIN (
-                    SELECT student_id, job_id, MAX(semester_id) AS semester_id
-                    FROM student_preferences
-                    GROUP BY student_id, job_id
-                ) sp1 ON sp0.student_id = sp1.student_id AND sp0.job_id = sp1.job_id AND sp0.semester_id = sp1.semester_id
-            ) sp ON sp.student_id = mr.student_id AND sp.job_id = mr.job_id
             WHERE 1=1
         """
         params = []
@@ -1267,8 +1323,7 @@ def get_all_admissions():
             params.append(class_id)
         
         if semester:
-            base_query += " AND mr.semester_id = (SELECT id FROM semesters WHERE code = %s LIMIT 1)"
-            params.append(semester)
+            pass
         
         if company_id:
             base_query += " AND ic.id = %s"
@@ -1751,7 +1806,8 @@ def vendor_matching_results():
             """, tuple(company_ids))
         except Exception as qerr:
             err_str = str(qerr).lower()
-            if "unknown column" in err_str or "1054" in str(qerr) or "1146" in str(qerr):
+            # 當 matching_results 無 job_id（或其它欄位）時，改用不依賴 mr.job_id 的查詢
+            if "unknown column" in err_str or "1054" in str(qerr) or "1146" in str(qerr) or "job_id" in err_str:
                 cursor.execute(f"""
                     SELECT DISTINCT
                         u.id AS student_id,
@@ -1762,28 +1818,28 @@ def vendor_matching_results():
                         c.department AS class_department,
                         ic.id AS company_id,
                         ic.company_name,
-                        COALESCE(mr.job_id, ij.id) AS job_id,
-                        COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title, '未指定職缺') AS job_title,
-                        sp.preference_order,
-                        sp.submitted_at AS preference_submitted_at,
+                        (SELECT sja.job_id FROM student_job_applications sja
+                         WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id LIMIT 1) AS job_id,
+                        COALESCE(
+                            (SELECT ij.title FROM student_job_applications sja2
+                             JOIN internship_jobs ij ON ij.id = sja2.job_id
+                             WHERE sja2.student_id = mr.student_id AND sja2.company_id = mr.company_id LIMIT 1),
+                            '未指定職缺') AS job_title,
+                        (SELECT sp.preference_order FROM student_preferences sp
+                         WHERE sp.student_id = mr.student_id AND sp.company_id = mr.company_id
+                         ORDER BY sp.submitted_at DESC LIMIT 1) AS preference_order,
+                        NULL AS preference_submitted_at,
                         'approved' AS preference_status,
-                        COALESCE(mr.matched_at, ra.updated_at, CURDATE()) AS admitted_at,
-                        COALESCE(sem.code, '1132') AS semester,
+                        CURDATE() AS admitted_at,
+                        COALESCE((SELECT code FROM semesters WHERE is_active = 1 LIMIT 1), '1132') AS semester,
                         NULL AS is_reserve,
                         NULL AS slot_index
                     FROM matching_results mr
-                    LEFT JOIN semesters sem ON sem.id = mr.semester_id
                     INNER JOIN users u ON mr.student_id = u.id
-                    LEFT JOIN student_job_applications sja ON u.id = sja.student_id AND mr.job_id = sja.job_id
-                    LEFT JOIN resume_applications ra ON ra.application_id = sja.id
                     LEFT JOIN classes c ON u.class_id = c.id
                     INNER JOIN internship_companies ic ON mr.company_id = ic.id
-                    LEFT JOIN internship_jobs ij ON mr.job_id = ij.id
-                    LEFT JOIN student_preferences sp ON mr.student_id = sp.student_id 
-                        AND mr.company_id = sp.company_id 
-                        AND mr.job_id = sp.job_id
                     WHERE mr.company_id IN ({placeholders})
-                    ORDER BY ic.company_name, sp.preference_order, u.name
+                    ORDER BY ic.company_name, u.name
                 """, tuple(company_ids))
             else:
                 raise

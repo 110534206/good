@@ -4744,32 +4744,38 @@ def get_withdraw_intern_list():
             status_sql = """
             SELECT mr.student_id,
                    u.name AS student_name, u.username AS student_number,
-                   ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
+                   ic.company_name,
+                   COALESCE((SELECT ij.title FROM student_job_applications sja
+                             JOIN internship_jobs ij ON ij.id = sja.job_id
+                             WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id
+                             LIMIT 1), '未指定職缺') AS job_title,
                    CASE WHEN ir.student_id IS NOT NULL THEN 'withdrawing' ELSE 'accepted' END AS status,
                    ir.id AS record_id
             FROM matching_results mr
             JOIN users u ON u.id = mr.student_id
-            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
             JOIN internship_companies ic ON ic.id = mr.company_id
             LEFT JOIN internship_records ir
                    ON ir.student_id = mr.student_id
                   AND ir.semester_id = %s
                   AND ir.company_id = mr.company_id
             WHERE mr.company_id IN (""" + placeholders + """)
-            ORDER BY ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title), u.name
+            ORDER BY ic.company_name, u.name
             """
         else:
             status_sql = """
             SELECT mr.student_id,
                    u.name AS student_name, u.username AS student_number,
-                   ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
+                   ic.company_name,
+                   COALESCE((SELECT ij.title FROM student_job_applications sja
+                             JOIN internship_jobs ij ON ij.id = sja.job_id
+                             WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id
+                             LIMIT 1), '未指定職缺') AS job_title,
                    'accepted' AS status
             FROM matching_results mr
             JOIN users u ON u.id = mr.student_id
-            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
             JOIN internship_companies ic ON ic.id = mr.company_id
             WHERE mr.company_id IN (""" + placeholders + """)
-            ORDER BY ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title), u.name
+            ORDER BY ic.company_name, u.name
             """
         cursor.execute(status_sql, args)
         rows = cursor.fetchall()
@@ -4827,12 +4833,17 @@ def get_withdraw_intern_info():
         placeholders = ",".join(["%s"] * len(company_ids))
         # 查詢該學生是否為廠商旗下公司之錄取生（matching_results）
         cursor.execute("""
-            SELECT mr.student_id, mr.job_id,
+            SELECT mr.student_id,
+                   (SELECT sja.job_id FROM student_job_applications sja
+                    WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id LIMIT 1) AS job_id,
                    u.name AS student_name, u.username AS student_number,
-                   ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title
+                   ic.company_name,
+                   COALESCE((SELECT ij.title FROM student_job_applications sja2
+                             JOIN internship_jobs ij ON ij.id = sja2.job_id
+                             WHERE sja2.student_id = mr.student_id AND sja2.company_id = mr.company_id
+                             LIMIT 1), '未指定職缺') AS job_title
             FROM matching_results mr
             JOIN users u ON u.id = mr.student_id
-            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
             JOIN internship_companies ic ON ic.id = mr.company_id
             WHERE mr.student_id = %s AND mr.company_id IN (""" + placeholders + """)
             LIMIT 1
@@ -4908,11 +4919,14 @@ def submit_withdraw_intern():
         cursor.execute("""
             SELECT mr.id AS offer_id,
                    mr.student_id,
-                   mr.job_id,
+                   (SELECT sja.job_id FROM student_job_applications sja
+                    WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id LIMIT 1) AS job_id,
                    mr.company_id,
-                   COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title
+                   COALESCE((SELECT ij.title FROM student_job_applications sja2
+                             JOIN internship_jobs ij ON ij.id = sja2.job_id
+                             WHERE sja2.student_id = mr.student_id AND sja2.company_id = mr.company_id
+                             LIMIT 1), '未指定職缺') AS job_title
             FROM matching_results mr
-            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
             WHERE mr.student_id = %s AND mr.company_id IN (""" + placeholders + """)
             LIMIT 1
         """, [int(student_id)] + company_ids)
@@ -5229,11 +5243,10 @@ def vendor_get_withdraw_history():
                    ir.status, ir.created_at,
                    u.name AS student_name, u.username AS student_number,
                    ic.company_name,
-                   (SELECT COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title)
-                    FROM matching_results mr
-                    LEFT JOIN internship_jobs ij ON ij.id = mr.job_id AND ij.company_id = ir.company_id
-                    WHERE mr.student_id = ir.student_id AND mr.company_id = ir.company_id
-                    LIMIT 1) AS job_title
+                   COALESCE((SELECT ij.title FROM student_job_applications sja
+                            JOIN internship_jobs ij ON ij.id = sja.job_id
+                            WHERE sja.student_id = ir.student_id AND sja.company_id = ir.company_id
+                            LIMIT 1), '未指定職缺') AS job_title
             FROM internship_records ir
             JOIN internship_companies ic ON ic.id = ir.company_id
             JOIN users u ON u.id = ir.student_id
@@ -5310,9 +5323,11 @@ def vendor_get_withdraw_case_detail():
         cursor.execute("SELECT u.id, u.name AS student_name, u.username AS student_number FROM users u WHERE u.id = %s", (row["student_id"],))
         student = cursor.fetchone()
         cursor.execute("""
-            SELECT COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title, ic.company_name
+            SELECT COALESCE((SELECT ij.title FROM student_job_applications sja
+                             JOIN internship_jobs ij ON ij.id = sja.job_id
+                             WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id
+                             LIMIT 1), '未指定職缺') AS job_title, ic.company_name
             FROM matching_results mr
-            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
             JOIN internship_companies ic ON ic.id = mr.company_id
             WHERE mr.student_id = %s
             ORDER BY mr.id DESC LIMIT 1
@@ -5395,11 +5410,15 @@ def teacher_get_withdraw_cases():
                        ir.status, ir.created_at,
                        u.name AS student_name, u.username AS student_number,
                        ic.company_name,
-                       (SELECT COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title)
-                        FROM matching_results mr
-                        LEFT JOIN internship_jobs ij ON ij.id = mr.job_id AND ij.company_id = ir.company_id
-                        WHERE mr.student_id = ir.student_id AND mr.company_id = ir.company_id
-                        LIMIT 1) AS job_title
+                       COALESCE(
+                         (SELECT ij.title FROM student_job_applications sja
+                          JOIN internship_jobs ij ON ij.id = sja.job_id
+                          WHERE sja.student_id = ir.student_id AND sja.company_id = ir.company_id
+                          LIMIT 1),
+                         (SELECT ij.title FROM internship_jobs ij
+                          WHERE ij.company_id = ir.company_id AND (ij.is_active = 1 OR ij.is_active IS NULL)
+                          ORDER BY ij.id LIMIT 1)
+                       ) AS job_title
                 FROM internship_records ir
                 JOIN internship_companies ic ON ic.id = ir.company_id
                 JOIN users u ON u.id = ir.student_id
@@ -5418,11 +5437,15 @@ def teacher_get_withdraw_cases():
                            ir.status, ir.created_at,
                            u.name AS student_name, u.username AS student_number,
                            ic.company_name,
-                           (SELECT COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title)
-                            FROM matching_results mr
-                            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id AND ij.company_id = ir.company_id
-                            WHERE mr.student_id = ir.student_id AND mr.company_id = ir.company_id
-                            LIMIT 1) AS job_title
+                           COALESCE(
+                             (SELECT ij.title FROM student_job_applications sja
+                              JOIN internship_jobs ij ON ij.id = sja.job_id
+                              WHERE sja.student_id = ir.student_id AND sja.company_id = ir.company_id
+                              LIMIT 1),
+                             (SELECT ij.title FROM internship_jobs ij
+                              WHERE ij.company_id = ir.company_id AND (ij.is_active = 1 OR ij.is_active IS NULL)
+                              ORDER BY ij.id LIMIT 1)
+                           ) AS job_title
                     FROM internship_records ir
                     JOIN internship_companies ic ON ic.id = ir.company_id
                     JOIN users u ON u.id = ir.student_id
@@ -5482,9 +5505,11 @@ def teacher_get_withdraw_case_detail():
         student = cursor.fetchone()
         # 職缺／公司（從 matching_results 取該生目前錄取）
         cursor.execute("""
-            SELECT COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title, ic.company_name
+            SELECT COALESCE((SELECT ij.title FROM student_job_applications sja
+                             JOIN internship_jobs ij ON ij.id = sja.job_id
+                             WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id
+                             LIMIT 1), '未指定職缺') AS job_title, ic.company_name
             FROM matching_results mr
-            LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
             JOIN internship_companies ic ON ic.id = mr.company_id
             WHERE mr.student_id = %s
             ORDER BY mr.id DESC LIMIT 1
@@ -5836,18 +5861,24 @@ def director_intern_status():
                 return base + " (" + str(ay).strip() + "屆)"
             return base or ""
 
-        # 每位學生只取一筆錄取（當前學期 matching_results），避免多筆錄取造成錯誤顯示
+        # 每位學生只取一筆錄取（matching_results 一學生一筆，不依賴 mr.semester_id/mr.job_id）
         try:
             cursor.execute("""
                 SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
                        c.name AS class_name, c.department, c.admission_year,
                        mr.id AS offer_id, 'accepted' AS offer_status,
-                       ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
+                       ic.company_name,
+                       COALESCE((SELECT ij.title FROM student_job_applications sja
+                                JOIN internship_jobs ij ON ij.id = sja.job_id
+                                WHERE sja.student_id = u.id AND sja.company_id = mr.company_id LIMIT 1),
+                                (SELECT ij.title FROM internship_jobs ij WHERE ij.company_id = mr.company_id LIMIT 1),
+                                '') AS job_title,
                        vri.id AS withdraw_id
                 FROM users u
                 LEFT JOIN classes c ON c.id = u.class_id
-                LEFT JOIN matching_results mr ON mr.student_id = u.id AND mr.semester_id <=> %s
-                LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
+                LEFT JOIN (SELECT mr1.* FROM matching_results mr1
+                    INNER JOIN (SELECT student_id, MAX(id) AS max_id FROM matching_results GROUP BY student_id) mr2
+                    ON mr1.student_id = mr2.student_id AND mr1.id = mr2.max_id) mr ON mr.student_id = u.id
                 LEFT JOIN internship_companies ic ON ic.id = mr.company_id
                 LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                 WHERE u.role = 'student'
@@ -5864,14 +5895,18 @@ def director_intern_status():
                     SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
                            c.name AS class_name, c.department, c.admission_year,
                            mr.id AS offer_id, 'accepted' AS offer_status,
-                           ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
+                           ic.company_name,
+                           COALESCE((SELECT ij.title FROM student_job_applications sja
+                                    JOIN internship_jobs ij ON ij.id = sja.job_id
+                                    WHERE sja.student_id = u.id AND sja.company_id = mr.company_id LIMIT 1),
+                                    (SELECT ij.title FROM internship_jobs ij WHERE ij.company_id = mr.company_id LIMIT 1),
+                                    '') AS job_title,
                            vri.id AS withdraw_id
                     FROM users u
                     LEFT JOIN classes c ON c.id = u.class_id
                     LEFT JOIN (SELECT mr1.* FROM matching_results mr1
                         INNER JOIN (SELECT student_id, MAX(id) AS max_id FROM matching_results GROUP BY student_id) mr2
                         ON mr1.student_id = mr2.student_id AND mr1.id = mr2.max_id) mr ON mr.student_id = u.id
-                    LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
                     LEFT JOIN internship_companies ic ON ic.id = mr.company_id
                     LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                     WHERE u.role = 'student'
@@ -5889,14 +5924,18 @@ def director_intern_status():
                     SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
                            c.name AS class_name, c.department, c.admission_year,
                            mr.id AS offer_id, 'accepted' AS offer_status,
-                           ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
+                           ic.company_name,
+                           COALESCE((SELECT ij.title FROM student_job_applications sja
+                                    JOIN internship_jobs ij ON ij.id = sja.job_id
+                                    WHERE sja.student_id = u.id AND sja.company_id = mr.company_id LIMIT 1),
+                                    (SELECT ij.title FROM internship_jobs ij WHERE ij.company_id = mr.company_id LIMIT 1),
+                                    '') AS job_title,
                            vri.id AS withdraw_id
                     FROM users u
                     LEFT JOIN classes c ON c.id = u.class_id
                     LEFT JOIN (SELECT mr1.* FROM matching_results mr1
                         INNER JOIN (SELECT student_id, MAX(id) AS max_id FROM matching_results GROUP BY student_id) mr2
                         ON mr1.student_id = mr2.student_id AND mr1.id = mr2.max_id) mr ON mr.student_id = u.id
-                    LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
                     LEFT JOIN internship_companies ic ON ic.id = mr.company_id
                     LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
                     WHERE u.role = 'student'
