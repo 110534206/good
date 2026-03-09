@@ -5917,7 +5917,7 @@ def director_intern_status():
                     INNER JOIN (SELECT student_id, MAX(id) AS max_id FROM matching_results GROUP BY student_id) mr2
                     ON mr1.student_id = mr2.student_id AND mr1.id = mr2.max_id) mr ON mr.student_id = u.id
                 LEFT JOIN internship_companies ic ON ic.id = mr.company_id
-                LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
+                LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s AND vri.status = 'confirmed'
                 WHERE u.role = 'student'
                 AND EXISTS (
                     SELECT 1 FROM internship_configs cfg
@@ -5925,7 +5925,7 @@ def director_intern_status():
                     AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
                 )
                 ORDER BY c.name, u.username
-            """, (current_semester_id, current_semester_id, current_semester_id))
+            """, (current_semester_id, current_semester_id))
         except Exception as sem_err:
             if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err) or "internship_configs" in str(sem_err):
                 cursor.execute("""
@@ -5945,7 +5945,7 @@ def director_intern_status():
                         INNER JOIN (SELECT student_id, MAX(id) AS max_id FROM matching_results GROUP BY student_id) mr2
                         ON mr1.student_id = mr2.student_id AND mr1.id = mr2.max_id) mr ON mr.student_id = u.id
                     LEFT JOIN internship_companies ic ON ic.id = mr.company_id
-                    LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
+                    LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s AND vri.status = 'confirmed'
                     WHERE u.role = 'student'
                     ORDER BY c.name, u.username
                 """, (current_semester_id,))
@@ -5974,7 +5974,7 @@ def director_intern_status():
                         INNER JOIN (SELECT student_id, MAX(id) AS max_id FROM matching_results GROUP BY student_id) mr2
                         ON mr1.student_id = mr2.student_id AND mr1.id = mr2.max_id) mr ON mr.student_id = u.id
                     LEFT JOIN internship_companies ic ON ic.id = mr.company_id
-                    LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
+                    LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s AND vri.status = 'confirmed'
                     WHERE u.role = 'student'
                     ORDER BY c.name, u.username
                 """, (current_semester_id,))
@@ -5990,6 +5990,7 @@ def director_intern_status():
             if sid in seen:
                 if r.get("withdraw_id") or (r.get("offer_status") or "").lower() == "withdrawing":
                     seen[sid]["status"] = "退出"
+                    seen[sid]["withdraw_record_id"] = r.get("withdraw_id")
                     seen[sid]["company_name"] = seen[sid]["company_name"] or r.get("company_name")
                     seen[sid]["job_title"] = seen[sid]["job_title"] or r.get("job_title")
                 continue
@@ -6008,8 +6009,115 @@ def director_intern_status():
                 "company_name": r.get("company_name") or "",
                 "job_title": r.get("job_title") or "",
                 "status": status,
+                "withdraw_record_id": r.get("withdraw_id") if status == "退出" else None,
             }
         return jsonify({"success": True, "data": list(seen.values())})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# =========================================================
+# 主任：預覽已確認的退實習案件詳情（唯讀，僅 status='confirmed' 才顯示於主任列表故僅能查已確認）
+# =========================================================
+@vendor_bp.route("/director/api/withdraw_case_detail", methods=["GET"])
+def director_get_withdraw_case_detail():
+    """主任：取得單一退實習案件詳情（僅限指導老師已確認之案件，唯讀預覽）"""
+    if "user_id" not in session or session.get("role") not in ("director", "ta", "admin"):
+        return jsonify({"success": False, "message": "未授權"}), 403
+    case_id = request.args.get("id") or request.args.get("case_id")
+    if not case_id:
+        return jsonify({"success": False, "message": "缺少案件 id"}), 400
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            rid = int(case_id)
+        except (ValueError, TypeError):
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "無效的案件 id"}), 400
+        cursor.execute("""
+            SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                   ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                   ir.teacher_reason, ir.teacher_meeting_notes,
+                   ic.company_name
+            FROM internship_records ir
+            JOIN internship_companies ic ON ic.id = ir.company_id
+            WHERE ir.id = %s AND ir.status = 'confirmed'
+        """, (rid,))
+        row = cursor.fetchone()
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "案件不存在或尚未經指導老師確認"}), 404
+        row["teacher_meeting_notes"] = (row.get("teacher_reason") or row.get("teacher_meeting_notes") or "").strip()
+        cursor.execute("SELECT u.id, u.name AS student_name, u.username AS student_number FROM users u WHERE u.id = %s", (row["student_id"],))
+        student = cursor.fetchone()
+        cursor.execute("""
+            SELECT COALESCE((SELECT ij.title FROM student_job_applications sja
+                             JOIN internship_jobs ij ON ij.id = sja.job_id
+                             WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id LIMIT 1), '未指定職缺') AS job_title, ic.company_name
+            FROM matching_results mr
+            JOIN internship_companies ic ON ic.id = mr.company_id
+            WHERE mr.student_id = %s ORDER BY mr.id DESC LIMIT 1
+        """, (row["student_id"],))
+        offer = cursor.fetchone()
+        attachments = []
+        sid, vid, cid, stid = row["semester_id"], row["vendor_id"], row["company_id"], row["student_id"]
+        try:
+            cursor.execute("""
+                SELECT file_type, file_path, original_filename
+                FROM internship_withdraw_attachments
+                WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
+                ORDER BY id
+            """, (sid, vid, cid, stid))
+            upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+            seen_paths = set()
+            for a in cursor.fetchall():
+                fp = (a.get("file_path") or "").lstrip("/")
+                if fp and fp in seen_paths:
+                    continue
+                if fp:
+                    seen_paths.add(fp)
+                url = "/uploads/" + fp
+                file_size_str = ""
+                if fp:
+                    try:
+                        full_path = os.path.join(upload_base, fp.replace("/", os.sep))
+                        if os.path.isfile(full_path):
+                            sz = os.path.getsize(full_path)
+                            file_size_str = f"{sz} B" if sz < 1024 else (f"{sz // 1024} KB" if sz < 1024 * 1024 else f"{sz / (1024 * 1024):.2f} MB")
+                    except Exception:
+                        pass
+                attachments.append({
+                    "file_type": a.get("file_type") or "file",
+                    "url": url,
+                    "original_filename": a.get("original_filename") or "",
+                    "file_size": file_size_str or None,
+                })
+        except Exception:
+            pass
+        cursor.close()
+        conn.close()
+        return jsonify({
+            "success": True,
+            "data": {
+                "id": row["id"],
+                "student_id": row["student_id"],
+                "student_name": student.get("student_name") if student else "",
+                "student_number": student.get("student_number") if student else "",
+                "company_name": offer.get("company_name") if offer else row.get("company_name"),
+                "job_title": offer.get("job_title") if offer else "",
+                "reason_category": row.get("reason_category") or "",
+                "reason_detail": row.get("reason_detail") or "",
+                "status": row.get("status") or "",
+                "created_at": row.get("created_at").isoformat() if row.get("created_at") else None,
+                "teacher_meeting_notes": (row.get("teacher_meeting_notes") or "").strip(),
+                "logs": [],
+                "attachments": attachments,
+            },
+        })
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500

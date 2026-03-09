@@ -174,7 +174,13 @@
     }
     .data-table td { color: #212529; text-align: left; background: #fff; }
     .data-table th.col-status, .data-table td.col-status { text-align: center; }
+    .data-table th.col-action, .data-table td.col-action { text-align: center; }
     .data-table tbody tr:hover td { background: #f8f9fa; }
+    .btn-preview {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
+      border: none; background: #0454a3; color: #fff; font-size: 0.85rem; cursor: pointer; text-decoration: none;
+    }
+    .btn-preview:hover { background: #0369a1; color: #fff; }
     .badge {
       display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 500;
     }
@@ -205,6 +211,28 @@
     .alert-danger { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
     #errorMessage { display: none; }
     #errorMessage.show { display: block; }
+    .preview-backdrop {
+      position: fixed; inset: 0; background: rgba(15,23,42,0.4); z-index: 2000;
+      display: none; align-items: center; justify-content: center; padding: 24px;
+    }
+    .preview-backdrop.show { display: flex; }
+    .preview-content {
+      max-width: 560px; max-height: 85vh; background: #fff; border-radius: 14px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column;
+    }
+    .preview-header { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; font-weight: 700; font-size: 1.1rem; color: #0f172a; }
+    .preview-body { padding: 20px; overflow-y: auto; flex: 1; }
+    .preview-body .detail-block { background: #f8fafc; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; border: 1px solid #e2e8f0; }
+    .preview-body .detail-block h3 { font-size: 0.95rem; color: #334155; margin-bottom: 8px; }
+    .preview-body .detail-block .value { color: #1e293b; white-space: pre-wrap; word-break: break-word; font-size: 0.9rem; }
+    .preview-body .detail-block .label { color: #64748b; font-size: 0.9rem; margin-right: 6px; }
+    .preview-body .attachment-img-wrap { max-height: 200px; overflow: hidden; border-radius: 8px; margin-bottom: 8px; }
+    .preview-body .attachment-img-wrap img { max-height: 200px; width: auto; max-width: 100%; object-fit: contain; }
+    .preview-close {
+      position: absolute; top: 12px; right: 16px; width: 32px; height: 32px;
+      border-radius: 50%; border: none; background: #1e293b; color: #fff; font-size: 1.2rem; cursor: pointer;
+    }
+    .preview-close:hover { background: #475569; }
   </style>
 </head>
 <body>
@@ -234,6 +262,7 @@
     <a href="/admin_statistics">查詢統計資料</a>
     <a href="/admission/manage_director">媒合結果</a>
     <a href="/admission/second_round/director" id="secondRoundMenuLink" style="display: none;">二輪分發</a>
+    <a href="/admission/unadmitted_list">查看未錄取名單</a>
     <a href="/login">登出</a>
   </nav>
 
@@ -260,12 +289,36 @@
               <th>實習單位</th>
               <th>職缺</th>
               <th class="col-status">實習狀況</th>
+              <th class="col-action">操作</th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
         </table>
       </div>
       <p id="listEmpty" class="empty-msg" style="display: none;">尚無學生資料。</p>
+    </div>
+  </div>
+
+  <!-- 退實習案件預覽彈窗（唯讀） -->
+  <div id="previewBackdrop" class="preview-backdrop" role="dialog" aria-modal="true" aria-label="退實習案件預覽">
+    <div class="preview-content" style="position: relative;">
+      <button type="button" class="preview-close" id="previewCloseBtn" aria-label="關閉預覽">×</button>
+      <div class="preview-header">退實習案件詳情（已由指導老師確認）</div>
+      <div class="preview-body" id="previewBody">
+        <div class="detail-block">
+          <h3>解約報告</h3>
+          <p class="value"><span class="label">原因類別：</span><span id="previewReasonCategory">—</span></p>
+          <p class="value" style="margin-top: 8px;"><span class="label">具體說明：</span><span id="previewReasonDetail">—</span></p>
+        </div>
+        <div class="detail-block" id="previewMeetingBlock">
+          <h3>與學生訪談紀錄</h3>
+          <p class="value" id="previewMeetingNotes">—</p>
+        </div>
+        <div class="detail-block" id="previewAttachmentsBlock" style="display: none;">
+          <h3>廠商佐證 (圖片/檔案)</h3>
+          <div id="previewAttachmentsList"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -335,7 +388,7 @@
 
       function renderTable(rows) {
         if (!rows || rows.length === 0) {
-          tableBody.innerHTML = '<tr><td colspan="6" class="empty-msg">查無符合條件的學生</td></tr>';
+          tableBody.innerHTML = '<tr><td colspan="7" class="empty-msg">查無符合條件的學生</td></tr>';
           listEmpty.style.display = 'none';
           return;
         }
@@ -344,6 +397,10 @@
           var status = row.status || '未實習';
           var cls = statusClass(status);
           var classDisplay = row.class_display || row.class_name || '—';
+          var recordId = row.withdraw_record_id;
+          var actionCell = (status === '退出' && recordId)
+            ? '<button type="button" class="btn-preview" data-record-id="' + escapeHtml(String(recordId)) + '"><i class="bi bi-eye"></i> 預覽</button>'
+            : '—';
           return '<tr>' +
             '<td>' + escapeHtml(row.student_name || '—') + '</td>' +
             '<td>' + escapeHtml(row.student_number || '—') + '</td>' +
@@ -351,9 +408,56 @@
             '<td>' + escapeHtml(row.company_name || '—') + '</td>' +
             '<td>' + escapeHtml(row.job_title || '—') + '</td>' +
             '<td class="col-status"><span class="badge ' + cls + '">' + escapeHtml(status) + '</span></td>' +
+            '<td class="col-action">' + actionCell + '</td>' +
             '</tr>';
         }).join('');
+        tableBody.querySelectorAll('.btn-preview').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var id = this.getAttribute('data-record-id');
+            if (id) openPreview(id);
+          });
+        });
       }
+
+      var previewBackdrop = document.getElementById('previewBackdrop');
+      var previewCloseBtn = document.getElementById('previewCloseBtn');
+      function openPreview(recordId) {
+        if (!recordId) return;
+        fetch('/director/api/withdraw_case_detail?id=' + encodeURIComponent(recordId), { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (!res.success || !res.data) {
+              alert(res.message || '無法載入案件詳情');
+              return;
+            }
+            var d = res.data;
+            document.getElementById('previewReasonCategory').textContent = d.reason_category || '—';
+            document.getElementById('previewReasonDetail').textContent = d.reason_detail || '—';
+            document.getElementById('previewMeetingNotes').textContent = (d.teacher_meeting_notes || '').trim() || '—';
+            var list = document.getElementById('previewAttachmentsList');
+            var block = document.getElementById('previewAttachmentsBlock');
+            if (d.attachments && d.attachments.length > 0) {
+              block.style.display = 'block';
+              list.innerHTML = d.attachments.map(function (a) {
+                var url = (a.url || '').replace(/^\/*/, '/');
+                if ((a.file_type || '').toLowerCase() === 'image' || /\.(jpg|jpeg|png|gif|webp)$/i.test(a.original_filename || '')) {
+                  return '<div class="detail-block"><div class="attachment-img-wrap"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener"><img src="' + escapeHtml(url) + '" alt=""></a></div><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' + escapeHtml(a.original_filename || '') + '</a></div>';
+                }
+                return '<div class="detail-block"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' + escapeHtml(a.original_filename || '下載檔案') + '</a></div>';
+              }).join('');
+            } else {
+              block.style.display = 'none';
+              list.innerHTML = '';
+            }
+            if (previewBackdrop) previewBackdrop.classList.add('show');
+          })
+          .catch(function () { alert('載入失敗'); });
+      }
+      function closePreview() {
+        if (previewBackdrop) previewBackdrop.classList.remove('show');
+      }
+      if (previewCloseBtn) previewCloseBtn.addEventListener('click', closePreview);
+      if (previewBackdrop) previewBackdrop.addEventListener('click', function (e) { if (e.target === previewBackdrop) closePreview(); });
 
       function applySearch() {
         var q = (searchInput && searchInput.value) ? searchInput.value.trim().toLowerCase() : '';
@@ -410,7 +514,7 @@
         .then(function (res) {
           if (!res.success) {
             showError(res.message || '無法載入資料');
-            tableBody.innerHTML = '<tr><td colspan="6" class="empty-msg">載入失敗</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="7" class="empty-msg">載入失敗</td></tr>';
             return;
           }
           allRows = res.data || [];
@@ -425,7 +529,7 @@
         })
         .catch(function () {
           showError('網路錯誤，請稍後再試');
-          tableBody.innerHTML = '<tr><td colspan="6" class="empty-msg">載入失敗</td></tr>';
+          tableBody.innerHTML = '<tr><td colspan="7" class="empty-msg">載入失敗</td></tr>';
         });
     })();
   </script>

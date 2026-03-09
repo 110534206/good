@@ -382,11 +382,14 @@
           loading.classList.add('d-none');
           notOpenMsg.classList.add('d-none');
           contentArea.classList.remove('d-none');
-          var assignDisabled = !statusData.is_enabled;
+          var isReadOnly = statusData.director_read_only === true;
+          var assignDisabled = !statusData.is_enabled || isReadOnly;
           if (btnAssign) btnAssign.disabled = assignDisabled;
           if (selStudent) selStudent.disabled = assignDisabled;
           if (selCompany) selCompany.disabled = assignDisabled;
-          if (statusData.is_enabled && alertPlace) alertPlace.innerHTML = '';
+          if (isReadOnly && alertPlace) {
+            alertPlace.innerHTML = '<div class="alert alert-info alert-dismissible fade show"><i class="fas fa-eye"></i> 目前為實習學期，僅可檢視二輪名單，無法進行指派。<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+          } else if (statusData.is_enabled && alertPlace) alertPlace.innerHTML = '';
           else if (!statusData.is_enabled && alertPlace) {
             alertPlace.innerHTML = '<div class="alert alert-info alert-dismissible fade show">二輪尚未開啟，目前僅可查看名單（與科助未錄取名單一致）；科助開啟二輪後即可指派。<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
           }

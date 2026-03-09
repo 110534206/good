@@ -416,12 +416,21 @@
 
           Promise.all([
             fetch(apiUrl).then(res => res.ok ? res.json() : {success:false}),
-            userRole === 'vendor' ? Promise.resolve({success:true, companies:[]}) : fetch('/api/get_reviewed_companies').then(res => res.ok ? res.json() : {success:true, companies:[]}),
-            userRole === 'vendor' ? fetch('/vendor/api/positions').then(res => res.ok ? res.json() : {success:true, items:[]}) : (targetCompanyId ? fetch(`/api/public/company/${targetCompanyId}`).then(async res => {
-               if(!res.ok) return {success:true, items:[]};
-               const r = await res.json();
-               return {success:true, items: (r.jobs||[]).map(j=>({id:j.id, title:j.title}))};
-            }) : fetch('/api/public/positions').then(res => res.ok ? res.json() : {success:true, items:[]}))
+            userRole === 'vendor'
+              ? Promise.resolve({success:true, companies:[]})
+              : fetch('/api/get_reviewed_companies').then(res => res.ok ? res.json() : {success:true, companies:[]}),
+            // 職缺資料：導師/班導可用公開職缺，主任不需要呼叫 /api/public/positions（避免 403）
+            userRole === 'vendor'
+              ? fetch('/vendor/api/positions').then(res => res.ok ? res.json() : {success:true, items:[]})
+              : (userRole === 'director' || isDirectorMode
+                  ? Promise.resolve({success:true, items:[]})
+                  : (targetCompanyId
+                      ? fetch(`/api/public/company/${targetCompanyId}`).then(async res => {
+                           if(!res.ok) return {success:true, items:[]};
+                           const r = await res.json();
+                           return {success:true, items: (r.jobs||[]).map(j=>({id:j.id, title:j.title}))};
+                         })
+                      : fetch('/api/public/positions').then(res => res.ok ? res.json() : {success:true, items:[]})))
           ]).then(([resumeResponse, companyData, positionData]) => {
             if (resumeResponse.success) {
               // 處理履歷數據和截止時間信息
@@ -835,8 +844,10 @@
       });
     }
 
-    function applyFilters() {
-      currentPage = 1;
+    function applyFilters(resetPage = true) {
+      if (resetPage) {
+        currentPage = 1;
+      }
       const cls = document.getElementById("classFilter").value.trim();
       const companyName = document.getElementById("companyNameFilter").value.trim();
       const jobFilter = document.getElementById("companyFilter").value.trim();
@@ -1107,7 +1118,11 @@
         const li = document.createElement("li");
         li.className = `page-item ${i === currentPage ? "active" : ""}`;
         li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
-        li.onclick = (e) => { e.preventDefault(); currentPage = i; applyFilters(); }; 
+        li.onclick = (e) => { 
+          e.preventDefault(); 
+          currentPage = i; 
+          applyFilters(false); 
+        }; 
         pagination.appendChild(li);
       }
     }
