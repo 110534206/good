@@ -662,17 +662,18 @@
           <textarea name="reason_detail" id="reasonDetail" required placeholder="請輸入退實習原因，供指導老師了解。"></textarea>
         </div>
         <div class="form-group upload-group">
-          <label class="upload-label"><i class="bi bi-image" aria-hidden="true"></i> 上傳圖片</label>
+          <label class="upload-label"><i class="bi bi-image" aria-hidden="true"></i> 上傳圖片 <span class="hint">（可多選）</span></label>
           <div class="upload-box">
-            <input type="file" id="evidenceImage" name="evidence_image" accept=".png,.jpg,.jpeg,.gif,.webp" aria-label="選擇圖片佐證">
+            <input type="file" id="evidenceImage" name="evidence_image" accept=".png,.jpg,.jpeg,.gif,.webp" multiple aria-label="選擇圖片佐證（可多選）">
           </div>
         </div>
         <div class="form-group upload-group">
-          <label class="upload-label"><i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i> 上傳檔案</label>
+          <label class="upload-label"><i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i> 上傳檔案 <span class="hint">（可多選）</span></label>
           <div class="upload-box">
-            <input type="file" id="evidenceFile" name="evidence_file" accept=".pdf,.doc,.docx,.xls,.xlsx,.odt,.ods,.txt" aria-label="選擇檔案佐證">
+            <input type="file" id="evidenceFile" name="evidence_file" accept=".pdf,.doc,.docx,.xls,.xlsx,.odt,.ods,.txt" multiple aria-label="選擇檔案佐證（可多選）">
           </div>
         </div>
+        <div id="evidenceError" class="alert alert-danger evidence-error" role="alert" style="display: none; margin-top: 10px;"></div>
         <button type="submit" class="btn-submit" id="submitBtn">送出</button>
       </form>
     </div>
@@ -1023,6 +1024,16 @@
       }
       function hideError() {
         errorMessage.style.display = 'none';
+        var evidenceErr = document.getElementById('evidenceError');
+        if (evidenceErr) { evidenceErr.style.display = 'none'; evidenceErr.textContent = ''; }
+      }
+      function showEvidenceError(msg) {
+        errorMessage.style.display = 'none';
+        var evidenceErr = document.getElementById('evidenceError');
+        if (evidenceErr) {
+          evidenceErr.textContent = msg || '請至少上傳一張圖片或一個檔案作為佐證。';
+          evidenceErr.style.display = 'block';
+        }
       }
 
       // 成功彈跳視窗按鈕
@@ -1076,6 +1087,12 @@
 
       const evidenceImageInput = document.getElementById('evidenceImage');
       const evidenceFileInput = document.getElementById('evidenceFile');
+      const evidenceErrorEl = document.getElementById('evidenceError');
+      function clearEvidenceError() {
+        if (evidenceErrorEl) { evidenceErrorEl.style.display = 'none'; evidenceErrorEl.textContent = ''; }
+      }
+      if (evidenceImageInput) evidenceImageInput.addEventListener('change', clearEvidenceError);
+      if (evidenceFileInput) evidenceFileInput.addEventListener('change', clearEvidenceError);
 
       withdrawForm.addEventListener('submit', async function (e) {
         e.preventDefault();
@@ -1083,7 +1100,7 @@
         const hasImage = evidenceImageInput && evidenceImageInput.files.length > 0;
         const hasFile = evidenceFileInput && evidenceFileInput.files.length > 0;
         if (!hasImage && !hasFile) {
-          showError('請至少上傳一張圖片或一個檔案作為佐證。');
+          showEvidenceError('請至少上傳一張圖片或一個檔案作為佐證。');
           return;
         }
         submitBtn.disabled = true;
@@ -1094,8 +1111,16 @@
           formData.append('reason_category', document.getElementById('reasonCategory').value.trim());
           formData.append('reason_detail', document.getElementById('reasonDetail').value.trim());
           if (matchId) formData.append('match_id', matchId);
-          if (hasImage) formData.append('evidence_image', evidenceImageInput.files[0]);
-          if (hasFile) formData.append('evidence_file', evidenceFileInput.files[0]);
+          if (hasImage) {
+            for (var i = 0; i < evidenceImageInput.files.length; i++) {
+              formData.append('evidence_image', evidenceImageInput.files[i]);
+            }
+          }
+          if (hasFile) {
+            for (var j = 0; j < evidenceFileInput.files.length; j++) {
+              formData.append('evidence_file', evidenceFileInput.files[j]);
+            }
+          }
           const res = await fetch('/vendor/api/withdraw_intern', {
             method: 'POST',
             body: formData,

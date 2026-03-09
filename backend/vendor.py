@@ -4744,6 +4744,7 @@ def get_withdraw_intern_list():
             status_sql = """
             SELECT mr.student_id,
                    u.name AS student_name, u.username AS student_number,
+<<<<<<< HEAD
                    ic.company_name, COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title) AS job_title,
                    CASE WHEN ir.student_id IS NOT NULL THEN 'withdrawing' ELSE 'accepted' END AS status,
                    ir.id AS record_id
@@ -4751,6 +4752,14 @@ def get_withdraw_intern_list():
             JOIN users u ON u.id = mr.student_id
             LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
             JOIN internship_companies ic ON ic.id = mr.company_id
+=======
+                   ic.company_name, ij.title AS job_title,
+                   CASE WHEN ir.student_id IS NOT NULL THEN COALESCE(ir.status, 'withdrawing') ELSE COALESCE(io.status, '') END AS status
+            FROM internship_offers io
+            JOIN users u ON u.id = io.student_id
+            JOIN internship_jobs ij ON ij.id = io.job_id
+            JOIN internship_companies ic ON ic.id = ij.company_id
+>>>>>>> 1a5598e6fbe43c64ec7bedd485a1179ab9e096db
             LEFT JOIN internship_records ir
                    ON ir.student_id = mr.student_id
                   AND ir.semester_id = %s
@@ -4877,17 +4886,18 @@ def submit_withdraw_intern():
         student_id = request.form.get("student_id")
         reason_category = (request.form.get("reason_category") or "").strip()
         reason_detail = (request.form.get("reason_detail") or "").strip()
-        evidence_image = request.files.get("evidence_image")
-        evidence_file = request.files.get("evidence_file")
-        # 表單送出時至少須上傳一張圖片或一個檔案
-        if (not evidence_image or not evidence_image.filename) and (not evidence_file or not evidence_file.filename):
+        evidence_images = request.files.getlist("evidence_image")
+        evidence_files = request.files.getlist("evidence_file")
+        has_image = any(f and getattr(f, "filename", None) for f in evidence_images)
+        has_file = any(f and getattr(f, "filename", None) for f in evidence_files)
+        if not has_image and not has_file:
             return jsonify({"success": False, "message": "請至少上傳一張圖片或一個檔案作為佐證。"}), 400
     else:
         data = request.get_json() or {}
         student_id = data.get("student_id")
         reason_category = (data.get("reason_category") or "").strip()
         reason_detail = (data.get("reason_detail") or "").strip()
-        evidence_image = evidence_file = None
+        evidence_images = evidence_files = []
     if not student_id:
         return jsonify({"success": False, "message": "缺少學生 ID"}), 400
     if not reason_category:
@@ -4932,28 +4942,48 @@ def submit_withdraw_intern():
         evidence_file_dir = os.path.join(upload_base, "evidence_file")
         saved_paths = []
         ts = datetime.now().strftime("%Y%m%d%H%M%S")
-        if evidence_image and evidence_image.filename:
+        os.makedirs(evidence_dir, exist_ok=True)
+        for i, evidence_image in enumerate(evidence_images or []):
+            if not evidence_image or not getattr(evidence_image, "filename", None):
+                continue
             ext = (evidence_image.filename.rsplit(".", 1)[-1] or "").lower()
             if ext in WITHDRAW_EVIDENCE_IMAGE_EXT:
+<<<<<<< HEAD
                 os.makedirs(evidence_image_dir, exist_ok=True)
                 safe = secure_filename(evidence_image.filename) or "image"
                 base, _ = os.path.splitext(safe)
                 save_name = f"img_{ts}_{base[:20]}.{ext}"
                 abs_path = os.path.join(evidence_image_dir, save_name)
+=======
+                safe = secure_filename(evidence_image.filename) or "image"
+                base, _ = os.path.splitext(safe)
+                save_name = f"img_{ts}_{i}_{base[:16]}.{ext}"
+                abs_path = os.path.join(evidence_dir, save_name)
+>>>>>>> 1a5598e6fbe43c64ec7bedd485a1179ab9e096db
                 evidence_image.save(abs_path)
                 rel = os.path.join("evidence_image", save_name).replace("\\", "/")
                 saved_paths.append(("image", rel, evidence_image.filename))
-        if evidence_file and evidence_file.filename:
+        for j, evidence_file in enumerate(evidence_files or []):
+            if not evidence_file or not getattr(evidence_file, "filename", None):
+                continue
             ext = (evidence_file.filename.rsplit(".", 1)[-1] or "").lower()
             if ext in WITHDRAW_EVIDENCE_FILE_EXT:
+<<<<<<< HEAD
                 os.makedirs(evidence_file_dir, exist_ok=True)
                 safe = secure_filename(evidence_file.filename) or "file"
                 base, _ = os.path.splitext(safe)
                 save_name = f"file_{ts}_{base[:20]}.{ext}"
                 abs_path = os.path.join(evidence_file_dir, save_name)
+=======
+                safe = secure_filename(evidence_file.filename) or "file"
+                base, _ = os.path.splitext(safe)
+                save_name = f"file_{ts}_{j}_{base[:16]}.{ext}"
+                abs_path = os.path.join(evidence_dir, save_name)
+>>>>>>> 1a5598e6fbe43c64ec7bedd485a1179ab9e096db
                 evidence_file.save(abs_path)
                 rel = os.path.join("evidence_file", save_name).replace("\\", "/")
                 saved_paths.append(("file", rel, evidence_file.filename))
+<<<<<<< HEAD
         # 佐證路徑：第一張圖片、第一個檔案，寫入 internship_records.evidence_image / evidence_file（若表有該欄位）
         evidence_image_path = next((p for t, p, _ in saved_paths if t == "image"), None)
         evidence_file_path = next((p for t, p, _ in saved_paths if t == "file"), None)
@@ -4976,6 +5006,43 @@ def submit_withdraw_intern():
                         %s, %s, %s, %s, NOW(), NOW())
             """, insert_params + (evidence_image_path, evidence_file_path))
             conn.commit()
+=======
+        # 寫入或更新退實習記錄至 internship_records（若已存在則更新，並會一併替換佐證，使「只上傳一張」只顯示一張）
+        cursor.execute("""
+            SELECT 1 FROM internship_records
+            WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
+            LIMIT 1
+        """, (current_semester_id, vendor_id, company_id, int(student_id)))
+        record_exists = cursor.fetchone() is not None
+        try:
+            if record_exists:
+                try:
+                    cursor.execute("""
+                        UPDATE internship_records
+                        SET reason_category = %s, reason_detail = %s, updated_at = NOW()
+                        WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
+                    """, (reason_category, reason_detail, current_semester_id, vendor_id, company_id, int(student_id)))
+                    conn.commit()
+                except Exception as upd_err:
+                    if "Unknown column" in str(upd_err):
+                        cursor.execute("""
+                            UPDATE internship_records SET updated_at = NOW()
+                            WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
+                        """, (current_semester_id, vendor_id, company_id, int(student_id)))
+                        conn.commit()
+                    else:
+                        raise
+            else:
+                cursor.execute("""
+                    INSERT INTO internship_records
+                    (semester_id, vendor_id, company_id, student_id, job_title, status,
+                     reason_category, reason_detail, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, 'withdrawing',
+                            %s, %s, NOW(), NOW())
+                """, (current_semester_id, vendor_id, company_id, int(student_id),
+                      offer.get("job_title"), reason_category, reason_detail))
+                conn.commit()
+>>>>>>> 1a5598e6fbe43c64ec7bedd485a1179ab9e096db
         except Exception as create_err:
             err_str = str(create_err)
             if "doesn't exist" in err_str.lower() or "1146" in err_str:
@@ -5004,7 +5071,11 @@ def submit_withdraw_intern():
                     }), 500
             else:
                 raise create_err
+<<<<<<< HEAD
         # 建立佐證附件表並寫入（同一案件先刪除舊附件，避免重複送出產生多筆）
+=======
+        # 建立佐證附件表並寫入（同一案件先刪除舊佐證再寫入，避免重複顯示）
+>>>>>>> 1a5598e6fbe43c64ec7bedd485a1179ab9e096db
         try:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS internship_withdraw_attachments (
@@ -5021,11 +5092,30 @@ def submit_withdraw_intern():
                 )
             """)
             conn.commit()
+<<<<<<< HEAD
+=======
+            # 重新提出申請：放棄先前的佐證紀錄與檔案，只保留本次上傳
+            cursor.execute("""
+                SELECT file_path FROM internship_withdraw_attachments
+                WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
+            """, (current_semester_id, vendor_id, company_id, int(student_id)))
+            old_paths = [r.get("file_path") for r in (cursor.fetchall() or []) if r.get("file_path")]
+>>>>>>> 1a5598e6fbe43c64ec7bedd485a1179ab9e096db
             cursor.execute("""
                 DELETE FROM internship_withdraw_attachments
                 WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
             """, (current_semester_id, vendor_id, company_id, int(student_id)))
             conn.commit()
+<<<<<<< HEAD
+=======
+            for rel_path in old_paths:
+                try:
+                    full = os.path.join(upload_base, rel_path.replace("/", os.sep))
+                    if os.path.isfile(full):
+                        os.remove(full)
+                except Exception:
+                    pass
+>>>>>>> 1a5598e6fbe43c64ec7bedd485a1179ab9e096db
             for ft, fp, orig in saved_paths:
                 cursor.execute("""
                     INSERT INTO internship_withdraw_attachments
@@ -5090,6 +5180,43 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
                 row["teacher_meeting_notes"] = (row.get("teacher_reason") or row.get("teacher_meeting_notes") or "").strip()
             return row
         except Exception:
+            row = None
+            try:
+                cursor.execute("""
+                    SELECT CONCAT(ir.semester_id, '_', ir.vendor_id, '_', ir.company_id, '_', ir.student_id) AS id,
+                           ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                           ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                           ir.teacher_reason,
+                           ic.company_name, ic.advisor_user_id
+                    FROM internship_records ir
+                    JOIN internship_companies ic ON ic.id = ir.company_id
+                    WHERE ir.semester_id = %s AND ir.vendor_id = %s AND ir.company_id = %s AND ir.student_id = %s
+                      AND ic.advisor_user_id = %s
+                """, (semester_id, vendor_id, company_id, student_id, teacher_id))
+                row = cursor.fetchone()
+                if row:
+                    row["teacher_meeting_notes"] = (row.get("teacher_reason") or "").strip()
+                return row
+            except Exception:
+                pass
+            try:
+                cursor.execute("""
+                    SELECT CONCAT(ir.semester_id, '_', ir.vendor_id, '_', ir.company_id, '_', ir.student_id) AS id,
+                           ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                           ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                           ir.teacher_meeting_notes,
+                           ic.company_name, ic.advisor_user_id
+                    FROM internship_records ir
+                    JOIN internship_companies ic ON ic.id = ir.company_id
+                    WHERE ir.semester_id = %s AND ir.vendor_id = %s AND ir.company_id = %s AND ir.student_id = %s
+                      AND ic.advisor_user_id = %s
+                """, (semester_id, vendor_id, company_id, student_id, teacher_id))
+                row = cursor.fetchone()
+                if row:
+                    row["teacher_meeting_notes"] = (row.get("teacher_meeting_notes") or "").strip()
+                return row
+            except Exception:
+                pass
             cursor.execute("""
                 SELECT CONCAT(ir.semester_id, '_', ir.vendor_id, '_', ir.company_id, '_', ir.student_id) AS id,
                        ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
@@ -5120,6 +5247,38 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
         return row
     except Exception as e:
         if "teacher_reason" in str(e) or "teacher_meeting_notes" in str(e) or "Unknown column" in str(e):
+            try:
+                cursor.execute("""
+                    SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                           ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                           ir.teacher_reason,
+                           ic.company_name, ic.advisor_user_id
+                    FROM internship_records ir
+                    JOIN internship_companies ic ON ic.id = ir.company_id
+                    WHERE ir.id = %s AND ic.advisor_user_id = %s
+                """, (int(case_id), teacher_id))
+                row = cursor.fetchone()
+                if row:
+                    row["teacher_meeting_notes"] = (row.get("teacher_reason") or "").strip()
+                return row
+            except Exception:
+                pass
+            try:
+                cursor.execute("""
+                    SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
+                           ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
+                           ir.teacher_meeting_notes,
+                           ic.company_name, ic.advisor_user_id
+                    FROM internship_records ir
+                    JOIN internship_companies ic ON ic.id = ir.company_id
+                    WHERE ir.id = %s AND ic.advisor_user_id = %s
+                """, (int(case_id), teacher_id))
+                row = cursor.fetchone()
+                if row:
+                    row["teacher_meeting_notes"] = (row.get("teacher_meeting_notes") or "").strip()
+                return row
+            except Exception:
+                pass
             cursor.execute("""
                 SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                        ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
@@ -5428,6 +5587,7 @@ def teacher_get_withdraw_case_detail():
                 WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
                 ORDER BY id
             """, (sid, vid, cid, stid))
+<<<<<<< HEAD
             upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
             seen_paths = set()
             for a in cursor.fetchall():
@@ -5436,6 +5596,15 @@ def teacher_get_withdraw_case_detail():
                     continue
                 if fp:
                     seen_paths.add(fp)
+=======
+            upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(__file__), "uploads")
+            seen_paths = set()
+            for a in cursor.fetchall():
+                fp = (a.get("file_path") or "").lstrip("/")
+                if fp in seen_paths:
+                    continue
+                seen_paths.add(fp)
+>>>>>>> 1a5598e6fbe43c64ec7bedd485a1179ab9e096db
                 url = "/uploads/" + fp
                 file_size_str = ""
                 if fp:
@@ -5556,6 +5725,45 @@ def teacher_confirm_withdraw():
                 else:
                     raise
         conn.commit()
+
+        # 狀態為已確認：通知學生、班導、主任、廠商
+        try:
+            from notification import create_notification
+            stid = row["student_id"]
+            vid = row["vendor_id"]
+            company_name = (row.get("company_name") or "").strip() or "實習單位"
+            cursor.execute("SELECT name FROM users WHERE id = %s", (stid,))
+            stu_row = cursor.fetchone()
+            title = "退實習生已確認"
+            msg = "退實習生已確認"
+            link_teacher = "/teacher_remove_intern"
+            link_vendor = "/vendor_remove_intern"
+            link_student = "/student_home"
+
+            create_notification(stid, title, msg, category="approval", link_url=link_student)
+
+            cursor.execute("""
+                SELECT ct.teacher_id FROM users u
+                JOIN classes_teacher ct ON u.class_id = ct.class_id AND ct.role = 'classteacher'
+                WHERE u.id = %s
+            """, (stid,))
+            for ct_row in cursor.fetchall() or []:
+                tid = ct_row.get("teacher_id")
+                if tid:
+                    create_notification(tid, title, msg, category="approval", link_url=link_teacher)
+
+            cursor.execute("SELECT id FROM users WHERE role = 'director'")
+            for d_row in cursor.fetchall() or []:
+                did = d_row.get("id")
+                if did:
+                    create_notification(did, title, msg, category="approval", link_url=link_teacher)
+
+            if vid:
+                create_notification(vid, title, msg, category="approval", link_url=link_vendor)
+        except Exception as notif_err:
+            traceback.print_exc()
+            print(f"[退實習確認] 通知發送失敗: {notif_err}")
+
         cursor.close()
         conn.close()
         return jsonify({"success": True, "message": "已確認異動"})
