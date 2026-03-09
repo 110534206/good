@@ -4306,6 +4306,22 @@ def ta_confirm_matching():
         """, (current_semester_id, current_semester_id))
         match_results = cursor.fetchall() or []
         
+        # 檢查 matching_results 表實際有哪些欄位（相容各種表結構）
+        cursor.execute("""
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'matching_results'
+        """)
+        mr_columns = {row['COLUMN_NAME'] for row in cursor.fetchall()}
+        mr_has_semester_id = 'semester_id' in mr_columns
+        mr_has_job_id = 'job_id' in mr_columns
+        mr_has_job_title = 'job_title' in mr_columns
+        mr_has_mentor_id = 'mentor_id' in mr_columns
+        mr_has_company_id = 'company_id' in mr_columns
+        mr_has_matched_at = 'matched_at' in mr_columns
+        mr_has_status = 'status' in mr_columns
+        mr_has_internship_dates = 'internship_start_date' in mr_columns and 'internship_end_date' in mr_columns
+        mr_has_comment = 'comment' in mr_columns
+
         today_str = datetime.now().strftime('%Y-%m-%d')
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         inserted_count = 0
@@ -4320,25 +4336,89 @@ def ta_confirm_matching():
             mentor_id = match_result.get('mentor_id') or 0
             job_title_val = (match_result.get('job_title') or '').strip() or ' '
 
-            cursor.execute("""
-                SELECT id FROM matching_results
-                WHERE student_id = %s AND semester_id <=> %s
-                LIMIT 1
-            """, (student_id, semester_id))
-            existing = cursor.fetchone()
-            if existing:
+            if mr_has_semester_id:
                 cursor.execute("""
-                    UPDATE matching_results
-                    SET company_id = %s, mentor_id = %s, job_id = %s, job_title = %s, matched_at = %s, status = 'accepted'
-                    WHERE id = %s
-                """, (company_id, mentor_id, job_id, job_title_val, now_str, existing['id']))
-                updated_count += 1
+                    SELECT id FROM matching_results
+                    WHERE student_id = %s AND semester_id <=> %s
+                    LIMIT 1
+                """, (student_id, semester_id))
             else:
                 cursor.execute("""
-                    INSERT INTO matching_results
-                    (student_id, company_id, mentor_id, job_id, semester_id, job_title, internship_start_date, internship_end_date, matched_at, comment, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, 'accepted')
-                """, (student_id, company_id, mentor_id, job_id, semester_id, job_title_val, today_str, today_str, now_str))
+                    SELECT id FROM matching_results
+                    WHERE student_id = %s
+                    LIMIT 1
+                """, (student_id,))
+            existing = cursor.fetchone()
+            if existing:
+                set_parts = []
+                set_args = []
+                if mr_has_company_id:
+                    set_parts.append("company_id = %s")
+                    set_args.append(company_id)
+                if mr_has_mentor_id:
+                    set_parts.append("mentor_id = %s")
+                    set_args.append(mentor_id)
+                if mr_has_job_id:
+                    set_parts.append("job_id = %s")
+                    set_args.append(job_id)
+                if mr_has_job_title:
+                    set_parts.append("job_title = %s")
+                    set_args.append(job_title_val)
+                if mr_has_matched_at:
+                    set_parts.append("matched_at = %s")
+                    set_args.append(now_str)
+                if mr_has_status:
+                    set_parts.append("status = 'accepted'")
+                if set_parts:
+                    set_args.append(existing['id'])
+                    cursor.execute(
+                        "UPDATE matching_results SET " + ", ".join(set_parts) + " WHERE id = %s",
+                        set_args
+                    )
+                updated_count += 1
+            else:
+                ins_cols = ["student_id"]
+                ins_placeholders = ["%s"]
+                ins_vals = [student_id]
+                if mr_has_company_id:
+                    ins_cols.append("company_id")
+                    ins_placeholders.append("%s")
+                    ins_vals.append(company_id)
+                if mr_has_mentor_id:
+                    ins_cols.append("mentor_id")
+                    ins_placeholders.append("%s")
+                    ins_vals.append(mentor_id)
+                if mr_has_job_id:
+                    ins_cols.append("job_id")
+                    ins_placeholders.append("%s")
+                    ins_vals.append(job_id)
+                if mr_has_semester_id:
+                    ins_cols.append("semester_id")
+                    ins_placeholders.append("%s")
+                    ins_vals.append(semester_id)
+                if mr_has_job_title:
+                    ins_cols.append("job_title")
+                    ins_placeholders.append("%s")
+                    ins_vals.append(job_title_val)
+                if mr_has_internship_dates:
+                    ins_cols.extend(["internship_start_date", "internship_end_date"])
+                    ins_placeholders.extend(["%s", "%s"])
+                    ins_vals.extend([today_str, today_str])
+                if mr_has_matched_at:
+                    ins_cols.append("matched_at")
+                    ins_placeholders.append("%s")
+                    ins_vals.append(now_str)
+                if mr_has_comment:
+                    ins_cols.append("comment")
+                    ins_placeholders.append("NULL")
+                if mr_has_status:
+                    ins_cols.append("status")
+                    ins_placeholders.append("%s")
+                    ins_vals.append("accepted")
+                cursor.execute(
+                    "INSERT INTO matching_results (" + ", ".join(ins_cols) + ") VALUES (" + ", ".join(ins_placeholders) + ")",
+                    ins_vals
+                )
                 inserted_count += 1
         
         print(f"✅ [DEBUG] 寫入 matching_results: 新增 {inserted_count} 筆，更新 {updated_count} 筆")
