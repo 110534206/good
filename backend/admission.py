@@ -2232,7 +2232,10 @@ def director_matching_results():
                 COALESCE(md.is_adjusted, 0) AS is_adjusted,
                 COALESCE(md.updated_at, ra.updated_at, ra.created_at) AS updated_at,
                 COALESCE(sp.company_id, sja.company_id, md.vendor_id, ra.job_id) AS company_id,
-                sp.preference_order,
+                (SELECT sp2.preference_order FROM student_preferences sp2
+                 WHERE sp2.student_id = sja.student_id AND sp2.company_id = sja.company_id AND sp2.job_id = sja.job_id
+                   AND sp2.status = 'approved'
+                 ORDER BY sp2.submitted_at DESC LIMIT 1) AS preference_order,
                 COALESCE(sp.job_id, sja.job_id, ra.job_id) AS job_id,
                 ic.company_name,
                 u.name AS student_name,
@@ -2251,17 +2254,23 @@ def director_matching_results():
                 AND sja.company_id = sp.company_id 
                 AND sja.job_id = sp.job_id
                 AND (sp.semester_id = %s OR sp.semester_id IS NULL))
-            LEFT JOIN manage_director md ON ra.application_id = md.preference_id
+            RIGHT JOIN manage_director md ON ra.application_id = md.preference_id
             LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, sja.company_id, md.vendor_id) = ic.id
             LEFT JOIN internship_jobs ij ON COALESCE(sp.job_id, sja.job_id, ra.job_id) = ij.id
             LEFT JOIN users u ON COALESCE(md.student_id, sja.student_id) = u.id
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
-            WHERE ra.apply_status = 'approved'  -- 廠商必須已通過履歷審核
-            AND (
-                (ra.is_reserve = 0 AND ra.slot_index IS NOT NULL)  -- 正取學生：is_reserve=0且slot_index有值
-                OR (ra.is_reserve = 1)  -- 候補學生：is_reserve=1
-            )  -- 必須已完成媒合排序
+            WHERE (
+                -- 1) 有廠商排序且通過審核的紀錄（原本條件）
+                (ra.apply_status = 'approved'
+                 AND (
+                    (ra.is_reserve = 0 AND ra.slot_index IS NOT NULL)
+                    OR (ra.is_reserve = 1)
+                 )
+                )
+                -- 2) 任何存在於 manage_director 的紀錄（主任手動加入或調整），即使廠商尚未審核也要顯示
+                OR md.match_id IS NOT NULL
+            )
             AND (ic.status = 'approved' OR ic.status IS NULL)  -- 公司狀態必須是已審核（如果公司不存在則也顯示）
             ORDER BY 
                 CASE COALESCE(md.director_decision, 'Pending')
@@ -2665,10 +2674,13 @@ def director_matching_results():
             added_students_vendor[key] = True
         
         # 過濾 formatted_results：重複中選的學生只保留志願序最高的記錄（主任排序結果）
+        # 只顯示在 manage_director 有對應記錄的學生（match_id 非 'ra_xxx'）；主任按移除會刪除該筆，故不會再出現
         filtered_results = []
         for result in formatted_results:
-            # 主任已「移除」(Rejected) 的記錄，不應再出現在主任排序結果中
             if result.get("director_decision") == "Rejected":
+                continue
+            match_id_val = result.get("match_id")
+            if isinstance(match_id_val, str) and match_id_val.startswith("ra_"):
                 continue
             student_id = result.get("student_id")
             if student_id in duplicate_students:
@@ -2873,7 +2885,10 @@ def final_matching_results():
                 COALESCE(md.is_adjusted, 0) AS is_adjusted,
                 COALESCE(md.updated_at, ra.updated_at, ra.created_at) AS updated_at,
                 COALESCE(sp.company_id, sja.company_id, md.vendor_id, ra.job_id) AS company_id,
-                sp.preference_order,
+                (SELECT sp2.preference_order FROM student_preferences sp2
+                 WHERE sp2.student_id = sja.student_id AND sp2.company_id = sja.company_id AND sp2.job_id = sja.job_id
+                   AND sp2.status = 'approved'
+                 ORDER BY sp2.submitted_at DESC LIMIT 1) AS preference_order,
                 COALESCE(sp.job_id, sja.job_id, ra.job_id) AS job_id,
                 ic.company_name,
                 u.name AS student_name,
@@ -2893,17 +2908,23 @@ def final_matching_results():
                 AND sja.company_id = sp.company_id 
                 AND sja.job_id = sp.job_id
                 AND (sp.semester_id = %s OR sp.semester_id IS NULL))
-            LEFT JOIN manage_director md ON ra.application_id = md.preference_id
+            RIGHT JOIN manage_director md ON ra.application_id = md.preference_id
             LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, sja.company_id, md.vendor_id) = ic.id
             LEFT JOIN internship_jobs ij ON COALESCE(sp.job_id, sja.job_id, ra.job_id) = ij.id
             LEFT JOIN users u ON COALESCE(md.student_id, sja.student_id) = u.id
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
-            WHERE ra.apply_status = 'approved'  -- 廠商必須已通過履歷審核
-            AND (
-                (ra.is_reserve = 0 AND ra.slot_index IS NOT NULL)  -- 正取學生：is_reserve=0且slot_index有值
-                OR (ra.is_reserve = 1)  -- 候補學生：is_reserve=1
-            )  -- 必須已完成媒合排序
+            WHERE (
+                -- 1) 有廠商排序且通過審核的紀錄（原本條件）
+                (ra.apply_status = 'approved'
+                 AND (
+                    (ra.is_reserve = 0 AND ra.slot_index IS NOT NULL)
+                    OR (ra.is_reserve = 1)
+                 )
+                )
+                -- 2) 任何存在於 manage_director 的紀錄（主任已確認），即使廠商尚未審核也要顯示
+                OR md.match_id IS NOT NULL
+            )
             AND (md.director_decision = 'Approved')  -- 只顯示主任已確認的記錄
             AND (ic.status = 'approved' OR ic.status IS NULL)  -- 公司狀態必須是已審核
             ORDER BY 
@@ -3244,19 +3265,14 @@ def director_remove_student():
             except ValueError:
                 return jsonify({"success": False, "message": "無效的記錄ID"}), 400
             
-            # 查詢 resume_applications 記錄，獲取相關資訊
+            # 查詢 resume_applications 記錄（不強制 JOIN student_preferences，避免 semester_id 不符導致 404）
             cursor.execute("""
                 SELECT ra.id, ra.application_id, ra.job_id, ra.is_reserve, ra.slot_index,
-                       sja.student_id, sja.company_id,
-                       sp.id AS student_preference_id
+                       sja.student_id, sja.company_id
                 FROM resume_applications ra
                 INNER JOIN student_job_applications sja ON ra.application_id = sja.id
-                INNER JOIN student_preferences sp ON sja.student_id = sp.student_id 
-                    AND sja.company_id = sp.company_id 
-                    AND sja.job_id = sp.job_id
-                    AND sp.semester_id = %s
                 WHERE ra.id = %s
-            """, (current_semester_id, ra_id_int))
+            """, (ra_id_int,))
             ra_record = cursor.fetchone()
             
             if not ra_record:
@@ -3270,79 +3286,16 @@ def director_remove_student():
             existing_md = cursor.fetchone()
             
             if existing_md:
-                # 更新現有記錄
-                cursor.execute("""
-                    UPDATE manage_director
-                    SET director_decision = 'Rejected',
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE match_id = %s
-                """, (existing_md['match_id'],))
-            else:
-                # 創建新記錄並標記為 Rejected
-                original_type = 'Regular' if ra_record.get('is_reserve') == 0 else 'Backup'
-                original_rank = ra_record.get('slot_index')
-                
-                # 檢查 semester_id 欄位是否存在
-                cursor.execute("""
-                    SELECT COLUMN_NAME 
-                    FROM information_schema.COLUMNS 
-                    WHERE TABLE_SCHEMA = DATABASE() 
-                    AND TABLE_NAME = 'manage_director'
-                    AND COLUMN_NAME = 'semester_id'
-                """)
-                has_semester_id = cursor.fetchone() is not None
-                cursor.fetchall()  # 確保所有結果都被讀取
-                
-                # 使用 application_id 作為 preference_id（符合外鍵約束）
-                # 外鍵約束要求 preference_id 必須是 resume_applications.application_id
-                application_id = ra_record.get('application_id')
-                
-                if has_semester_id:
-                    cursor.execute("""
-                        INSERT INTO manage_director (
-                            semester_id, vendor_id, student_id, preference_id,
-                            original_type, original_rank, is_conflict,
-                            director_decision, is_adjusted, updated_at
-                        ) VALUES (
-                            %s, %s, %s, %s,
-                            %s, %s, 0,
-                            'Rejected', 0, CURRENT_TIMESTAMP
-                        )
-                    """, (
-                        current_semester_id,
-                        ra_record.get('company_id'),  # 使用 company_id 作為 vendor_id（如果沒有對應的 vendor）
-                        ra_record.get('student_id'),
-                        application_id,  # 使用 application_id 作為 preference_id
-                        original_type,
-                        original_rank
-                    ))
-                else:
-                    # 如果沒有 semester_id 欄位，不包含它
-                    cursor.execute("""
-                        INSERT INTO manage_director (
-                            vendor_id, student_id, preference_id,
-                            original_type, original_rank, is_conflict,
-                            director_decision, is_adjusted, updated_at
-                        ) VALUES (
-                            %s, %s, %s,
-                            %s, %s, 0,
-                            'Rejected', 0, CURRENT_TIMESTAMP
-                        )
-                    """, (
-                        ra_record.get('company_id'),  # 使用 company_id 作為 vendor_id（如果沒有對應的 vendor）
-                        ra_record.get('student_id'),
-                        application_id,  # 使用 application_id 作為 preference_id
-                        original_type,
-                        original_rank
-                    ))
+                # 主任按移除：直接刪除該筆記錄，資料表不再保留
+                cursor.execute("DELETE FROM manage_director WHERE match_id = %s", (existing_md['match_id'],))
+            # 若無 manage_director 記錄則不新增列，直接視為移除成功（主任排序結果只顯示有 md 的學生，故不會再出現）
         else:
-            # 更新 manage_director 表，將 director_decision 設為 Rejected
-            cursor.execute("""
-                UPDATE manage_director
-                SET director_decision = 'Rejected',
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE match_id = %s
-            """, (match_id,))
+            # 主任按移除：直接從 manage_director 刪除該筆記錄（match_id 可能為整數欄位，嘗試整數比對）
+            try:
+                match_id_param = int(match_id) if str(match_id).isdigit() else match_id
+            except (ValueError, TypeError):
+                match_id_param = match_id
+            cursor.execute("DELETE FROM manage_director WHERE match_id = %s", (match_id_param,))
             
             if cursor.rowcount == 0:
                 return jsonify({"success": False, "message": "找不到該記錄"}), 404
@@ -3769,22 +3722,25 @@ def director_add_student():
         # 這是因為 manage_director.preference_id 外鍵引用 resume_applications.application_id
         preference_id = application_id
         
-        # 6. 在 manage_director 表中創建或更新記錄
+        # 6. 在 manage_director 表中創建或更新記錄（包含 job_id，對應 internship_jobs.id）
         is_reserve = (type == 'reserve')
+        # original_type / original_rank 代表「廠商原始排序」，主任手動加入時不應覆寫廠商的原始排序
+        # 僅使用 final_rank 表示主任在本公司內的排序位置
         original_type = "Regular" if not is_reserve else "Reserve"
-        original_rank = slot_index if not is_reserve else None
+        # 主任新加入的學生：original_rank 保持為 NULL，只設定 final_rank
         final_rank = slot_index if not is_reserve else None
         
         # 如果已存在記錄，更新它；否則創建新記錄
         if existing and existing.get('match_id'):
             match_id = existing.get('match_id')
             print(f"🔄 更新現有記錄 match_id={match_id}")
+            # 這裡僅調整 vendor_id / preference_id / director_decision / final_rank
+            # 不覆寫 original_type / original_rank（保留廠商原始排序）
             cursor.execute("""
                 UPDATE manage_director
                 SET vendor_id = %s,
+                    job_id = %s,
                     preference_id = %s,
-                    original_type = %s,
-                    original_rank = %s,
                     is_conflict = 0,
                     director_decision = 'Approved',
                     final_rank = %s,
@@ -3792,8 +3748,7 @@ def director_add_student():
                     updated_at = CURRENT_TIMESTAMP
                 WHERE match_id = %s
             """, (
-                company_id, preference_id,
-                original_type, original_rank,
+                company_id, job_id, preference_id,
                 final_rank,
                 match_id
             ))
@@ -3825,7 +3780,7 @@ def director_add_student():
                     )
                 """, (
                     current_semester_id, company_id, student_id, preference_id,
-                    original_type, original_rank,
+                    original_type, None,
                     final_rank
                 ))
             else:
@@ -3843,7 +3798,7 @@ def director_add_student():
                     )
                 """, (
                     current_semester_id, company_id, student_id, preference_id,
-                    original_type, original_rank,
+                    original_type, None,
                     final_rank
                 ))
         

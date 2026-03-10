@@ -3084,11 +3084,9 @@
       return getFilteredCompanies(getCompaniesWithCompletedSorting(allCompaniesData || []));
     }
 
-    // 只保留「有廠商排序資料」的公司
-    // 判斷依據：在 vendorOriginalCompaniesData 中，
-    // 至少一個職缺的 regulars/reserves 有學生（代表廠商真的有排過人）
-    // 即使主任把學生全部移除（正取／備取為 0），vendorOriginalCompaniesData 仍保留原始排序，
-    // 所以這家公司會被視為「已填寫」並出現在上方列表。
+    // 只保留「有廠商排序資料」或「主任排序結果中有學生」的公司
+    // 廠商：vendorOriginalCompaniesData 至少一職缺有 regulars/reserves
+    // 主任手動加入：allCompaniesData 中該公司至少一職缺有學生，也要顯示
     function getCompaniesWithCompletedSorting(source) {
       const data = source || [];
       const vendorList = vendorOriginalCompaniesData || [];
@@ -3104,7 +3102,12 @@
           vendorIdSet.add(String(c.company_id));
         }
       });
-      return data.filter(company => vendorIdSet.has(String(company.company_id)));
+      const directorIdSet = new Set();
+      data.forEach(c => {
+        const hasAny = (c.jobs || []).some(job => ((job.regulars || []).length > 0 || (job.reserves || []).length > 0));
+        if (hasAny) directorIdSet.add(String(c.company_id));
+      });
+      return data.filter(company => vendorIdSet.has(String(company.company_id)) || directorIdSet.has(String(company.company_id)));
     }
 
     function getFilteredCompanies(source) {
@@ -3299,7 +3302,7 @@
                       </div>
                       <div class="student-details-row">
                         <span class="preference-order">
-                          <i class="fas fa-list-ol"></i> 志願序：${(student.preference_order >= 1 && student.preference_order <= 5) ? student.preference_order : '—'}
+                          <i class="fas fa-list-ol"></i> 志願序：${(student.preference_order != null && Number(student.preference_order) >= 1) ? Number(student.preference_order) : '主任排入'}
                         </span>
                       </div>
                     </div>
@@ -3649,7 +3652,7 @@
                 </div>
                 <div class="student-details-row">
                   <span class="preference-order">
-                    <i class="fas fa-list-ol"></i> 志願序：${(student.preference_order && student.preference_order >= 1 && student.preference_order <= 5) ? student.preference_order : '—'}
+                    <i class="fas fa-list-ol"></i> 志願序：${(student.preference_order != null && Number(student.preference_order) >= 1) ? Number(student.preference_order) : '主任排入'}
                   </span>
                 </div>
               </div>
