@@ -4915,6 +4915,43 @@ WITHDRAW_EVIDENCE_IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
 WITHDRAW_EVIDENCE_FILE_EXT = {"pdf", "doc", "docx", "xls", "xlsx", "odt", "ods", "txt"}
 
 
+def _attachments_from_evidence(upload_base, evidence_image_str=None, evidence_file_str=None):
+    """從 internship_records 的 evidence_image、evidence_file（逗號分隔路徑）組出 attachments 列表。"""
+    attachments = []
+    seen = set()
+    for path in (evidence_image_str or "").split(","):
+        path = (path or "").strip()
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        url = "/uploads/" + path.lstrip("/")
+        file_size_str = ""
+        try:
+            full = os.path.join(upload_base, path.replace("/", os.sep))
+            if os.path.isfile(full):
+                sz = os.path.getsize(full)
+                file_size_str = f"{sz} B" if sz < 1024 else (f"{sz // 1024} KB" if sz < 1024 * 1024 else f"{sz / (1024 * 1024):.2f} MB")
+        except Exception:
+            pass
+        attachments.append({"file_type": "image", "url": url, "original_filename": path.split("/")[-1] or "", "file_size": file_size_str or None})
+    for path in (evidence_file_str or "").split(","):
+        path = (path or "").strip()
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        url = "/uploads/" + path.lstrip("/")
+        file_size_str = ""
+        try:
+            full = os.path.join(upload_base, path.replace("/", os.sep))
+            if os.path.isfile(full):
+                sz = os.path.getsize(full)
+                file_size_str = f"{sz} B" if sz < 1024 else (f"{sz // 1024} KB" if sz < 1024 * 1024 else f"{sz / (1024 * 1024):.2f} MB")
+        except Exception:
+            pass
+        attachments.append({"file_type": "file", "url": url, "original_filename": path.split("/")[-1] or "", "file_size": file_size_str or None})
+    return attachments
+
+
 @vendor_bp.route("/vendor/api/withdraw_intern", methods=["POST"])
 def submit_withdraw_intern():
     """廠商送出退實習申請：寫入原因、可選佐證圖片/檔案，並將學生標記為退出處理中"""
@@ -5010,9 +5047,11 @@ def submit_withdraw_intern():
                 evidence_file.save(abs_path)
                 rel = os.path.join("evidence_file", save_name).replace("\\", "/")
                 saved_paths.append(("file", rel, evidence_file.filename))
-        # 佐證路徑：第一張圖片、第一個檔案，寫入 internship_records.evidence_image / evidence_file（若表有該欄位）
-        evidence_image_path = next((p for t, p, _ in saved_paths if t == "image"), None)
-        evidence_file_path = next((p for t, p, _ in saved_paths if t == "file"), None)
+        # 佐證路徑：多張圖片、多個檔案以逗號分隔寫入 internship_records.evidence_image / evidence_file
+        image_paths = [p for t, p, _ in saved_paths if t == "image"]
+        file_paths = [p for t, p, _ in saved_paths if t == "file"]
+        evidence_image_path = ",".join(image_paths) if image_paths else None
+        evidence_file_path = ",".join(file_paths) if file_paths else None
         # 寫入退實習記錄至 internship_records（含佐證圖片/檔案路徑）
         insert_params = (
             current_semester_id,
@@ -5060,42 +5099,7 @@ def submit_withdraw_intern():
                     }), 500
             else:
                 raise create_err
-        # 建立佐證附件表並寫入（同一案件先刪除舊附件，避免重複送出產生多筆）
-        try:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS internship_withdraw_attachments (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    semester_id INT NOT NULL,
-                    vendor_id INT NOT NULL,
-                    company_id INT NOT NULL,
-                    student_id INT NOT NULL,
-                    file_type VARCHAR(20) NOT NULL,
-                    file_path VARCHAR(500) NOT NULL,
-                    original_filename VARCHAR(255),
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_withdraw (semester_id, vendor_id, company_id, student_id)
-                )
-            """)
-            conn.commit()
-            cursor.execute("""
-                DELETE FROM internship_withdraw_attachments
-                WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
-            """, (current_semester_id, vendor_id, company_id, int(student_id)))
-            conn.commit()
-            for ft, fp, orig in saved_paths:
-                cursor.execute("""
-                    INSERT INTO internship_withdraw_attachments
-                    (semester_id, vendor_id, company_id, student_id, file_type, file_path, original_filename)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (current_semester_id, vendor_id, company_id, int(student_id), ft, fp, orig))
-                conn.commit()
-        except Exception as att_err:
-            traceback.print_exc()
-            # 不因附件寫入失敗而整筆失敗，主流程已成功
-            try:
-                conn.rollback()
-            except Exception:
-                pass
+        # 佐證已寫入 internship_records.evidence_image / evidence_file，不再使用 internship_withdraw_attachments
         # 退實習狀態已寫入 internship_records，不再更新 internship_offers（已改用 matching_results）
         try:
             conn.commit()
@@ -5370,41 +5374,13 @@ def vendor_get_withdraw_case_detail():
             ORDER BY mr.id DESC LIMIT 1
         """, (row["student_id"],))
         offer = cursor.fetchone()
-        attachments = []
-        sid, vid, cid, stid = row["semester_id"], row["vendor_id"], row["company_id"], row["student_id"]
+        upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
         try:
-            cursor.execute("""
-                SELECT file_type, file_path, original_filename
-                FROM internship_withdraw_attachments
-                WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
-                ORDER BY id
-            """, (sid, vid, cid, stid))
-            upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
-            seen_paths = set()
-            for a in cursor.fetchall():
-                fp = (a.get("file_path") or "").lstrip("/")
-                if fp and fp in seen_paths:
-                    continue
-                if fp:
-                    seen_paths.add(fp)
-                url = "/uploads/" + fp
-                file_size_str = ""
-                if fp:
-                    try:
-                        full_path = os.path.join(upload_base, fp.replace("/", os.sep))
-                        if os.path.isfile(full_path):
-                            sz = os.path.getsize(full_path)
-                            file_size_str = f"{sz} B" if sz < 1024 else (f"{sz // 1024} KB" if sz < 1024 * 1024 else f"{sz / (1024 * 1024):.2f} MB")
-                    except Exception:
-                        pass
-                attachments.append({
-                    "file_type": a.get("file_type") or "file",
-                    "url": url,
-                    "original_filename": a.get("original_filename") or "",
-                    "file_size": file_size_str or None,
-                })
+            cursor.execute("SELECT evidence_image, evidence_file FROM internship_records WHERE id = %s", (row["id"],))
+            er = cursor.fetchone()
+            attachments = _attachments_from_evidence(upload_base, er.get("evidence_image") if er else None, er.get("evidence_file") if er else None)
         except Exception:
-            pass
+            attachments = []
         cursor.close()
         conn.close()
         return jsonify({
@@ -5554,47 +5530,13 @@ def teacher_get_withdraw_case_detail():
         offer = cursor.fetchone()
         # 實習生日誌：若系統有日誌表可在此查詢；目前無則回傳空陣列
         logs = []
-        # 廠商上傳的退實習佐證（圖片/檔案），依 file_path 去重避免重複顯示
-        attachments = []
-        sid, vid, cid, stid = row["semester_id"], row["vendor_id"], row["company_id"], row["student_id"]
+        upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
         try:
-            cursor.execute("""
-                SELECT file_type, file_path, original_filename
-                FROM internship_withdraw_attachments
-                WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
-                ORDER BY id
-            """, (sid, vid, cid, stid))
-            upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
-            seen_paths = set()
-            for a in cursor.fetchall():
-                fp = (a.get("file_path") or "").lstrip("/")
-                if fp and fp in seen_paths:
-                    continue
-                if fp:
-                    seen_paths.add(fp)
-                url = "/uploads/" + fp
-                file_size_str = ""
-                if fp:
-                    try:
-                        full_path = os.path.join(upload_base, fp.replace("/", os.sep))
-                        if os.path.isfile(full_path):
-                            sz = os.path.getsize(full_path)
-                            if sz < 1024:
-                                file_size_str = f"{sz} B"
-                            elif sz < 1024 * 1024:
-                                file_size_str = f"{sz // 1024} KB"
-                            else:
-                                file_size_str = f"{sz / (1024 * 1024):.2f} MB"
-                    except Exception:
-                        pass
-                attachments.append({
-                    "file_type": a.get("file_type") or "file",
-                    "url": url,
-                    "original_filename": a.get("original_filename") or "",
-                    "file_size": file_size_str or None,
-                })
+            cursor.execute("SELECT evidence_image, evidence_file FROM internship_records WHERE id = %s", (row["id"],))
+            er = cursor.fetchone()
+            attachments = _attachments_from_evidence(upload_base, er.get("evidence_image") if er else None, er.get("evidence_file") if er else None)
         except Exception:
-            pass
+            attachments = []
         cursor.close()
         conn.close()
         return jsonify({
@@ -6063,41 +6005,13 @@ def director_get_withdraw_case_detail():
             WHERE mr.student_id = %s ORDER BY mr.id DESC LIMIT 1
         """, (row["student_id"],))
         offer = cursor.fetchone()
-        attachments = []
-        sid, vid, cid, stid = row["semester_id"], row["vendor_id"], row["company_id"], row["student_id"]
+        upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
         try:
-            cursor.execute("""
-                SELECT file_type, file_path, original_filename
-                FROM internship_withdraw_attachments
-                WHERE semester_id = %s AND vendor_id = %s AND company_id = %s AND student_id = %s
-                ORDER BY id
-            """, (sid, vid, cid, stid))
-            upload_base = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
-            seen_paths = set()
-            for a in cursor.fetchall():
-                fp = (a.get("file_path") or "").lstrip("/")
-                if fp and fp in seen_paths:
-                    continue
-                if fp:
-                    seen_paths.add(fp)
-                url = "/uploads/" + fp
-                file_size_str = ""
-                if fp:
-                    try:
-                        full_path = os.path.join(upload_base, fp.replace("/", os.sep))
-                        if os.path.isfile(full_path):
-                            sz = os.path.getsize(full_path)
-                            file_size_str = f"{sz} B" if sz < 1024 else (f"{sz // 1024} KB" if sz < 1024 * 1024 else f"{sz / (1024 * 1024):.2f} MB")
-                    except Exception:
-                        pass
-                attachments.append({
-                    "file_type": a.get("file_type") or "file",
-                    "url": url,
-                    "original_filename": a.get("original_filename") or "",
-                    "file_size": file_size_str or None,
-                })
+            cursor.execute("SELECT evidence_image, evidence_file FROM internship_records WHERE id = %s", (row["id"],))
+            er = cursor.fetchone()
+            attachments = _attachments_from_evidence(upload_base, er.get("evidence_image") if er else None, er.get("evidence_file") if er else None)
         except Exception:
-            pass
+            attachments = []
         cursor.close()
         conn.close()
         return jsonify({
