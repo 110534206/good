@@ -2248,6 +2248,7 @@ def director_matching_results():
                 COALESCE(md.vendor_id, sja.company_id) AS vendor_id,
                 COALESCE(md.student_id, sja.student_id) AS student_id,
                 COALESCE(sp.id, NULL) AS preference_id,
+                md.original_type AS md_original_type,
                 COALESCE(md.original_type, CASE WHEN ra.is_reserve = 0 THEN 'Regular' ELSE 'Backup' END) AS original_type,
                 COALESCE(md.original_rank, ra.slot_index) AS original_rank,
                 COALESCE(md.is_conflict, 0) AS is_conflict,
@@ -2471,9 +2472,17 @@ def director_matching_results():
             vendor_slot_index = result.get("vendor_slot_index")
             original_rank = result.get("original_rank")
             original_type = result.get("original_type")
+            md_original_type = result.get("md_original_type")
             
             # 如果 resume_applications 表中有記錄（vendor_is_reserve 或 vendor_slot_index 不是 NULL），表示廠商已經排序
-            if vendor_is_reserve is not None or vendor_slot_index is not None:
+            # 但我們只把「真的來自廠商排序」的紀錄當成廠商原始結果：
+            # 1) 來自 manage_director 的 original_type 需要有值（廠商端產生的 Regular / Backup）
+            # 2) 同時具備 vendor_is_reserve 或 vendor_slot_index（來自 resume_applications）
+            has_vendor_sorting = (
+                md_original_type is not None and
+                (vendor_is_reserve is not None or vendor_slot_index is not None)
+            )
+            if has_vendor_sorting:
                 # 有廠商的媒合排序資料，優先使用
                 # is_reserve: 0=正取, 1=備取
                 is_reserve = bool(vendor_is_reserve) if vendor_is_reserve is not None else False
@@ -2520,7 +2529,9 @@ def director_matching_results():
                 "is_conflict": bool(result.get("is_conflict")),
                 "original_type": result.get("original_type"),
                 "original_rank": result.get("original_rank"),
-                "vendor_slot_index": result.get("vendor_slot_index"),  # 廠商的排序索引，用於判斷是否有媒合排序
+                "vendor_is_reserve": vendor_is_reserve,
+                "vendor_slot_index": vendor_slot_index,  # 廠商的排序索引，用於判斷是否有媒合排序
+                "has_vendor_sorting": has_vendor_sorting,
                 "updated_at": result.get("updated_at").strftime("%Y-%m-%d %H:%M:%S") if isinstance(result.get("updated_at"), datetime) else str(result.get("updated_at", ""))
             }
             formatted_results.append(formatted_result)
@@ -2662,8 +2673,12 @@ def director_matching_results():
                     "reserves": []
                 }
         
-        # 將所有媒合結果分配到廠商原始排序（不過濾 director_decision，保持廠商原始狀態）
+        # 將所有「有廠商實際排序資料」的媒合結果分配到廠商原始排序
+        # 僅保留廠商在系統中實際排過的正取／備取名單，排除純粹由主任手動加入、且沒有廠商排序紀錄的學生
         for result in formatted_results:
+            # has_vendor_sorting 為 True 代表此筆來自 resume_applications 的實際排序結果
+            if not result.get("has_vendor_sorting"):
+                continue
             company_id = result["company_id"]
             job_id = result.get("job_id") or 0
             job_title = result.get("job_title") or "未指定職缺"
@@ -2690,7 +2705,16 @@ def director_matching_results():
                     "reserves": []
                 }
             
-            if result["is_reserve"]:
+            # 廠商原始排序應依照廠商自己的正／備取設定（vendor_is_reserve），而非主任後續調整結果
+            is_reserve_vendor = None
+            if result.get("vendor_is_reserve") is not None:
+                is_reserve_vendor = bool(result.get("vendor_is_reserve"))
+            else:
+                # 理論上 has_vendor_sorting 為 True 時應該有 vendor_is_reserve
+                # 保險起見，若缺少則退回使用 is_reserve
+                is_reserve_vendor = bool(result.get("is_reserve"))
+
+            if is_reserve_vendor:
                 companies_data_vendor[company_id]["jobs"][job_id]["reserves"].append(result)
             else:
                 companies_data_vendor[company_id]["jobs"][job_id]["regulars"].append(result)
@@ -3748,9 +3772,10 @@ def director_add_student():
         
         # 6. 在 manage_director 表中創建或更新記錄（包含 job_id，對應 internship_jobs.id）
         is_reserve = (type == 'reserve')
-        # original_type / original_rank 代表「廠商原始排序」，主任手動加入時不應覆寫廠商的原始排序
-        # 僅使用 final_rank 表示主任在本公司內的排序位置
-        original_type = "Regular" if not is_reserve else "Reserve"
+        # original_type / original_rank 代表「廠商原始排序」
+        # 主任手動加入的學生不應該有廠商原始排序，因此這兩個欄位維持為 NULL，
+        # 只使用 final_rank 來表示主任在本公司內的排序位置
+        original_type = None
         # 主任新加入的學生：original_rank 保持為 NULL，只設定 final_rank
         final_rank = slot_index if not is_reserve else None
         

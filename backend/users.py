@@ -121,6 +121,18 @@ def review_experience_page():
     return render_template('user_shared/review experience.html')
 
 # -------------------------
+# 指導老師：審核實習週記頁面
+# -------------------------
+@users_bp.route('/review_weekly')
+def review_weekly_page():
+    """指導老師檢視學生實習週記列表"""
+    current_role = session.get("role")
+    if 'username' not in session or current_role not in ['teacher', 'director', 'class_teacher']:
+        return redirect(url_for('auth_bp.login_page'))
+
+    return render_template('user_shared/review_weekly.html')
+
+# -------------------------
 # 班導首頁
 # -------------------------
 @users_bp.route("/class_teacher_home")

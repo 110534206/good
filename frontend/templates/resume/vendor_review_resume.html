@@ -348,14 +348,18 @@
         <div class="modal-body">
           <div id="calendarContainer" style="padding: 20px;">
             <div style="position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 20px;">
-              <h4 id="currentMonthYear" style="margin: 0; font-weight: 600;"></h4>
-              <div style="position: absolute; right: 16px; display: flex; align-items: center; gap: 8px;">
-                <button id="prevMonthBtn"
-                        style="border: none; background: transparent; padding: 0; line-height: 1; font-size: 13px; color: #666; cursor: pointer;">
+              <h4 id="currentMonthYear" style="margin: 0; font-weight: 600; font-size: 1.75rem;"></h4>
+              <div style="position: absolute; right: 16px; display: flex; align-items: center; gap: 4px;">
+                <button id="prevMonthBtn" type="button"
+                        style="border: none; background: #f1f5f9; padding: 8px 14px; line-height: 1; font-size: 16px; color: #475569; cursor: pointer; border-radius: 8px; min-width: 48px; min-height: 36px; display: flex; align-items: center; justify-content: center; transition: background 0.2s, color 0.2s;"
+                        onmouseover="this.style.background='#e2e8f0'; this.style.color='#0f172a';"
+                        onmouseout="this.style.background='#f1f5f9'; this.style.color='#475569';">
                   ▲
                 </button>
-                <button id="nextMonthBtn"
-                        style="border: none; background: transparent; padding: 0; line-height: 1; font-size: 13px; color: #666; cursor: pointer;">
+                <button id="nextMonthBtn" type="button"
+                        style="border: none; background: #f1f5f9; padding: 8px 14px; line-height: 1; font-size: 16px; color: #475569; cursor: pointer; border-radius: 8px; min-width: 48px; min-height: 36px; display: flex; align-items: center; justify-content: center; transition: background 0.2s, color 0.2s;"
+                        onmouseover="this.style.background='#e2e8f0'; this.style.color='#0f172a';"
+                        onmouseout="this.style.background='#f1f5f9'; this.style.color='#475569';">
                   ▼
                 </button>
               </div>
@@ -1160,6 +1164,12 @@
         
         // 如果是老師，只顯示下載按鈕（只讀模式）
         if (userRole && userRole !== 'vendor') {
+            return dlBtn;
+        }
+
+        // 如果此履歷已審核為通過或未通過，操作欄改為唯讀（僅保留下載，不再顯示任何操作按鈕）
+        const currentStatus = row.display_status || row.status || row.application_statuses || '';
+        if (currentStatus === 'approved' || currentStatus === 'rejected') {
             return dlBtn;
         }
         
