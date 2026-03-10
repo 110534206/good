@@ -15,7 +15,7 @@ from reportlab.lib import colors
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from semester import get_current_semester_code, get_current_semester_id, get_semester_code_for_company_openings, is_student_in_application_phase
+from semester import get_current_semester_code, get_current_semester_id, get_flow_semester_id, get_semester_code_for_company_openings, is_student_in_application_phase
 
 
 def _get_active_semester_year(cursor):
@@ -569,17 +569,27 @@ def review_preferences():
         class_ids = [r['class_id'] for r in class_rows]
         placeholders = ','.join(['%s'] * len(class_ids))
 
-        # 取得當前學期ID
-        current_semester_id = get_current_semester_id(cursor)
+        # 使用流程學期（1131），1132 時仍顯示 1131 的志願；班導僅看「四年級」志願（當屆實習生）
+        flow_semester_id = get_flow_semester_id(cursor)
+        current_semester_id = flow_semester_id or get_current_semester_id(cursor)
+        # 流程學期對應四年級：1131→110 屆，學號 110xxx
+        student_id_prefix = None
+        if flow_semester_id:
+            cursor.execute("SELECT code FROM semesters WHERE id = %s", (flow_semester_id,))
+            row = cursor.fetchone()
+            if row and row.get('code') and len(str(row['code'])) >= 3:
+                try:
+                    year_part = int(str(row['code'])[:3])
+                    student_id_prefix = year_part - 3  # 113 → 110
+                except (ValueError, TypeError):
+                    pass
         
-        # 檢查志願序填寫截止時間並自動更新狀態
+        # 檢查志願序填寫截止時間並自動更新狀態（依流程學期）
         is_preference_deadline_passed, update_count = update_preference_status_after_deadline(cursor, conn)
         
-        print(f"🔍 班導審核志願序 - class_ids: {class_ids}, current_semester_id: {current_semester_id}")
+        print(f"🔍 班導審核志願序 - class_ids: {class_ids}, flow_semester_id: {flow_semester_id}, 僅四年級(學號前3碼={student_id_prefix})")
 
-        # 1. 取得該班導班級的所有學生（含班級顯示）
-        # 關聯：users.class_id → classes.id；student_preferences.student_id → users.id
-        # 班級顯示由 classes.department + 年級 + classes.name 組成（如 資管科 四孝）
+        # 1. 取得該班導班級學生（僅顯示四年級：1131 時只列 110 屆／學號 110xxx）
         cursor.execute(f"""
             SELECT u.id AS student_id, u.username AS student_number, u.name AS student_name,
                    c.department AS class_department, c.name AS class_name_raw,
@@ -593,6 +603,17 @@ def review_preferences():
         active_year = _get_active_semester_year(cursor)
         all_class_students = []
         for s in raw_students:
+            # 有設定「僅四年級」時，只保留當屆實習生（110 屆 / 學號 110xxx）
+            if student_id_prefix is not None:
+                adm = s.get('class_admission_year')
+                try:
+                    adm_int = int(adm) if adm is not None else None
+                except (TypeError, ValueError):
+                    adm_int = None
+                username = str(s.get('student_number') or '')
+                prefix_ok = (adm_int == student_id_prefix) or (len(username) >= 3 and username[:3] == str(student_id_prefix))
+                if not prefix_ok:
+                    continue
             class_display = _format_class_display(
                 s.get('class_department'),
                 s.get('class_name_raw'),
@@ -609,32 +630,59 @@ def review_preferences():
                 'class_name': class_display
             })
 
-        # 2. 查詢已填寫志願序的學生（student_preferences JOIN users）
-        if current_semester_id:
-            cursor.execute(f"""
-                SELECT 
-                    u.id AS student_id,
-                    u.name AS student_name,
-                    u.username AS student_number,
-                    sp.id AS preference_id,
-                    sp.preference_order,
-                    sp.company_id,
-                    COALESCE(ic.company_name, '未知公司') AS company_name,
-                    sp.job_id,
-                    sp.job_title,
-                    sp.status,
-                    sp.submitted_at,
-                    sp.semester_id
-                FROM student_preferences sp
-                JOIN users u ON sp.student_id = u.id
-                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-                WHERE u.class_id IN ({placeholders}) 
-                  AND u.role = 'student'
-                  AND sp.semester_id = %s
-                ORDER BY u.name, sp.preference_order
-            """, tuple(class_ids) + (current_semester_id,))
+        # 2. 查詢已填寫志願序的學生（僅流程學期、僅四年級：1131 學年班導只看 110 屆／學號 110xxx）
+        if flow_semester_id:
+            if student_id_prefix is not None:
+                prefix_str = str(student_id_prefix)
+                cursor.execute(f"""
+                    SELECT 
+                        u.id AS student_id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        sp.company_id,
+                        COALESCE(ic.company_name, '未知公司') AS company_name,
+                        sp.job_id,
+                        sp.job_title,
+                        sp.status,
+                        sp.submitted_at,
+                        sp.semester_id
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    LEFT JOIN classes c ON u.class_id = c.id
+                    LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                    WHERE u.class_id IN ({placeholders}) 
+                      AND u.role = 'student'
+                      AND sp.semester_id = %s
+                      AND (COALESCE(c.admission_year, u.admission_year) = %s OR u.username LIKE %s)
+                    ORDER BY u.name, sp.preference_order
+                """, tuple(class_ids) + (flow_semester_id, student_id_prefix, prefix_str + '%'))
+            else:
+                cursor.execute(f"""
+                    SELECT 
+                        u.id AS student_id,
+                        u.name AS student_name,
+                        u.username AS student_number,
+                        sp.id AS preference_id,
+                        sp.preference_order,
+                        sp.company_id,
+                        COALESCE(ic.company_name, '未知公司') AS company_name,
+                        sp.job_id,
+                        sp.job_title,
+                        sp.status,
+                        sp.submitted_at,
+                        sp.semester_id
+                    FROM student_preferences sp
+                    JOIN users u ON sp.student_id = u.id
+                    LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                    WHERE u.class_id IN ({placeholders}) 
+                      AND u.role = 'student'
+                      AND sp.semester_id = %s
+                    ORDER BY u.name, sp.preference_order
+                """, tuple(class_ids) + (flow_semester_id,))
         else:
-            print("⚠️ 沒有設定當前學期，查詢所有志願序")
+            print("⚠️ 沒有設定學期，查詢該班級所有志願序")
             cursor.execute(f"""
                 SELECT 
                     u.id AS student_id,
