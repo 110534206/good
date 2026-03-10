@@ -4916,9 +4916,9 @@
                         </table>
                     </div>
                     <div class="form-check mt-2">
-                        <input class="form-check-input" type="checkbox" id="onlyUpdateCheck" checked disabled>
+                        <input class="form-check-input" type="checkbox" id="onlyUpdateCheck" checked>
                         <label class="form-check-label small" for="onlyUpdateCheck">
-                            僅執行「更新」、不新增 AI 辨識的科目
+                            預設僅執行「更新」、不新增 AI 辨識的科目（取消勾選才會新增）
                         </label>
                     </div>
                 </div>
@@ -4936,7 +4936,7 @@
             }).then((result) => {
                 if (!result.isConfirmed) return;
 
-                const onlyUpdate = true;
+                const onlyUpdate = document.getElementById('onlyUpdateCheck')?.checked !== false;
                 let updatedCount = 0;
                 let newCount = 0;
 
@@ -4951,8 +4951,8 @@
                             allCoursesData[matchIndex].isNotTaken = false;
                             updatedCount++;
                         }
-                    } else if (action === 'add' && false) {
-                        // 不新增 AI 辨識的科目
+                    } else if (action === 'add' && !onlyUpdate) {
+                        // 新增 AI 辨識的科目（只有在使用者取消勾選時才會執行）
                         allCoursesData.push(ocrCourse);
                         newCount++;
                     }
@@ -5395,7 +5395,7 @@
                         </div>
                     `}
                     <div class="form-check mt-2">
-                        <input class="form-check-input" type="checkbox" id="onlyUpdateCheck" checked disabled>
+                        <input class="form-check-input" type="checkbox" id="onlyUpdateCheck" checked>
                         <label class="form-check-label small" for="onlyUpdateCheck">
                             只修正「不一樣」的（以 Excel 為準），<strong>不新增</strong> AI 多抓的課
                         </label>
@@ -5414,7 +5414,7 @@
             }).then((result) => {
                 if (!result.isConfirmed) return;
 
-                const onlyUpdate = true;
+                const onlyUpdate = document.getElementById('onlyUpdateCheck')?.checked !== false;
                 let updatedCount = 0;
                 let newCount = 0;
                 clearCourseDiffMarkers();
@@ -5440,7 +5440,7 @@
                             allCoursesData[matchIndex].diffStatus = 'updated';
                             updatedCount++;
                         }
-                    } else if (action === 'add' && false) {
+                    } else if (action === 'add' && !onlyUpdate) {
                         ocrCourse.diffStatus = 'added';
                         allCoursesData.push(ocrCourse);
                         newCount++;
