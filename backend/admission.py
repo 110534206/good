@@ -566,36 +566,88 @@ def get_my_admission():
             pass
         
         # 從 matching_results 表獲取錄取資料（統一媒合結果來源，取代 internship_offers）
+        # 若資料表無 job_id 欄位則改用不依賴 mr.job_id 的查詢
         print(f"🔍 [DEBUG] 查詢 matching_results，student_id={student_id}")
         cursor.execute("""
-            SELECT 
-                mr.id AS offer_id,
-                mr.job_id,
-                'accepted' AS offer_status,
-                mr.matched_at AS offered_at,
-                mr.matched_at AS responded_at,
-                mr.company_id,
-                mr.job_title,
-                ij.description AS job_description,
-                ij.period AS internship_period,
-                ij.work_time AS internship_time,
-                ij.salary AS job_salary,
-                ic.company_name,
-                ic.location AS company_address,
-                ic.contact_person AS contact_name,
-                ic.contact_email,
-                ic.contact_phone,
-                mr.mentor_id AS advisor_user_id,
-                mr.semester_id,
-                mr.internship_start_date,
-                mr.internship_end_date
-            FROM matching_results mr
-            LEFT JOIN internship_jobs ij ON mr.job_id = ij.id
-            LEFT JOIN internship_companies ic ON mr.company_id = ic.id
-            WHERE mr.student_id = %s
-            ORDER BY mr.matched_at DESC
-            LIMIT 1
-        """, (student_id,))
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'matching_results'
+        """)
+        mr_cols = {row['COLUMN_NAME'] for row in cursor.fetchall()}
+        mr_has_job_id = 'job_id' in mr_cols
+        mr_has_matched_at = 'matched_at' in mr_cols
+        mr_has_job_title = 'job_title' in mr_cols
+        mr_has_mentor_id = 'mentor_id' in mr_cols
+        mr_has_semester_id = 'semester_id' in mr_cols
+        mr_has_internship_dates = 'internship_start_date' in mr_cols and 'internship_end_date' in mr_cols
+
+        if mr_has_job_id:
+            cursor.execute("""
+                SELECT 
+                    mr.id AS offer_id,
+                    mr.job_id,
+                    'accepted' AS offer_status,
+                    mr.matched_at AS offered_at,
+                    mr.matched_at AS responded_at,
+                    mr.company_id,
+                    mr.job_title,
+                    ij.description AS job_description,
+                    ij.period AS internship_period,
+                    ij.work_time AS internship_time,
+                    ij.salary AS job_salary,
+                    ic.company_name,
+                    ic.location AS company_address,
+                    ic.contact_person AS contact_name,
+                    ic.contact_email,
+                    ic.contact_phone,
+                    mr.mentor_id AS advisor_user_id,
+                    mr.semester_id,
+                    mr.internship_start_date,
+                    mr.internship_end_date
+                FROM matching_results mr
+                LEFT JOIN internship_jobs ij ON mr.job_id = ij.id
+                LEFT JOIN internship_companies ic ON mr.company_id = ic.id
+                WHERE mr.student_id = %s
+                ORDER BY mr.matched_at DESC
+                LIMIT 1
+            """, (student_id,))
+        else:
+            # 無 job_id 時不 JOIN internship_jobs，job_id 由 student_preferences 子查詢取得
+            sel = [
+                "mr.id AS offer_id",
+                "(SELECT sp.job_id FROM student_preferences sp WHERE sp.student_id = mr.student_id AND sp.company_id = mr.company_id AND sp.status = 'approved' ORDER BY sp.preference_order ASC LIMIT 1) AS job_id",
+                "'accepted' AS offer_status",
+            ]
+            if mr_has_matched_at:
+                sel.extend(["mr.matched_at AS offered_at", "mr.matched_at AS responded_at"])
+            else:
+                sel.extend(["NULL AS offered_at", "NULL AS responded_at"])
+            sel.extend([
+                "mr.company_id",
+                "mr.job_title" if mr_has_job_title else "NULL AS job_title",
+                "NULL AS job_description",
+                "NULL AS internship_period",
+                "NULL AS internship_time",
+                "NULL AS job_salary",
+                "ic.company_name",
+                "ic.location AS company_address",
+                "ic.contact_person AS contact_name",
+                "ic.contact_email",
+                "ic.contact_phone",
+                "mr.mentor_id AS advisor_user_id" if mr_has_mentor_id else "NULL AS advisor_user_id",
+                "mr.semester_id" if mr_has_semester_id else "NULL AS semester_id",
+                "mr.internship_start_date" if mr_has_internship_dates else "NULL AS internship_start_date",
+                "mr.internship_end_date" if mr_has_internship_dates else "NULL AS internship_end_date",
+            ])
+            order = "ORDER BY mr.matched_at DESC" if mr_has_matched_at else "ORDER BY mr.id DESC"
+            cursor.execute("""
+                SELECT
+                    """ + ",\n                    ".join(sel) + """
+                FROM matching_results mr
+                LEFT JOIN internship_companies ic ON mr.company_id = ic.id
+                WHERE mr.student_id = %s
+                """ + order + """
+                LIMIT 1
+            """, (student_id,))
         offer_info = cursor.fetchone()
         if offer_info and offer_info.get('semester_id'):
             offer_info['offer_semester_id'] = offer_info['semester_id']

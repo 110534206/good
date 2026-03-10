@@ -1183,12 +1183,16 @@ def get_session():
         })
     return jsonify({"success": False}), 401
     
-#實習成果
+# 實習成果 / 實習週記（學生）
 @users_bp.route('/intern_achievement')
-def intern_achievement():
+@users_bp.route('/intern_weekly')
+def intern_student_page():
     if 'username' not in session or session.get('role') != 'student':
         return redirect(url_for('auth_bp.login_page'))
+    if request.path.endswith('/intern_weekly'):
+        return render_template('user_shared/intern_weekly.html')
     return render_template('user_shared/intern_achievement.html')
+
 
 # -------------------------
 # 廠商職缺瀏覽頁面（給指導老師、科助查看所有廠商職缺）
