@@ -13,7 +13,6 @@
             background: #f7f9fc;
             margin: 0;
             padding: 0;
-            padding-top: 4.5rem; /* 預留固定頂端列高度 */
         }
 
         header {
@@ -21,11 +20,7 @@
             color: white;
             padding: 1rem 2rem;
             font-size: 1.5rem;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -310,6 +305,12 @@
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
+        /* 職缺欄不換行、保留足夠寬度 */
+        .table-container .table .th-job-titles,
+        .table-container .table .td-job-titles {
+            white-space: nowrap;
+            min-width: 220px;
+        }
 
         /* 分頁樣式 */
         .pagination-container {
@@ -494,14 +495,15 @@
             <table class="table table-hover align-middle">
                 <thead>
                     <tr>
+                        <th id="thPreferenceOrder" style="display: none;">志願序</th>
                         <th>公司名稱</th>
-                        <th>職缺</th>
+                        <th class="th-job-titles">職缺</th>
                         <th class="text-center">操作</th>
                     </tr>
                 </thead>
                 <tbody id="companyTable">
                     <tr>
-                        <td colspan="3" class="text-center text-muted">
+                        <td colspan="4" class="text-center text-muted">
                             <i class="bi bi-hourglass-split"></i> 載入中...
                         </td>
                     </tr>
@@ -653,6 +655,7 @@
         let currentCompaniesList = []; // 當前要顯示的公司列表
         let companyPreferenceJobs = new Map(); // 公司ID -> 用户在志願序中選擇的職缺名稱列表
         let companyPreferenceJobId = new Map(); // 公司ID -> 志願序中選擇的職缺 ID（用於投遞時預設）
+        let companyPreferenceOrder = new Map(); // 公司ID -> 志願序順位陣列（如 [1, 3] 表示該公司為第1、3志願）
         let applicationCount = 0; // 當前已投遞筆數（最多 5 筆）
 
         function escapeHtml(text) {
@@ -755,7 +758,7 @@
                     const companyIds = new Set();
                     companyPreferenceJobs.clear();
                     companyPreferenceJobId.clear();
-                    
+                    companyPreferenceOrder.clear();
                     result.preferences.forEach(pref => {
                         if (pref.company_id) {
                             companyIds.add(pref.company_id);
@@ -766,9 +769,18 @@
                                 const jobs = companyPreferenceJobs.get(pref.company_id);
                                 if (!jobs.includes(pref.job_title)) jobs.push(pref.job_title);
                             }
-                            // 記錄該公司在志願序中選擇的職缺 ID（用於投遞時預設選中）
                             if (pref.job_id && !companyPreferenceJobId.has(pref.company_id)) {
                                 companyPreferenceJobId.set(pref.company_id, pref.job_id);
+                            }
+                            // 記錄該公司在志願序的順位（第幾志願）
+                            if (pref.preference_order != null && pref.preference_order !== '') {
+                                const order = Number(pref.preference_order);
+                                if (!companyPreferenceOrder.has(pref.company_id)) {
+                                    companyPreferenceOrder.set(pref.company_id, []);
+                                }
+                                const arr = companyPreferenceOrder.get(pref.company_id);
+                                if (!arr.includes(order)) arr.push(order);
+                                arr.sort((a, b) => a - b);
                             }
                         }
                     });
@@ -823,10 +835,9 @@
                 }
             }));
 
-            // 分類公司
+            // 分類公司；志願序公司依志願順位排序（第一志願在前）
             selectedCompanies = [];
             unselectedCompanies = [];
-
             allCompanies.forEach(c => {
                 if (selectedCompanyIds.has(c.id)) {
                     selectedCompanies.push(c);
@@ -834,6 +845,12 @@
                     unselectedCompanies.push(c);
                 }
             });
+            const minOrder = (c) => {
+                const arr = companyPreferenceOrder.get(c.id);
+                if (!arr || arr.length === 0) return 999;
+                return arr[0];
+            };
+            selectedCompanies.sort((a, b) => minOrder(a) - minOrder(b));
 
             // 根據當前篩選條件顯示對應的公司
             filterCompanies(currentFilter);
@@ -880,12 +897,15 @@
         function renderCompanyTable(companies, emptyMessage = '<i class="bi bi-inbox"></i> 尚無公司資料') {
             currentCompaniesList = companies;
             currentPage = 1; // 重置到第一頁
-            
+            const thOrder = document.getElementById('thPreferenceOrder');
+            if (thOrder) thOrder.style.display = currentFilter === 'selected' ? '' : 'none';
+
             if (companies.length === 0) {
                 const tbody = document.getElementById('companyTable');
+                const colSpan = currentFilter === 'selected' ? 4 : 3;
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="3" class="text-center text-muted">
+                        <td colspan="${colSpan}" class="text-center text-muted">
                             ${emptyMessage}
                         </td>
                     </tr>
@@ -900,9 +920,25 @@
         /* ===============================
            更新公司表格分頁顯示
         ================================ */
+        function formatPreferenceOrder(orders) {
+            if (!orders || orders.length === 0) return '—';
+            const labels = orders.map(o => {
+                const n = Number(o);
+                if (n === 1) return '第一志願';
+                if (n === 2) return '第二志願';
+                if (n === 3) return '第三志願';
+                if (n === 4) return '第四志願';
+                if (n === 5) return '第五志願';
+                return `第${n}志願`;
+            });
+            return labels.join('、');
+        }
+
         function updateCompanyTablePage() {
             const tbody = document.getElementById('companyTable');
             tbody.innerHTML = '';
+            const thOrder = document.getElementById('thPreferenceOrder');
+            if (thOrder) thOrder.style.display = currentFilter === 'selected' ? '' : 'none';
 
             const totalPages = Math.ceil(currentCompaniesList.length / itemsPerPage);
             const startIndex = (currentPage - 1) * itemsPerPage;
@@ -912,10 +948,8 @@
             pageCompanies.forEach(c => {
                 const escapedName = (c.company_name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 
-                // 根據當前篩選條件決定顯示哪些職缺
                 let jobTitles = '尚無職缺';
                 if (currentFilter === 'selected' && companyPreferenceJobs.has(c.id)) {
-                    // 如果是志願序公司，只顯示用户在志願序中選擇的職缺
                     const preferenceJobs = companyPreferenceJobs.get(c.id);
                     if (preferenceJobs && preferenceJobs.length > 0) {
                         jobTitles = preferenceJobs.join('、');
@@ -923,9 +957,15 @@
                         jobTitles = '尚無職缺';
                     }
                 } else {
-                    // 其他情況顯示所有職缺
                     jobTitles = c.jobTitles || '尚無職缺';
                 }
+
+                const orderLabel = currentFilter === 'selected' && companyPreferenceOrder.has(c.id)
+                    ? formatPreferenceOrder(companyPreferenceOrder.get(c.id))
+                    : '';
+                const orderCell = currentFilter === 'selected'
+                    ? `<td class="text-nowrap">${escapeHtml(orderLabel)}</td>`
+                    : '';
 
                 const slotFull = applicationCount >= 5;
                 const applyBtn = slotFull
@@ -947,8 +987,9 @@
 
                 tbody.innerHTML += `
                     <tr id="company-row-${c.id}">
+                        ${orderCell}
                         <td>${escapeHtml(c.company_name || '')}</td>
-                        <td>${escapeHtml(jobTitles)}</td>
+                        <td class="td-job-titles">${escapeHtml(jobTitles)}</td>
                         <td class="text-center">
                             ${actionButtons}
                         </td>
