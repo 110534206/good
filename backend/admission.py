@@ -566,88 +566,55 @@ def get_my_admission():
             pass
         
         # 從 matching_results 表獲取錄取資料（統一媒合結果來源，取代 internship_offers）
-        # 若資料表無 job_id 欄位則改用不依賴 mr.job_id 的查詢
+        # 不依賴 mr.job_id（該欄位可能不存在），job_id 改由子查詢取得
         print(f"🔍 [DEBUG] 查詢 matching_results，student_id={student_id}")
         cursor.execute("""
             SELECT COLUMN_NAME FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'matching_results'
         """)
         mr_cols = {row['COLUMN_NAME'] for row in cursor.fetchall()}
-        mr_has_job_id = 'job_id' in mr_cols
         mr_has_matched_at = 'matched_at' in mr_cols
         mr_has_job_title = 'job_title' in mr_cols
         mr_has_mentor_id = 'mentor_id' in mr_cols
         mr_has_semester_id = 'semester_id' in mr_cols
         mr_has_internship_dates = 'internship_start_date' in mr_cols and 'internship_end_date' in mr_cols
 
-        if mr_has_job_id:
-            cursor.execute("""
-                SELECT 
-                    mr.id AS offer_id,
-                    mr.job_id,
-                    'accepted' AS offer_status,
-                    mr.matched_at AS offered_at,
-                    mr.matched_at AS responded_at,
-                    mr.company_id,
-                    mr.job_title,
-                    ij.description AS job_description,
-                    ij.period AS internship_period,
-                    ij.work_time AS internship_time,
-                    ij.salary AS job_salary,
-                    ic.company_name,
-                    ic.location AS company_address,
-                    ic.contact_person AS contact_name,
-                    ic.contact_email,
-                    ic.contact_phone,
-                    mr.mentor_id AS advisor_user_id,
-                    mr.semester_id,
-                    mr.internship_start_date,
-                    mr.internship_end_date
-                FROM matching_results mr
-                LEFT JOIN internship_jobs ij ON mr.job_id = ij.id
-                LEFT JOIN internship_companies ic ON mr.company_id = ic.id
-                WHERE mr.student_id = %s
-                ORDER BY mr.matched_at DESC
-                LIMIT 1
-            """, (student_id,))
+        sel = [
+            "mr.id AS offer_id",
+            "(SELECT sp.job_id FROM student_preferences sp WHERE sp.student_id = mr.student_id AND sp.company_id = mr.company_id AND sp.status = 'approved' ORDER BY sp.preference_order ASC LIMIT 1) AS job_id",
+            "'accepted' AS offer_status",
+        ]
+        if mr_has_matched_at:
+            sel.extend(["mr.matched_at AS offered_at", "mr.matched_at AS responded_at"])
         else:
-            # 無 job_id 時不 JOIN internship_jobs，job_id 由 student_preferences 子查詢取得
-            sel = [
-                "mr.id AS offer_id",
-                "(SELECT sp.job_id FROM student_preferences sp WHERE sp.student_id = mr.student_id AND sp.company_id = mr.company_id AND sp.status = 'approved' ORDER BY sp.preference_order ASC LIMIT 1) AS job_id",
-                "'accepted' AS offer_status",
-            ]
-            if mr_has_matched_at:
-                sel.extend(["mr.matched_at AS offered_at", "mr.matched_at AS responded_at"])
-            else:
-                sel.extend(["NULL AS offered_at", "NULL AS responded_at"])
-            sel.extend([
-                "mr.company_id",
-                "mr.job_title" if mr_has_job_title else "NULL AS job_title",
-                "NULL AS job_description",
-                "NULL AS internship_period",
-                "NULL AS internship_time",
-                "NULL AS job_salary",
-                "ic.company_name",
-                "ic.location AS company_address",
-                "ic.contact_person AS contact_name",
-                "ic.contact_email",
-                "ic.contact_phone",
-                "mr.mentor_id AS advisor_user_id" if mr_has_mentor_id else "NULL AS advisor_user_id",
-                "mr.semester_id" if mr_has_semester_id else "NULL AS semester_id",
-                "mr.internship_start_date" if mr_has_internship_dates else "NULL AS internship_start_date",
-                "mr.internship_end_date" if mr_has_internship_dates else "NULL AS internship_end_date",
-            ])
-            order = "ORDER BY mr.matched_at DESC" if mr_has_matched_at else "ORDER BY mr.id DESC"
-            cursor.execute("""
-                SELECT
-                    """ + ",\n                    ".join(sel) + """
-                FROM matching_results mr
-                LEFT JOIN internship_companies ic ON mr.company_id = ic.id
-                WHERE mr.student_id = %s
-                """ + order + """
-                LIMIT 1
-            """, (student_id,))
+            sel.extend(["NULL AS offered_at", "NULL AS responded_at"])
+        sel.extend([
+            "mr.company_id",
+            "mr.job_title" if mr_has_job_title else "NULL AS job_title",
+            "NULL AS job_description",
+            "NULL AS internship_period",
+            "NULL AS internship_time",
+            "NULL AS job_salary",
+            "ic.company_name",
+            "ic.location AS company_address",
+            "ic.contact_person AS contact_name",
+            "ic.contact_email",
+            "ic.contact_phone",
+            "mr.mentor_id AS advisor_user_id" if mr_has_mentor_id else "NULL AS advisor_user_id",
+            "mr.semester_id" if mr_has_semester_id else "NULL AS semester_id",
+            "mr.internship_start_date" if mr_has_internship_dates else "NULL AS internship_start_date",
+            "mr.internship_end_date" if mr_has_internship_dates else "NULL AS internship_end_date",
+        ])
+        order = "ORDER BY mr.matched_at DESC" if mr_has_matched_at else "ORDER BY mr.id DESC"
+        cursor.execute("""
+            SELECT
+            """ + ",\n            ".join(sel) + """
+            FROM matching_results mr
+            LEFT JOIN internship_companies ic ON mr.company_id = ic.id
+            WHERE mr.student_id = %s
+            """ + order + """
+            LIMIT 1
+        """, (student_id,))
         offer_info = cursor.fetchone()
         if offer_info and offer_info.get('semester_id'):
             offer_info['offer_semester_id'] = offer_info['semester_id']
@@ -1860,6 +1827,7 @@ def vendor_matching_results():
                     u.name AS student_name,
                     u.username AS student_number,
                     u.email AS student_email,
+                    COALESCE(u.admission_year, LEFT(u.username, 3)) AS admission_year,
                     c.name AS class_name,
                     c.department AS class_department,
                     ic.id AS company_id,
@@ -1929,6 +1897,7 @@ def vendor_matching_results():
                         u.name AS student_name,
                         u.username AS student_number,
                         u.email AS student_email,
+                        COALESCE(u.admission_year, LEFT(u.username, 3)) AS admission_year,
                         c.name AS class_name,
                         c.department AS class_department,
                         ic.id AS company_id,
@@ -2008,9 +1977,51 @@ def vendor_matching_results():
                             pass
         
         matches = unique_matches
+        active_semester_year = _get_active_semester_year(cursor)
         
-        # 格式化日期
+        # 格式化日期；班級格式與個人資料一致：資管科 四孝（年級國字 + 空格）
+        grade_chars = ('一', '二', '三', '四', '五', '六')
         for match in matches:
+            dept = (match.get('class_department') or '').strip()
+            cname = (match.get('class_name') or '').strip()
+            ay = match.get('admission_year')
+            ay_int = None
+            if ay is not None and str(ay).strip() != '':
+                try:
+                    ay_int = int(str(ay).strip())
+                except (TypeError, ValueError):
+                    pass
+            if not ay_int and match.get('student_number'):
+                sn = str(match.get('student_number')).strip()
+                if len(sn) >= 3:
+                    try:
+                        ay_int = int(sn[:3])
+                    except (TypeError, ValueError):
+                        pass
+            if dept or cname:
+                # 有班級：格式如圖二「資管科 四孝」（年級用國字，科系與班名間空格）
+                if active_semester_year is not None and ay_int is not None and cname:
+                    grade_num = active_semester_year - ay_int + 1
+                    if 1 <= grade_num <= 6:
+                        grade_char = grade_chars[grade_num - 1]
+                        match['class_name'] = ' ' + grade_char + cname
+                    elif grade_num > 0:
+                        match['class_name'] = ' ' + str(grade_num) + cname
+                    else:
+                        match['class_name'] = cname
+                else:
+                    match['class_name'] = (' ' + cname) if cname else ''
+                match['class_department'] = dept
+            else:
+                # 無班級：先填屆數，稍後若有同屆其他人有班級則改為與其他一致
+                if ay_int is not None:
+                    match['class_department'] = ''
+                    match['class_name'] = str(ay_int) + '屆'
+                elif match.get('student_number'):
+                    sn = str(match.get('student_number')).strip()
+                    if len(sn) >= 3:
+                        match['class_department'] = ''
+                        match['class_name'] = sn[:3] + '屆'
             if isinstance(match.get('preference_submitted_at'), datetime):
                 # 錄取志願的提交時間只顯示年月日
                 match['preference_submitted_at'] = match['preference_submitted_at'].strftime("%Y-%m-%d")
@@ -2034,6 +2045,19 @@ def vendor_matching_results():
             # 確保學期為 1132
             if not match.get('semester'):
                 match['semester'] = '1132'
+        
+        # 無班級者（顯示 110屆）：改為與同列表中第一個有班級的學生一致（通常同一屆同一班）
+        template_class = None
+        for m in matches:
+            if (m.get('class_department') or '').strip() and (m.get('class_name') or ''):
+                template_class = (m.get('class_department'), m.get('class_name'))
+                break
+        if template_class:
+            for match in matches:
+                cname = (match.get('class_name') or '')
+                dept = (match.get('class_department') or '').strip()
+                if not dept and cname and str(cname).endswith('屆'):
+                    match['class_department'], match['class_name'] = template_class
         
         # 統計信息：計算所有狀態為 approved 的學生履歷數量（去重，每個學生只計算一次）
         total_students = len(set(m['student_id'] for m in matches)) if matches else 0
