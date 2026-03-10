@@ -304,11 +304,18 @@ def register_company():
         if cursor.fetchone():
             return jsonify({"success": False, "message": "該 Email 已被使用，學生與廠商不可使用相同 Email"}), 400
         
-        # 4. 將廠商資料寫入 users 資料表，並將 status 設為 'active'
+        # 3.1 取得預設主任 ID（廠商註冊後指導老師預設為主任，科助可於「實習投遞流程管理」修改）
+        default_teacher_id = 0
+        cursor.execute("SELECT id FROM users WHERE role = 'director' AND status = 'approved' LIMIT 1")
+        director_row = cursor.fetchone()
+        if director_row:
+            default_teacher_id = director_row[0]
+        
+        # 4. 將廠商資料寫入 users 資料表，並將 status 設為 'active'，teacher_id 預設為主任
         cursor.execute("""
-            INSERT INTO users (username, password, email, role, status)
-            VALUES (%s, %s, %s, %s, 'active')
-        """, (username, hashed_pw, email, role))
+            INSERT INTO users (username, password, email, role, status, teacher_id)
+            VALUES (%s, %s, %s, %s, 'active', %s)
+        """, (username, hashed_pw, email, role, default_teacher_id))
         
         user_id = cursor.lastrowid
         name_for_email = data.get("name") or username  # 廠商註冊表若有姓名則用，否則用 username

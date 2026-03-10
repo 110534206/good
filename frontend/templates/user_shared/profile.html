@@ -640,10 +640,10 @@
 
         if (advisorField) advisorField.style.display = 'none';
 
-        // 學生、主任可設定班級；指導老師不需選擇班級
+        // 僅學生顯示班級欄位；主任、指導老師不顯示班級
         const classSelectContainer = document.getElementById('classSelectContainer');
         if (classSelectContainer) {
-          classSelectContainer.style.display = (role === 'student' || role === 'director') ? 'block' : 'none';
+          classSelectContainer.style.display = role === 'student' ? 'block' : 'none';
         }
         if (role === 'student') {
           if (studentFieldsEl) studentFieldsEl.style.display = 'block';
@@ -711,8 +711,8 @@
           // ⭐️ 修正點 B: 填入唯讀的實習學期資料 ⭐️
           currentSemesterInput.value = user.current_semester_display || '';
 
-          // 學生、主任：載入班級下拉選單並帶入班導（學生選班級時自動帶入班導）；指導老師不顯示班級選單
-          if (userRole === 'student' || userRole === 'director') {
+          // 學生：載入班級下拉選單並帶入班導（學生選班級時自動帶入班導）；主任、指導老師不顯示班級選單
+          if (userRole === 'student') {
             const classSelect = document.getElementById('classSelect');
             const homeroomInput = document.getElementById('homeroomTeacher');
             fetch('/api/profile/classes')
@@ -867,10 +867,10 @@
               document.getElementById('avatarPreview').src = avatarUrl + '?t=' + Date.now();
             }
 
-            // 更新個人資料（學生、主任可傳送班級；班導師可傳送帶班班級複選）
+            // 更新個人資料（僅學生傳送班級；班導師可傳送帶班班級複選）
             const roleDisplayValue = document.getElementById('identity').value;
             const classSelectForSave = document.getElementById('classSelect');
-            const classIdToSend = (userRole === 'student' || userRole === 'director') && classSelectForSave
+            const classIdToSend = userRole === 'student' && classSelectForSave
               ? (classSelectForSave.value || null)
               : null;
             const homeroomContainerForSave = document.getElementById('homeroomClassContainer');

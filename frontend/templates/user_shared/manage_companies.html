@@ -524,7 +524,26 @@
           </div>
           <div class="card-body">
             <div id="panel-companies" class="tab-panel active">
-            <h5 class="table-section-title">公司管理 <span id="currentSemesterDisplay">（載入中...）</span></h5>
+            <!-- 待審核公司（廠商/老師送出後會出現在此，科助審核通過後會移至下方已審核列表）-->
+            <h5 class="table-section-title mt-0"><i class="bi bi-hourglass-split text-warning"></i> 待審核公司 <span id="pendingCountDisplay" class="text-muted fw-normal"></span></h5>
+            <div class="table-responsive mb-4">
+              <table class="table table-bordered align-middle" style="margin-bottom: 0;">
+                <thead>
+                  <tr>
+                    <th style="text-align: center;">公司名稱</th>
+                    <th style="text-align: center;">上傳者</th>
+                    <th style="text-align: center;">送出時間</th>
+                    <th style="text-align: center;">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="pendingCompaniesTableBody">
+                  <tr>
+                    <td colspan="4" class="text-center text-muted">載入中...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <h5 class="table-section-title">已審核公司 <span id="currentSemesterDisplay">（載入中...）</span></h5>
             <div class="table-responsive">
               <table class="table table-bordered align-middle" style="margin-bottom: 0;">
                 <thead>
@@ -837,8 +856,78 @@
       }
     }
 
+    // 載入待審核公司列表（廠商/老師送出後會出現在此）
+    async function loadPendingCompanies() {
+      const tbody = document.getElementById('pendingCompaniesTableBody');
+      const countEl = document.getElementById('pendingCountDisplay');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">載入中...</td></tr>';
+      try {
+        const res = await fetch('/api/get_pending_companies');
+        const data = await res.json();
+        if (!data.success) {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">載入失敗</td></tr>';
+          if (countEl) countEl.textContent = '';
+          return;
+        }
+        const companies = data.companies || [];
+        if (countEl) countEl.textContent = companies.length ? `（${companies.length} 筆）` : '';
+        if (companies.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">目前沒有待審核的公司</td></tr>';
+          return;
+        }
+        tbody.innerHTML = companies.map(c => {
+          const name = escapeHtml(c.company_name || '-');
+          const uploader = escapeHtml(c.upload_teacher_name || '-');
+          const submitted = c.submitted_at || '-';
+          const id = c.id;
+          return `<tr>
+            <td>${name}</td>
+            <td>${uploader}</td>
+            <td>${submitted}</td>
+            <td>
+              <button type="button" class="btn btn-sm btn-success pending-approve-btn me-1" data-company-id="${id}">審核</button>
+              <a href="/api/download_company_file/${id}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener">下載檔案</a>
+            </td>
+          </tr>`;
+        }).join('');
+        // 綁定審核通過
+        tbody.querySelectorAll('.pending-approve-btn').forEach(btn => {
+          btn.addEventListener('click', () => submitCompanyReview(btn.dataset.companyId, 'approved'));
+        });
+      } catch (error) {
+        console.error('載入待審核公司錯誤:', error);
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">載入時發生錯誤</td></tr>';
+        if (countEl) countEl.textContent = '';
+      }
+    }
+
+    async function submitCompanyReview(companyId, status) {
+      const action = status === 'approved' ? '審核通過' : '退件';
+      if (!confirm(`確定要將此公司審核通過嗎？`)) return;
+      try {
+        const res = await fetch('/api/approve_company', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company_id: parseInt(companyId, 10), status })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(data.message || '已更新');
+          loadPendingCompanies();
+          loadReviewedCompanies();
+        } else {
+          alert(data.message || '操作失敗');
+        }
+      } catch (e) {
+        console.error('submitCompanyReview', e);
+        alert('操作時發生錯誤');
+      }
+    }
+
     // 初始載入
     loadAllTeachers().then(() => {
+      loadPendingCompanies();  // 先載入待審核公司（廠商送出後會出現在此）
       loadReviewedCompanies(); // 載入已審核公司列表
     });
 

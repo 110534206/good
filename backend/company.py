@@ -377,7 +377,7 @@ def upload_company():
             status = 'approved'
             reviewed_at = datetime.now()
         elif role == 'vendor':
-            # 廠商上傳：根據廠商的 teacher_id 找到對應的指導老師
+            # 廠商上傳：根據廠商的 teacher_id 找到對應的指導老師；若未設定則預設為主任（科助可於「實習投遞流程管理」修改）
             cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (user_id,))
             vendor_row = cursor.fetchone()
             advisor_user_id = None
@@ -389,6 +389,12 @@ def upload_company():
                     teacher_row = cursor.fetchone()
                     if teacher_row:
                         advisor_user_id = teacher_id
+            # 若廠商尚未指派指導老師，預設為主任（廠商新增公司時先由主任暫代，科助審核時可修改）
+            if advisor_user_id is None:
+                cursor.execute("SELECT id FROM users WHERE role = 'director' AND status = 'approved' LIMIT 1")
+                director_row = cursor.fetchone()
+                if director_row:
+                    advisor_user_id = director_row[0]
             reviewed_by_user_id = None
             status = 'pending'
             reviewed_at = None
@@ -457,8 +463,9 @@ def upload_company():
               company_description, company_location, contact_person, contact_title, contact_email, contact_phone))
         company_id = cursor.lastrowid
 
-        # 插入職缺
+        # 插入職缺（廠商上傳時標記 created_by_vendor_id，審核通過後「職位需求管理」才會列出該公司）
         job_records = []
+        created_by_vendor = user_id if role == 'vendor' else None
         for j in jobs_data:
             job_description = j.get("description", "（詳見附檔）")
             job_records.append((
@@ -469,12 +476,13 @@ def upload_company():
                 "",
                 "",
                 "",
-                True
+                True,
+                created_by_vendor
             ))
         cursor.executemany("""
             INSERT INTO internship_jobs 
-            (company_id, title, slots, description, period, work_time, remark, is_active)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            (company_id, title, slots, description, period, work_time, remark, is_active, created_by_vendor_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, job_records)
 
         conn.commit()
@@ -1704,12 +1712,15 @@ def get_student_companies():
         conn.close()
 
 # =========================================================
-# 🖥️ 審核公司頁面
+# 🖥️ 審核公司頁面（僅主任可使用；科助請使用「實習投遞流程管理」公司管理頁籤）
 # =========================================================
 @company_bp.route('/approve_company', methods=['GET'])
 def approve_company_form_page():
-    is_ta = session.get('role') == 'ta'
-    return render_template('company/approve_company.html', is_ta=is_ta)
+    if 'user_id' not in session or session.get('role') != 'director':
+        if 'user_id' in session:
+            return redirect(url_for('users_bp.director_home'))
+        return redirect(url_for('auth_bp.login_page'))
+    return render_template('company/approve_company.html')
 
 # =========================================================
 # 🖥️ 查看公司頁面

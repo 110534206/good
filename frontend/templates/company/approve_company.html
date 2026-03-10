@@ -215,7 +215,7 @@
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="reviewed-tab" data-bs-toggle="tab" data-bs-target="#reviewed" type="button"
-          role="tab" aria-controls="reviewed" aria-selected="false">審核完成的公司</button>
+          role="tab" aria-controls="reviewed" aria-selected="false">分發指導老師</button>
       </li>
     </ul>
 
@@ -239,20 +239,22 @@
         </table>
       </div>
       <div class="tab-pane fade" id="reviewed" role="tabpanel" aria-labelledby="reviewed-tab">
+        <p class="text-muted small mb-2">學期：<span id="reviewedSemesterDisplay">（載入中...）</span></p>
         <table class="table table-bordered table-striped table-hover align-middle">
           <thead class="custom-header-blue">
             <tr>
-              <th>ID</th>
               <th>公司名稱</th>
+              <th>職缺</th>
               <th>上傳教師</th>
-              <th>審核狀態</th>
               <th>審核時間</th>
-              <th>操作</th>
+              <th>本學期開放</th>
+              <th>狀態</th>
+              <th>指導老師</th>
             </tr>
           </thead>
           <tbody id="reviewedTableBody">
             <tr>
-              <td colspan="6" class="text-center text-muted">載入中...</td>
+              <td colspan="7" class="text-center text-muted">載入中...</td>
             </tr>
           </tbody>
         </table>
@@ -279,21 +281,10 @@
     </div>
   </div>
 
-  <!-- 側邊選單（主任／科助共用：依角色顯示對應選單） -->
+  <!-- 側邊選單（本頁僅主任可使用） -->
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
-    {% if is_ta %}
-    <a href="/ta_home">首頁</a>
-    <a href="/profile">個人資料</a>
-    <a href="/notifications">公告</a>
-    <a href="/ta/statistics/manage_companies">實習投遞流程管理</a>
-    <a href="/ta/interview_schedule">行事曆</a>
-    <a href="/final_results">媒合結果確認</a>
-    <a href="/admin/absence_default_range">缺勤預設學期範圍設定</a>
-    <a href="/ta/upload_standard_courses">專業核心科目管理</a>
-    <a href="/login">登出</a>
-    {% else %}
     <a href="/director_home">首頁</a>
     <a href="/profile">個人資料</a>
     <a href="/approve_company">審核實習單位</a>
@@ -303,7 +294,6 @@
     <a href="/admin_statistics">查詢統計資料</a>
     <a href="/admission/manage_director">媒合結果</a>
     <a href="/login">登出</a>
-    {% endif %}
   </nav>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -337,11 +327,36 @@
       }
     });
 
-    // 載入待審核清單
-    document.addEventListener('DOMContentLoaded', loadPending);
+    let allTeachers = [];
 
-    // 切換到「審核完成的公司」時載入
-    document.getElementById('reviewed-tab').addEventListener('shown.bs.tab', loadReviewed);
+    function escapeHtml(text) {
+      if (text == null || text === undefined) return '';
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    async function loadAllTeachers() {
+      try {
+        const res = await fetch('/api/get_all_teachers');
+        const data = await res.json();
+        if (data.success) allTeachers = data.teachers || [];
+      } catch (e) { console.error('載入指導老師列表錯誤:', e); }
+    }
+
+    // 載入待審核清單
+    document.addEventListener('DOMContentLoaded', function() {
+      loadPending();
+      loadAllTeachers();
+    });
+
+    // 切換到「審核完成的公司」時載入（與科助公司管理頁籤同步：可調整指導老師、本學期開放）
+    document.getElementById('reviewed-tab').addEventListener('shown.bs.tab', function() {
+      loadReviewed();
+    });
 
     async function loadPending() {
       const tbody = document.getElementById('pendingTableBody');
@@ -361,18 +376,48 @@
           return;
         }
 
-        tbody.innerHTML = data.companies.map(r => `
-          <tr>
+        tbody.innerHTML = data.companies.map(r => {
+          const name = (r.company_name || '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+          const uploader = (r.upload_teacher_name || '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+          return `<tr>
             <td>${r.id}</td>
-            <td>${r.company_name}</td>
-            <td>${r.upload_teacher_name || '-'}</td>
+            <td>${name}</td>
+            <td>${uploader}</td>
             <td>${r.submitted_at || ''}</td>
             <td>
-              <button class="btn btn-sm btn-primary me-2" onclick="openCompanyModal(${r.id}, true)">審核</button>
+              <button type="button" class="btn btn-sm btn-primary me-2 pending-approve-btn" data-company-id="${r.id}">審核</button>
               <a href="/api/download_company_file/${r.id}" class="btn btn-sm btn-outline-primary">下載附檔</a>
             </td>
-          </tr>
-        `).join("");
+          </tr>`;
+        }).join("");
+
+        tbody.querySelectorAll('.pending-approve-btn').forEach(btn => {
+          btn.addEventListener('click', function() {
+            const id = parseInt(this.dataset.companyId, 10);
+            if (!confirm('確定要將此公司審核通過嗎？')) return;
+            this.disabled = true;
+            const origText = this.textContent;
+            this.textContent = '處理中...';
+            fetch('/api/approve_company', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ company_id: id, status: 'approved' })
+            }).then(res => res.json()).then(data => {
+              if (data.success) {
+                alert(data.message || '已審核通過');
+                loadPending();
+              } else {
+                alert(data.message || '審核失敗');
+                this.disabled = false;
+                this.textContent = origText;
+              }
+            }).catch(() => {
+              alert('審核時發生錯誤，請稍後再試');
+              this.disabled = false;
+              this.textContent = origText;
+            });
+          });
+        });
 
       } catch (error) {
         console.error("載入待審核紀錄發生錯誤:", error);
@@ -382,42 +427,114 @@
 
     async function loadReviewed() {
       const tbody = document.getElementById('reviewedTableBody');
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">載入中...</td></tr>`;
+      const semesterDisplay = document.getElementById('reviewedSemesterDisplay');
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">載入中...</td></tr>';
 
       try {
         const res = await fetch("/api/get_reviewed_companies");
         const data = await res.json();
 
         if (!data.success) {
-          tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">載入失敗: ${data.message}</td></tr>`;
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">載入失敗</td></tr>';
+          if (semesterDisplay) semesterDisplay.textContent = '載入失敗';
           return;
         }
 
-        if (data.companies.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">尚無審核完成的公司</td></tr>`;
+        const companies = data.companies || [];
+        if (semesterDisplay) semesterDisplay.textContent = data.current_semester || '未設定';
+
+        if (companies.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">尚無審核完成的公司</td></tr>';
           return;
         }
 
-        tbody.innerHTML = data.companies.map(r => {
-          const statusClass = r.status === 'approved' ? 'bg-success' : 'bg-danger';
-          const statusText = r.status === 'approved' ? '核准' : '退回';
-          return `
-          <tr>
-            <td>${r.id}</td>
-            <td>${r.company_name}</td>
-            <td>${r.upload_teacher_name || '-'}</td>
-            <td><span class="badge ${statusClass} status-badge">${statusText}</span></td>
-            <td>${r.reviewed_at || ''}</td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary me-2" onclick="openCompanyModal(${r.id}, false)">查看</button>
-              <a href="/api/download_company_file/${r.id}" class="btn btn-sm btn-outline-primary">下載附檔</a>
-            </td>
-          </tr>
-        `;
-        }).join("");
+        tbody.innerHTML = companies.map(company => {
+          const openStatusBadge = company.is_open_current_semester
+            ? '<span class="badge bg-success">開放中</span>'
+            : '<span class="badge bg-secondary">未開放</span>';
+          const checkboxDisabled = company.status !== 'approved' ? 'disabled' : '';
+          const checkboxChecked = company.is_open_current_semester ? 'checked' : '';
+          const jobTitles = Array.isArray(company.jobs) ? company.jobs.filter(t => t && String(t).trim()) : [];
+          const jobDisplay = jobTitles.length
+            ? jobTitles.map(t => escapeHtml(t)).join('<br>')
+            : '<span class="text-muted">-</span>';
+          let selectedTeacherId = '';
+          if (company.advisor_teacher_name) {
+            const mt = allTeachers.find(t => t.name === company.advisor_teacher_name);
+            if (mt) selectedTeacherId = mt.id;
+          }
+          if (!selectedTeacherId && company.advisor_user_id) selectedTeacherId = company.advisor_user_id;
+          let advisorSelect = '<select class="form-select form-select-sm advisor-select" data-company-id="' + company.id + '" data-original-value="' + (selectedTeacherId || '') + '" style="width:120px;font-size:0.875rem;">';
+          advisorSelect += '<option value="">-- 請選擇 --</option>';
+          allTeachers.forEach(teacher => {
+            const sel = selectedTeacherId == teacher.id ? 'selected' : '';
+            advisorSelect += '<option value="' + teacher.id + '" ' + sel + '>' + escapeHtml(teacher.name) + '</option>';
+          });
+          advisorSelect += '</select>';
+          const updateBtn = '<button type="button" class="btn btn-sm btn-primary advisor-update-btn ms-1" data-company-id="' + company.id + '">修改</button>';
+          const statusBadge = company.status === 'approved' ? '<span class="badge bg-success">核准</span>' : '<span class="badge bg-danger">退回</span>';
+          return '<tr>' +
+            '<td>' + escapeHtml(company.company_name || '-') + '</td>' +
+            '<td>' + jobDisplay + '</td>' +
+            '<td>' + escapeHtml(company.upload_teacher_name || '-') + '</td>' +
+            '<td>' + (company.reviewed_at || '-') + '</td>' +
+            '<td><div class="form-check form-switch d-inline-block"><input class="form-check-input company-open-checkbox" type="checkbox" data-company-id="' + company.id + '" ' + checkboxChecked + ' ' + checkboxDisabled + '></div></td>' +
+            '<td>' + openStatusBadge + '</td>' +
+            '<td><div class="d-flex align-items-center justify-content-center">' + advisorSelect + updateBtn + '</div></td>' +
+            '</tr>';
+        }).join('');
+
+        tbody.querySelectorAll('.advisor-update-btn').forEach(btn => {
+          btn.addEventListener('click', function() {
+            const companyId = parseInt(this.dataset.companyId, 10);
+            const select = document.querySelector('.advisor-select[data-company-id="' + companyId + '"]');
+            if (!select) { alert('找不到對應的下拉選單'); return; }
+            const advisorUserId = select.value ? parseInt(select.value, 10) : null;
+            const originalValue = select.dataset.originalValue;
+            if (select.value === originalValue) { alert('沒有變更，無需更新'); return; }
+            this.disabled = true;
+            select.disabled = true;
+            const origText = this.textContent;
+            this.textContent = '更新中...';
+            fetch('/api/update_company_advisor', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ company_id: companyId, advisor_user_id: advisorUserId })
+            }).then(r => r.json()).then(data => {
+              if (data.success) { select.dataset.originalValue = select.value; alert('指導老師已更新'); }
+              else { alert(data.message || '更新失敗'); select.value = originalValue; }
+            }).catch(() => { select.value = originalValue; alert('更新時發生錯誤'); }).finally(() => {
+              this.disabled = false;
+              select.disabled = false;
+              this.textContent = origText;
+            });
+          });
+        });
+
+        tbody.querySelectorAll('.company-open-checkbox').forEach(checkbox => {
+          checkbox.addEventListener('change', function() {
+            const companyId = parseInt(this.dataset.companyId, 10);
+            const isOpen = this.checked;
+            this.disabled = true;
+            const origChecked = this.checked;
+            fetch('/api/set_company_open_status', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ company_id: companyId, is_open: isOpen })
+            }).then(r => r.json()).then(data => {
+              if (!data.success) { alert(data.message || '設定失敗'); this.checked = !origChecked; }
+              else {
+                const row = this.closest('tr');
+                const statusCell = row.querySelector('td:nth-last-child(2)');
+                if (statusCell) statusCell.innerHTML = isOpen ? '<span class="badge bg-success">開放中</span>' : '<span class="badge bg-secondary">未開放</span>';
+              }
+            }).catch(() => { this.checked = !origChecked; alert('設定時發生錯誤'); }).finally(() => { this.disabled = false; });
+          });
+        });
       } catch (error) {
         console.error("載入審核完成紀錄發生錯誤:", error);
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">伺服器錯誤，載入失敗。</td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">伺服器錯誤，載入失敗。</td></tr>';
+        if (document.getElementById('reviewedSemesterDisplay')) document.getElementById('reviewedSemesterDisplay').textContent = '載入失敗';
       }
     }
 
