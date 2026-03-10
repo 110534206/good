@@ -720,8 +720,13 @@
               .then(api => {
                 if (!api.success || !api.classes) return;
                 function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+                // 若有入學屆數，學生只顯示同屆班級；主任仍顯示全部
+                const ay = (user.admission_year != null && String(user.admission_year).trim() !== '') ? String(user.admission_year).trim() : '';
+                const filtered = (userRole === 'student' && ay)
+                  ? api.classes.filter(c => String(c.admission_year || '').trim() === ay)
+                  : api.classes;
                 classSelect.innerHTML = '<option value="">請選擇班級</option>' +
-                  api.classes.map(c => {
+                  filtered.map(c => {
                     const homeroom = (c.homeroom_teacher_name || '').trim();
                     return '<option value="' + c.id + '" data-homeroom="' + esc(homeroom) + '">' + esc(c.display_name || '') + '</option>';
                   }).join('');

@@ -4786,7 +4786,12 @@ def get_withdraw_intern_list():
                              JOIN internship_jobs ij ON ij.id = sja.job_id
                              WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id
                              LIMIT 1), '未指定職缺') AS job_title,
-                   CASE WHEN ir.student_id IS NOT NULL THEN 'withdrawing' ELSE 'accepted' END AS status,
+                   CASE
+                       WHEN ir.student_id IS NULL THEN 'accepted'
+                       WHEN ir.status = 'withdrawing' THEN 'withdrawing'
+                       WHEN ir.status = 'confirmed' THEN 'confirmed'
+                       ELSE ir.status
+                   END AS status,
                    ir.id AS record_id
             FROM matching_results mr
             JOIN users u ON u.id = mr.student_id
