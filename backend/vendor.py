@@ -5138,7 +5138,7 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
                 SELECT CONCAT(ir.semester_id, '_', ir.vendor_id, '_', ir.company_id, '_', ir.student_id) AS id,
                        ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                        ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
-                       ir.teacher_reason, ir.teacher_meeting_notes,
+                       ir.teacher_reason,
                        ic.company_name, ic.advisor_user_id
                 FROM internship_records ir
                 JOIN internship_companies ic ON ic.id = ir.company_id
@@ -5174,7 +5174,7 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
                     SELECT CONCAT(ir.semester_id, '_', ir.vendor_id, '_', ir.company_id, '_', ir.student_id) AS id,
                            ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                            ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
-                           ir.teacher_meeting_notes,
+                           ir.teacher_reason,
                            ic.company_name, ic.advisor_user_id
                     FROM internship_records ir
                     JOIN internship_companies ic ON ic.id = ir.company_id
@@ -5183,7 +5183,7 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
                 """, (semester_id, vendor_id, company_id, student_id, teacher_id))
                 row = cursor.fetchone()
                 if row:
-                    row["teacher_meeting_notes"] = (row.get("teacher_meeting_notes") or "").strip()
+                    row["teacher_meeting_notes"] = (row.get("teacher_reason") or "").strip()
                 return row
             except Exception:
                 pass
@@ -5205,7 +5205,7 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
         cursor.execute("""
             SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                    ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
-                   ir.teacher_reason, ir.teacher_meeting_notes,
+                   ir.teacher_reason,
                    ic.company_name, ic.advisor_user_id
             FROM internship_records ir
             JOIN internship_companies ic ON ic.id = ir.company_id
@@ -5237,7 +5237,7 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
                 cursor.execute("""
                     SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                            ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
-                           ir.teacher_meeting_notes,
+                           ir.teacher_reason,
                            ic.company_name, ic.advisor_user_id
                     FROM internship_records ir
                     JOIN internship_companies ic ON ic.id = ir.company_id
@@ -5245,7 +5245,7 @@ def _teacher_can_access_withdraw_case(cursor, case_id, teacher_id):
                 """, (int(case_id), teacher_id))
                 row = cursor.fetchone()
                 if row:
-                    row["teacher_meeting_notes"] = (row.get("teacher_meeting_notes") or "").strip()
+                    row["teacher_meeting_notes"] = (row.get("teacher_reason") or "").strip()
                 return row
             except Exception:
                 pass
@@ -5320,12 +5320,15 @@ def _vendor_can_access_withdraw_case(cursor, case_id, vendor_id):
         cursor.execute("""
             SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                    ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
-                   ir.teacher_meeting_notes, ic.company_name
+                   ir.teacher_reason, ic.company_name
             FROM internship_records ir
             JOIN internship_companies ic ON ic.id = ir.company_id
             WHERE ir.id = %s AND ir.vendor_id = %s
         """, (int(case_id), vendor_id))
-        return cursor.fetchone()
+        row = cursor.fetchone()
+        if row:
+            row["teacher_meeting_notes"] = (row.get("teacher_reason") or "").strip()
+        return row
     except Exception:
         try:
             cursor.execute("""
@@ -5982,7 +5985,7 @@ def director_get_withdraw_case_detail():
         cursor.execute("""
             SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                    ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
-                   ir.teacher_reason, ir.teacher_meeting_notes,
+                   ir.teacher_reason,
                    ic.company_name
             FROM internship_records ir
             JOIN internship_companies ic ON ic.id = ir.company_id
@@ -5993,7 +5996,7 @@ def director_get_withdraw_case_detail():
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "案件不存在或尚未經指導老師確認"}), 404
-        row["teacher_meeting_notes"] = (row.get("teacher_reason") or row.get("teacher_meeting_notes") or "").strip()
+        row["teacher_meeting_notes"] = (row.get("teacher_reason") or "").strip()
         cursor.execute("SELECT u.id, u.name AS student_name, u.username AS student_number FROM users u WHERE u.id = %s", (row["student_id"],))
         student = cursor.fetchone()
         cursor.execute("""
