@@ -152,37 +152,12 @@ def _serialize_job(row):
 def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False):
     """
     獲取廠商有權限訪問的職缺。
-    權限邏輯：通過指導老師（teacher_id）關聯到公司。
+    權限邏輯：
+    1) 廠商透過「建立實習機會」上傳的職缺（created_by_vendor_id = vendor_id）且公司已審核通過 → 一律可查看/編輯。
+    2) 否則透過指導老師（teacher_id）關聯：公司 advisor_user_id = 廠商 teacher_id，且職缺為廠商建立或老師建立。
     """
-    # 1. 獲取廠商的 teacher_id
-    cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (vendor_id,))
-    vendor_row = cursor.fetchone()
-    if not vendor_row or not vendor_row.get("teacher_id"):
-        return None
-    
-    teacher_id = vendor_row.get("teacher_id")
-    if not teacher_id:
-        return None
-    
-    # 2. 驗證該 ID 是否為有效的指導老師
-    cursor.execute("SELECT id FROM users WHERE id = %s AND role IN ('teacher', 'director')", (teacher_id,))
-    teacher_row = cursor.fetchone()
-    if not teacher_row:
-        return None
-    
-    # 3. 構建查詢條件
-    if allow_teacher_created:
-        # 允許查看廠商自己建立的或指導老師建立的職缺 (created_by_vendor_id IS NULL)
-        created_condition = "(ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)"
-        params = (job_id, teacher_id, vendor_id)
-    else:
-        # 只允許查看/操作廠商自己建立的職缺
-        created_condition = "ij.created_by_vendor_id = %s"
-        params = (job_id, teacher_id, vendor_id)
-    
-    # 使用參數化查詢，防止 SQL 注入
-    # 同時獲取職缺和公司相關的欄位，以便編輯時填充表單
-    query = f"""
+    # 共通欄位選取
+    base_select = """
         SELECT
             ij.id, ij.company_id, ic.company_name, ij.title, ij.slots, ij.description,
             ij.period, ij.work_time, ij.salary, ij.remark, ij.is_active,
@@ -193,14 +168,46 @@ def _fetch_job_for_vendor(cursor, job_id, vendor_id, allow_teacher_created=False
             ic.contact_title,
             ic.contact_email AS email,
             ic.contact_phone AS phone,
-            COALESCE(ic.transport, '') AS transport
+            '' AS transport
         FROM internship_jobs ij
         JOIN internship_companies ic ON ij.company_id = ic.id
-        WHERE ij.id = %s AND ic.advisor_user_id = %s AND {created_condition}
     """
-    cursor.execute(query, params)
+    # 1) 廠商自己建立的職缺且公司已審核通過（來自 upload_company 表單）→ 可直接查看/編輯
+    cursor.execute(
+        base_select + """
+        WHERE ij.id = %s AND ij.created_by_vendor_id = %s AND ic.status = 'approved'
+        """,
+        (job_id, vendor_id),
+    )
     row = cursor.fetchone()
-    return row
+    if row:
+        return row
+
+    # 2) 透過指導老師關聯
+    cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (vendor_id,))
+    vendor_row = cursor.fetchone()
+    if not vendor_row or not vendor_row.get("teacher_id"):
+        return None
+
+    teacher_id = vendor_row.get("teacher_id")
+    cursor.execute("SELECT id FROM users WHERE id = %s AND role IN ('teacher', 'director')", (teacher_id,))
+    if not cursor.fetchone():
+        return None
+
+    if allow_teacher_created:
+        created_condition = "(ij.created_by_vendor_id = %s OR ij.created_by_vendor_id IS NULL)"
+        params = (job_id, teacher_id, vendor_id)
+    else:
+        created_condition = "ij.created_by_vendor_id = %s"
+        params = (job_id, teacher_id, vendor_id)
+
+    cursor.execute(
+        base_select + f"""
+        WHERE ij.id = %s AND ic.advisor_user_id = %s AND {created_condition}
+        """,
+        params,
+    )
+    return cursor.fetchone()
 
 
 def _record_history(cursor, preference_id, reviewer_id, action, comment, student_id=None):
@@ -1812,12 +1819,109 @@ def retrieve_application(application_id):
         conn.close()
 
 
+def _get_internship_semester_id(cursor):
+    """
+    取得「實習學期」ID。實習在下學期(1132)進行，故：
+    - 當前學期 1131 時 → 用 1132 的 config（實習期間為 2025）
+    - 當前學期 1132 時 → 用 1132 的 config
+    """
+    from semester import get_current_semester
+    current = get_current_semester(cursor)
+    if not current:
+        return None
+    code = (current.get("code") or "").strip()
+    if not code or len(code) < 4:
+        return current.get("id")
+    # 末位 1 = 上學期 → 實習學期為同學年下學期 XXX2；末位 2 = 下學期 → 即實習學期
+    if code[-1] == "1":
+        intern_code = code[:-1] + "2"  # 1131 → 1132
+    else:
+        intern_code = code  # 1132 → 1132
+    cursor.execute("SELECT id FROM semesters WHERE code = %s LIMIT 1", (intern_code,))
+    row = cursor.fetchone()
+    return row["id"] if row else current.get("id")
+
+
+@vendor_bp.route("/vendor/api/positions/default_period", methods=["GET"])
+def get_default_intern_period():
+    """依系統學年與「實習學期」之 internship_configs 回傳預設實習期間，供廠商新增/編輯職缺時帶入。"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 依實習學期（1131 時用 1132）查 config，日期才會是該學年實習年（如 2025）
+        internship_semester_id = _get_internship_semester_id(cursor)
+        if internship_semester_id:
+            cursor.execute(
+                """
+                SELECT ic.intern_start_date, ic.intern_end_date
+                FROM internship_configs ic
+                WHERE ic.semester_id = %s AND ic.user_id IS NULL
+                LIMIT 1
+                """,
+                (internship_semester_id,),
+            )
+            row = cursor.fetchone()
+            if row and row.get("intern_start_date") and row.get("intern_end_date"):
+                return jsonify({
+                    "success": True,
+                    "intern_start_date": row["intern_start_date"].isoformat() if hasattr(row["intern_start_date"], "isoformat") else str(row["intern_start_date"]),
+                    "intern_end_date": row["intern_end_date"].isoformat() if hasattr(row["intern_end_date"], "isoformat") else str(row["intern_end_date"]),
+                })
+        # 若實習學期無 config，改依當前學期
+        current_semester_id = get_current_semester_id(cursor)
+        if current_semester_id:
+            cursor.execute(
+                """
+                SELECT ic.intern_start_date, ic.intern_end_date
+                FROM internship_configs ic
+                WHERE ic.semester_id = %s AND ic.user_id IS NULL
+                LIMIT 1
+                """,
+                (current_semester_id,),
+            )
+            row = cursor.fetchone()
+            if row and row.get("intern_start_date") and row.get("intern_end_date"):
+                return jsonify({
+                    "success": True,
+                    "intern_start_date": row["intern_start_date"].isoformat() if hasattr(row["intern_start_date"], "isoformat") else str(row["intern_start_date"]),
+                    "intern_end_date": row["intern_end_date"].isoformat() if hasattr(row["intern_end_date"], "isoformat") else str(row["intern_end_date"]),
+                })
+        # 最後備援：任一年度預設 config，依學期代碼由小到大（優先較早年度，如 1132 的 2025）
+        cursor.execute(
+            """
+            SELECT ic.intern_start_date, ic.intern_end_date
+            FROM internship_configs ic
+            JOIN semesters s ON s.id = ic.semester_id
+            WHERE ic.user_id IS NULL
+            ORDER BY s.code ASC
+            LIMIT 1
+            """
+        )
+        row = cursor.fetchone()
+        if row and row.get("intern_start_date") and row.get("intern_end_date"):
+            return jsonify({
+                "success": True,
+                "intern_start_date": row["intern_start_date"].isoformat() if hasattr(row["intern_start_date"], "isoformat") else str(row["intern_start_date"]),
+                "intern_end_date": row["intern_end_date"].isoformat() if hasattr(row["intern_end_date"], "isoformat") else str(row["intern_end_date"]),
+            })
+        return jsonify({"success": True, "intern_start_date": None, "intern_end_date": None})
+    except Exception as exc:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(exc)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
 @vendor_bp.route("/vendor/api/positions/next_code", methods=["GET"])
 def get_next_position_code():
     """獲取下一個職缺編號（前3碼：民國年度，後3碼：順序號碼）"""
     if "user_id" not in session or session.get("role") != "vendor":
         return jsonify({"success": False, "message": "未授權"}), 403
-    
+
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -1994,6 +2098,18 @@ def list_positions_for_vendor():
                 job["is_created_by_vendor"] = row.get("created_by_vendor_id") == vendor_id
             items.append(job)
 
+        # 依公司內職缺順序計算工作編號（1, 2, 3…）與 upload_company / 生成 Word 一致
+        company_order = {}
+        for j in items:
+            cid = j.get("company_id")
+            if cid not in company_order:
+                company_order[cid] = []
+            company_order[cid].append(j)
+        for cid, job_list in company_order.items():
+            job_list.sort(key=lambda x: x.get("id") or 0)
+            for idx, j in enumerate(job_list, 1):
+                j["job_index"] = idx
+
         stats = {
             "total": len(items),
             "active": sum(1 for item in items if item["is_active"]),
@@ -2091,14 +2207,7 @@ def create_position_for_vendor():
                 vendor_id,
             ),
         )
-        
-        # 更新公司的交通說明（transport 欄位在 internship_companies 表中）
-        if transport:
-            cursor.execute(
-                "UPDATE internship_companies SET transport = %s WHERE id = %s",
-                (transport, company_id)
-            )
-        
+        # 註：internship_companies 若無 transport 欄位則不更新
         conn.commit()
         job_row = _fetch_job_for_vendor(cursor, cursor.lastrowid, session["user_id"])
         return jsonify({"success": True, "item": _serialize_job(job_row)})
@@ -2132,6 +2241,13 @@ def get_position_for_vendor(job_id):
         job = _serialize_job(job_row)
         if job:
             job["is_created_by_vendor"] = job_row.get("created_by_vendor_id") == vendor_id
+            # 該公司內的工作編號（1, 2, 3…）與 upload_company / Word 一致
+            cursor.execute(
+                "SELECT COUNT(*) AS cnt FROM internship_jobs WHERE company_id = %s AND id <= %s",
+                (job.get("company_id"), job_id),
+            )
+            row = cursor.fetchone()
+            job["job_index"] = (row.get("cnt") or 0) if row else 1
         return jsonify({"success": True, "item": job})
     except Exception as exc:
         traceback.print_exc()
@@ -2218,14 +2334,7 @@ def update_position_for_vendor(job_id):
                 job_id,
             ),
         )
-        
-        # 更新公司的交通說明（transport 欄位在 internship_companies 表中）
-        if transport and company_id:
-            cursor.execute(
-                "UPDATE internship_companies SET transport = %s WHERE id = %s",
-                (transport, company_id)
-            )
-        
+        # 註：internship_companies 若無 transport 欄位則不更新
         conn.commit()
         updated = _fetch_job_for_vendor(cursor, job_id, session["user_id"])
         return jsonify({"success": True, "item": _serialize_job(updated)})

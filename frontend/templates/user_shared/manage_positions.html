@@ -656,18 +656,19 @@
         <table class="positions-table">
           <thead>
             <tr>
-              <th style="width: 18%;">職缺名稱 / 公司</th>
-              <th style="width: 8%;">名額</th>
-              <th style="width: 13%;">期間 / 時間</th>
-              <th style="width: 10%;">薪資</th>
-              <th style="width: 25%;">職務說明</th>
-              <th style="width: 18%;">備註</th>
-              <th style="width: 10%;">操作</th>
+              <th style="width: 6%;">工作編號</th>
+              <th style="width: 17%;">職缺名稱 / 公司</th>
+              <th style="width: 7%;">名額</th>
+              <th style="width: 12%;">期間 / 時間</th>
+              <th style="width: 9%;">薪資</th>
+              <th style="width: 24%;">職務說明</th>
+              <th style="width: 17%;">備註</th>
+              <th style="width: 8%;">操作</th>
             </tr>
           </thead>
           <tbody id="positionsTableBody">
             <tr>
-              <td colspan="7">資料載入中...</td>
+              <td colspan="8">資料載入中...</td>
             </tr>
           </tbody>
         </table>
@@ -736,7 +737,7 @@
         if (!els.positionsTableBody) return;
         els.positionsTableBody.innerHTML = `
           <tr>
-            <td colspan="6">資料載入中...</td>
+            <td colspan="8">資料載入中...</td>
           </tr>
         `;
       }
@@ -770,7 +771,7 @@
         if (!jobs.length) {
           els.positionsTableBody.innerHTML = `
             <tr>
-                <td colspan="7">尚無職缺資料。</td>
+                <td colspan="8">尚無職缺資料。</td>
             </tr>
           `;
           return;
@@ -804,8 +805,10 @@
           // 根據索引決定背景色類別（奇數行用白色，偶數行用淺灰色）
           const rowClass = index % 2 === 0 ? 'even-row' : 'odd-row';
 
+          const jobIndex = job.job_index != null ? job.job_index : (index + 1);
           rows.push(`
             <tr data-id="${job.id}" class="data-row ${rowClass}">
+              <td>${jobIndex}</td>
               <td>
                 <div class="title-cell">
                   <span style="font-weight:700;font-size:1.05rem;">${escapeHtml(job.title)}</span>
@@ -883,7 +886,7 @@
           showToast(error.message || '資料載入失敗，請稍後再試', 'error');
           els.positionsTableBody.innerHTML = `
             <tr>
-                <td colspan="7">載入資料時發生錯誤，請稍後再試。</td>
+                <td colspan="8">載入資料時發生錯誤，請稍後再試。</td>
             </tr>
           `;
         }

@@ -488,10 +488,12 @@
           <div class="form-group">
             <label for="formPeriodStart">實習期間 - 開始日期</label>
             <input id="formPeriodStart" type="date" placeholder="點選或輸入日期" />
+            <small class="text-muted">預設依系統學年與實習設定帶入，可自行修改</small>
           </div>
           <div class="form-group">
             <label for="formPeriodEnd">實習期間 - 結束日期</label>
             <input id="formPeriodEnd" type="date" placeholder="點選或輸入日期" />
+            <small class="text-muted">預設依系統學年與實習設定帶入，可自行修改</small>
           </div>
           <div class="form-group">
             <label for="formPeriodNote">期間備註 (可留空)</label>
@@ -815,7 +817,10 @@
           }
           state.companies = result.companies || [];
           populateCompanies();
-          
+
+          // 新增與編輯皆由系統依學年與 internship_configs 帶入實習期間（開始／結束日期）
+          await loadDefaultPeriod();
+
           // 如果是編輯模式，載入職缺資料
           if (state.isEditMode && state.jobId) {
             await loadJobData();
@@ -824,6 +829,23 @@
           showToast(error.message || '資料載入失敗，請稍後再試', 'error');
           state.companies = [];
           populateCompanies();
+        }
+      }
+
+      /** 新增職缺時從系統設定（internship_configs）帶入預設實習期間 - 開始／結束日期 */
+      async function loadDefaultPeriod() {
+        try {
+          const response = await fetch('/vendor/api/positions/default_period', {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
+          const result = await response.json();
+          if (result.success && result.intern_start_date && result.intern_end_date && els.formPeriodStart && els.formPeriodEnd) {
+            els.formPeriodStart.value = formatDateForDisplay(result.intern_start_date);
+            els.formPeriodEnd.value = formatDateForDisplay(result.intern_end_date);
+          }
+        } catch (e) {
+          console.warn('載入預設實習期間失敗', e);
         }
       }
 
@@ -840,27 +862,13 @@
           
           const job = result.item;
           if (job) {
-            // 編輯模式下，根據職缺的創建順序（比數）獲取編號
-            if (els.formCode && job.id) {
-              try {
-                const codeResponse = await fetch(`/vendor/api/positions/${job.id}/code`, {
-                  headers: { 'Accept': 'application/json' },
-                  credentials: 'include'
-                });
-                const codeResult = await codeResponse.json();
-                if (codeResult.success && codeResult.code) {
-                  els.formCode.value = codeResult.code;
-                } else {
-                  // 如果獲取失敗，使用預設格式
-                  els.formCode.value = await generatePositionCode();
-                }
-              } catch (error) {
-                console.error('獲取職缺編號失敗:', error);
-                // 如果請求失敗，使用預設格式
+            // 編輯模式：顯示與「建立實習機會」/ Word 一致的工作編號（該公司內第 1、2、3… 筆）
+            if (els.formCode) {
+              if (job.job_index != null && job.job_index !== undefined) {
+                els.formCode.value = String(job.job_index);
+              } else {
                 els.formCode.value = await generatePositionCode();
               }
-            } else if (els.formCode) {
-              els.formCode.value = await generatePositionCode();
             }
             els.formCompany.value = job.company_id || '';
             if (els.formResponsible) els.formResponsible.value = job.responsible || '';
@@ -882,13 +890,11 @@
             if (els.formBusinessScope) els.formBusinessScope.value = job.business_scope || '';
             els.formTitle.value = job.title || '';
             els.formSlots.value = job.slots || '';
-            
-            // 解析日期字串
+
+            // 實習開始／結束日期由系統帶入（loadDefaultPeriod 已設定），僅保留期間備註可編輯
             const periodData = parsePeriodString(job.period || '');
-            els.formPeriodStart.value = formatDateForDisplay(periodData.start || '');
-            els.formPeriodEnd.value = formatDateForDisplay(periodData.end || '');
             els.formPeriodNote.value = periodData.note || '';
-            
+
             els.formWorkTime.value = job.work_time || '';
             els.formSalary.value = job.salary || '';
             els.formDescription.value = job.description || '';
