@@ -344,10 +344,13 @@ def get_profile():
 
         if active_role in ("teacher", "director", "class_teacher") and original_role_from_db in ("teacher", "director"):
             homeroom_class_names = []
+            homeroom_class_ids = []
             if is_homeroom and classes:
                 homeroom_classes = [c for c in classes if c.get("role") == "classteacher"]
                 homeroom_class_names = [_class_display_row(c.get('department'), c.get('name'), c.get('admission_year')) for c in homeroom_classes]
+                homeroom_class_ids = [c["id"] for c in homeroom_classes]
             user["homeroom_class_display"] = "、".join(homeroom_class_names) if homeroom_class_names else ""
+            user["homeroom_class_ids"] = homeroom_class_ids
 
             guided_class_names = []
             cursor.execute("""
@@ -493,6 +496,88 @@ def get_profile():
         cursor.close()
         conn.close()
 
+
+# -------------------------
+# API - 取得班級列表（供個人資料頁學生/老師設定班級用，含班導姓名）
+# -------------------------
+@users_bp.route("/api/profile/classes", methods=["GET"])
+def get_profile_classes():
+    """取得所有班級列表，含顯示名稱與班導姓名。學生、老師、主任可於個人資料設定班級。"""
+    if not session.get("user_id"):
+        return jsonify({"success": False, "message": "尚未登入"}), 401
+    if session.get("role") == "guest":
+        return jsonify({"success": False, "message": "訪客無權限"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT c.id, c.name, c.department, c.admission_year
+            FROM classes c
+            ORDER BY c.department ASC, c.admission_year DESC, c.name ASC
+        """, ())
+        rows = cursor.fetchall()
+
+        active_year = _get_active_semester_year(cursor)
+        grade_labels = ("一", "二", "三", "四", "五", "六")
+
+        def _class_display_row(dept, cname, admission_yr):
+            dept_str = (dept or "").strip()
+            name_str = (cname or "").strip()
+            if not name_str:
+                return dept_str or "-"
+            if admission_yr is None or active_year is None:
+                return f"{dept_str} {name_str}".strip() if dept_str else name_str
+            try:
+                ay_int = int(admission_yr)
+            except (TypeError, ValueError):
+                return f"{dept_str} {name_str}".strip() if dept_str else name_str
+            grade_num = active_year - ay_int + 1
+            if 1 <= grade_num <= 6:
+                grade_char = grade_labels[grade_num - 1]
+            elif grade_num > 0:
+                grade_char = str(grade_num)
+            else:
+                grade_char = ""
+            return f"{dept_str} {grade_char}{name_str}".strip() if grade_char else (f"{dept_str} {name_str}".strip() if dept_str else name_str)
+
+        classes_out = []
+        for r in rows:
+            display_name = _class_display_row(
+                r.get("department"), r.get("name"), r.get("admission_year")
+            )
+            homeroom_teacher_name = ""
+            cursor.execute("""
+                SELECT u.name AS teacher_name
+                FROM classes_teacher ct
+                JOIN users u ON u.id = ct.teacher_id
+                WHERE ct.class_id = %s AND ct.role = 'classteacher'
+                ORDER BY ct.id ASC
+                LIMIT 1
+            """, (r["id"],))
+            trow = cursor.fetchone()
+            if trow and trow.get("teacher_name"):
+                homeroom_teacher_name = trow["teacher_name"]
+            # 個人資料班級選單不顯示「資管科 忠」
+            if (display_name or "").strip() == "資管科 忠":
+                continue
+            classes_out.append({
+                "id": r["id"],
+                "name": r.get("name"),
+                "department": r.get("department"),
+                "admission_year": r.get("admission_year"),
+                "display_name": display_name,
+                "homeroom_teacher_name": homeroom_teacher_name,
+            })
+        return jsonify({"success": True, "classes": classes_out})
+    except Exception as e:
+        print("取得班級列表錯誤:", e)
+        return jsonify({"success": False, "message": "取得班級列表失敗"}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
 # -------------------------
 # API - 更新個人資料
 # -------------------------
@@ -506,6 +591,7 @@ def save_profile():
     role_display = data.get("role")
     name = data.get("name")
     class_id = data.get("class_id")
+    homeroom_class_ids = data.get("homeroom_class_ids")  # 班導帶班班級（可複選，最多 2 個）
 
     if not username or not role_display or not name:
         return jsonify({"success": False, "message": "缺少必要欄位"}), 400
@@ -552,14 +638,38 @@ def save_profile():
 
         cursor.execute("UPDATE users SET name=%s WHERE id=%s", (name, user_id))
 
-        if role == "student":
+        # 學生、老師、主任可設定班級；其他角色清空 class_id
+        if role in ("student", "teacher", "director"):
             if class_id:
                 cursor.execute("SELECT id FROM classes WHERE id=%s", (class_id,))
                 if not cursor.fetchone():
                     return jsonify({"success": False, "message": "班級不存在"}), 404
                 cursor.execute("UPDATE users SET class_id=%s WHERE id=%s", (class_id, user_id))
+            else:
+                cursor.execute("UPDATE users SET class_id=NULL WHERE id=%s", (user_id,))
         else:
             cursor.execute("UPDATE users SET class_id=NULL WHERE id=%s", (user_id,))
+
+        # 班導師：更新帶班班級（classes_teacher role=classteacher），最多 2 個班
+        if role in ("teacher", "director") and homeroom_class_ids is not None:
+            ids = homeroom_class_ids if isinstance(homeroom_class_ids, list) else []
+            if len(ids) > 2:
+                return jsonify({"success": False, "message": "帶班班級最多 2 個"}), 400
+            for cid in ids:
+                cursor.execute("SELECT id FROM classes WHERE id=%s", (cid,))
+                if not cursor.fetchone():
+                    return jsonify({"success": False, "message": "班級不存在"}), 404
+            cursor.execute(
+                "DELETE FROM classes_teacher WHERE teacher_id=%s AND role='classteacher'",
+                (user_id,),
+            )
+            from datetime import datetime
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            for cid in ids:
+                cursor.execute("""
+                    INSERT INTO classes_teacher (teacher_id, class_id, role, created_at, updated_at)
+                    VALUES (%s, %s, 'classteacher', %s, %s)
+                """, (user_id, cid, now, now))
 
         conn.commit()
 

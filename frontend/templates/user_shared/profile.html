@@ -104,6 +104,66 @@
       color: #666;
     }
 
+    /* 帶班班級、年級：核取方塊區塊美化 */
+    .homeroom-classes-box {
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: 8px;
+      padding: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+    .homeroom-classes-box::-webkit-scrollbar {
+      width: 8px;
+    }
+    .homeroom-classes-box::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 4px;
+    }
+    .homeroom-classes-box::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    .homeroom-class-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      background: #fff;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+    }
+    .homeroom-class-item:last-child { margin-bottom: 0; }
+    .homeroom-class-item:hover {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+    .homeroom-class-item input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      cursor: pointer;
+      accent-color: #0454a3;
+    }
+    .homeroom-class-item span {
+      flex: 1;
+      font-weight: normal;
+      font-size: 15px;
+      color: #334155;
+    }
+    .homeroom-class-hint {
+      display: block;
+      margin-top: 8px;
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.4;
+    }
+
   /* 頂端列 */
     header {
       background: #0454a3;
@@ -290,6 +350,9 @@
       <div id="admissionYearField">
         <label id="admissionYearLabel" for="admissionYear">入學屆數</label>
         <input id="admissionYear" type="text" readonly />
+        <!-- 班導師：帶班班級、年級為核取方塊複選（最多 2 個） -->
+        <div id="homeroomClassContainer" class="homeroom-classes-box" style="display: none;" role="group" aria-label="帶班班級、年級（可複選，最多 2 個）"></div>
+        <span id="homeroomClassHint" class="homeroom-class-hint" style="display: none;">可勾選多個，最多 2 個班級</span>
       </div>
 
       <div id="currentSemesterContainer">
@@ -297,10 +360,15 @@
         <input id="currentSemesterCode" type="text" readonly />
       </div>
 
-      <div id="studentFields" class="role-specific-fields" style="display: none;">
-        <label for="combinedClass">班級/年級</label>
-        <input id="combinedClass" type="text" readonly />
+      <!-- 學生、主任可設定班級；指導老師不需選擇班級；學生選班級後班導會自動帶入 -->
+      <div id="classSelectContainer" class="role-specific-fields" style="display: none;">
+        <label for="classSelect">班級</label>
+        <select id="classSelect" aria-label="選擇班級">
+          <option value="">請選擇班級</option>
+        </select>
+      </div>
 
+      <div id="studentFields" class="role-specific-fields" style="display: none;">
         <label for="homeroomTeacher">班導</label>
         <input id="homeroomTeacher" type="text" readonly />
 
@@ -531,24 +599,36 @@
         if (studentIdField) studentIdField.style.display = '';
         if (studentIdLabel) studentIdLabel.textContent = '帳號';
 
-        // 學生：入學屆數；班導：帶班班級、年級（classes_teacher）；指導老師：指導學生所屬班級（teacher_student_relations）；主任：不顯示此欄位
+        // 學生：入學屆數；班導：帶班班級、年級（可複選下拉）；指導老師：指導學生所屬班級；主任：不顯示此欄位
+        const admissionYearInput = document.getElementById('admissionYear');
+        const homeroomClassContainer = document.getElementById('homeroomClassContainer');
+        const homeroomClassHint = document.getElementById('homeroomClassHint');
         if (admissionYearField) {
           if (role === 'student') {
             admissionYearField.style.display = '';
             if (admissionYearLabel) admissionYearLabel.textContent = '入學屆數';
-            document.getElementById('admissionYear').value = document.getElementById('admissionYear').value || '';
+            if (admissionYearInput) admissionYearInput.style.display = '';
+            if (homeroomClassContainer) homeroomClassContainer.style.display = 'none';
+            if (homeroomClassHint) homeroomClassHint.style.display = 'none';
+            admissionYearInput.value = admissionYearInput.value || '';
           } else if (role === 'class_teacher') {
             admissionYearField.style.display = 'block';
             if (admissionYearLabel) admissionYearLabel.textContent = '帶班班級、年級';
-            const ayEl = document.getElementById('admissionYear');
-            if (ayEl) ayEl.value = ayEl.dataset.homeroomDisplay || '';
+            if (admissionYearInput) admissionYearInput.style.display = 'none';
+            if (homeroomClassContainer) homeroomClassContainer.style.display = 'block';
+            if (homeroomClassHint) homeroomClassHint.style.display = 'block';
+            if (admissionYearInput) admissionYearInput.dataset.homeroomDisplay = admissionYearInput.dataset.homeroomDisplay || '';
           } else if (role === 'teacher') {
             admissionYearField.style.display = 'block';
             if (admissionYearLabel) admissionYearLabel.textContent = '指導學生所屬班級';
-            const ayEl = document.getElementById('admissionYear');
-            if (ayEl) ayEl.value = ayEl.dataset.guidedDisplay || '';
+            if (admissionYearInput) admissionYearInput.style.display = '';
+            if (homeroomClassContainer) homeroomClassContainer.style.display = 'none';
+            if (homeroomClassHint) homeroomClassHint.style.display = 'none';
+            if (admissionYearInput) admissionYearInput.value = admissionYearInput.dataset.guidedDisplay || '';
           } else {
             admissionYearField.style.display = 'none';
+            if (homeroomClassContainer) homeroomClassContainer.style.display = 'none';
+            if (homeroomClassHint) homeroomClassHint.style.display = 'none';
           }
         }
 
@@ -560,6 +640,11 @@
 
         if (advisorField) advisorField.style.display = 'none';
 
+        // 學生、主任可設定班級；指導老師不需選擇班級
+        const classSelectContainer = document.getElementById('classSelectContainer');
+        if (classSelectContainer) {
+          classSelectContainer.style.display = (role === 'student' || role === 'director') ? 'block' : 'none';
+        }
         if (role === 'student') {
           if (studentFieldsEl) studentFieldsEl.style.display = 'block';
           document.getElementById('currentSemesterContainer').style.display = 'block';
@@ -626,31 +711,63 @@
           // ⭐️ 修正點 B: 填入唯讀的實習學期資料 ⭐️
           currentSemesterInput.value = user.current_semester_display || '';
 
-          // 填入角色特定資料：學生僅顯示「班級/年級」一欄，格式 資管科四孝
-          if (userRole === 'student') {
-            let classDisplay = user.class_display_name || '';
-            const dept = (user.department || '').trim();
-            const cname = (user.class_name || '').trim();
-            const ayStr = (user.admission_year != null && user.admission_year !== '') ? String(user.admission_year).trim() : '';
-            const codeStr = (user.current_semester_display || '').toString();
-            const apiYear = user.active_semester_year != null && user.active_semester_year !== '' ? parseInt(String(user.active_semester_year), 10) : NaN;
-            const activeYear = !isNaN(apiYear) ? apiYear : (codeStr.length >= 3 ? parseInt(codeStr.substring(0, 3), 10) : NaN);
-            if (dept && cname && ayStr && !isNaN(activeYear)) {
-              const ay = parseInt(ayStr, 10);
-              if (!isNaN(ay)) {
-                const gradeNum = activeYear - ay + 1;
-                const gradeLabels = ['一', '二', '三', '四', '五', '六'];
-                const gradeChar = (gradeNum >= 1 && gradeNum <= 6) ? gradeLabels[gradeNum - 1] : (gradeNum > 0 ? String(gradeNum) : '');
-                classDisplay = gradeChar ? `${dept} ${gradeChar}${cname}` : `${dept} ${cname}`;
-              }
-            }
-            document.getElementById('combinedClass').value = classDisplay || '';
-
-            // 填入班導老師名稱（若有）
+          // 學生、主任：載入班級下拉選單並帶入班導（學生選班級時自動帶入班導）；指導老師不顯示班級選單
+          if (userRole === 'student' || userRole === 'director') {
+            const classSelect = document.getElementById('classSelect');
             const homeroomInput = document.getElementById('homeroomTeacher');
-            if (homeroomInput) {
-              homeroomInput.value = user.homeroom_teacher_name || '';
+            fetch('/api/profile/classes')
+              .then(r => r.json())
+              .then(api => {
+                if (!api.success || !api.classes) return;
+                function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+                classSelect.innerHTML = '<option value="">請選擇班級</option>' +
+                  api.classes.map(c => {
+                    const homeroom = (c.homeroom_teacher_name || '').trim();
+                    return '<option value="' + c.id + '" data-homeroom="' + esc(homeroom) + '">' + esc(c.display_name || '') + '</option>';
+                  }).join('');
+                const classId = user.class_id != null ? String(user.class_id) : '';
+                classSelect.value = classId;
+                userClassIdInput.value = classId;
+                if (homeroomInput) {
+                  if (userRole === 'student') {
+                    const opt = classSelect.querySelector('option[value="' + classId + '"]');
+                    homeroomInput.value = (opt && opt.getAttribute('data-homeroom')) || (user.homeroom_teacher_name || '');
+                  } else {
+                    homeroomInput.value = '';
+                  }
+                }
+              })
+              .catch(err => console.error('載入班級列表失敗:', err));
+          }
+
+          // 班導師：載入帶班班級、年級核取方塊列表並預選目前帶班班級
+          if (userRole === 'class_teacher') {
+            const homeroomContainer = document.getElementById('homeroomClassContainer');
+            if (homeroomContainer) {
+              fetch('/api/profile/classes')
+                .then(r => r.json())
+                .then(api => {
+                  if (!api.success || !api.classes) return;
+                  function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+                  const ids = user.homeroom_class_ids || [];
+                  homeroomContainer.innerHTML = api.classes.map(c => {
+                    const checked = ids.indexOf(parseInt(c.id, 10)) !== -1 || ids.indexOf(String(c.id)) !== -1;
+                    return '<label class="homeroom-class-item"><input type="checkbox" name="homeroom_class" value="' + c.id + '"' + (checked ? ' checked' : '') + '><span>' + esc(c.display_name || '') + '</span></label>';
+                  }).join('');
+                  // 最多選 2 個：勾選時若超過 2 個則取消最早勾選的
+                  homeroomContainer.addEventListener('change', function (e) {
+                    if (e.target.name !== 'homeroom_class') return;
+                    const checked = homeroomContainer.querySelectorAll('input[name=homeroom_class]:checked');
+                    if (checked.length <= 2) return;
+                    checked[0].checked = false;
+                  });
+                })
+                .catch(err => console.error('載入帶班班級列表失敗:', err));
             }
+          }
+
+          if (userRole === 'student') {
+            // 班導欄位已在上方依班級帶入
           } else if (isHomeroom) {
             document.getElementById('managedClasses').value = user.class_display_name || '';
           } else if (userRole === 'vendor') {
@@ -683,6 +800,18 @@
 
         })
         .catch(err => alert('載入資料失敗：' + err.message));
+
+      // 學生選班級時，班導欄位自動帶入所屬班導
+      const classSelectEl = document.getElementById('classSelect');
+      if (classSelectEl) {
+        classSelectEl.addEventListener('change', function () {
+          const opt = this.options[this.selectedIndex];
+          const homeroom = opt ? (opt.getAttribute('data-homeroom') || '') : '';
+          userClassIdInput.value = this.value || '';
+          const homeroomInput = document.getElementById('homeroomTeacher');
+          if (homeroomInput) homeroomInput.value = homeroom;
+        });
+      }
 
       // -------------------------------------------------------------
       // 頁面切換與資料儲存
@@ -733,17 +862,24 @@
               document.getElementById('avatarPreview').src = avatarUrl + '?t=' + Date.now();
             }
 
-            // 更新個人資料
+            // 更新個人資料（學生、主任可傳送班級；班導師可傳送帶班班級複選）
             const roleDisplayValue = document.getElementById('identity').value;
-            const classIdToSend = userRole === 'student' ? userClassIdInput.value : null;
+            const classSelectForSave = document.getElementById('classSelect');
+            const classIdToSend = (userRole === 'student' || userRole === 'director') && classSelectForSave
+              ? (classSelectForSave.value || null)
+              : null;
+            const homeroomContainerForSave = document.getElementById('homeroomClassContainer');
+            const homeroomClassIdsSend = (userRole === 'class_teacher' && homeroomContainerForSave)
+              ? Array.from(homeroomContainerForSave.querySelectorAll('input[name=homeroom_class]:checked')).map(el => parseInt(el.value, 10)).filter(n => !isNaN(n))
+              : undefined;
 
             const payload = {
               username: document.getElementById('studentId').value || '',
               role: roleDisplayValue,
               name: document.getElementById('name').value,
               class_id: classIdToSend,
-              // ❌ 修正點 C: 移除 current_semester_code，因為它是唯讀且不參與更新 ❌
             };
+            if (homeroomClassIdsSend !== undefined) payload.homeroom_class_ids = homeroomClassIdsSend;
 
 
             return fetch('/api/saveProfile', {
@@ -773,6 +909,8 @@
               finalRedirectUrl = '/ta_home';
             } else if (roleValue === 'director') {
               finalRedirectUrl = '/director_home';
+            } else if (roleValue === 'teacher' && isHomeroom) {
+              finalRedirectUrl = '/class_teacher_home';
             } else if (roleValue === 'teacher') {
               finalRedirectUrl = '/teacher_home';
             } else if (roleValue === 'class_teacher') {
