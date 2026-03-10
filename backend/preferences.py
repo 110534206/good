@@ -1096,73 +1096,36 @@ def export_preferences_excel():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 確認是否為班導（取完結果再重用 cursor，避免 Unread result found）
+        # 確認是否為班導，取得該班導負責的「所有」班級（與審核頁一致，避免只取第一筆變成別班）
         cursor.execute("""
         SELECT c.id AS class_id, c.name AS class_name
         FROM classes c
         JOIN classes_teacher ct ON c.id = ct.class_id
         WHERE ct.teacher_id = %s AND ct.role = 'classteacher'
+        ORDER BY c.name
         """, (user_id,))
         class_rows = cursor.fetchall()
-        class_info = class_rows[0] if class_rows else None
-        if not class_info:
+        if not class_rows:
             return "你不是班導，無法導出志願序", 403
 
-        class_id = class_info['class_id']
-        class_name = class_info['class_name']
+        # 使用流程學期（與審核頁一致）；匯出僅四年級，與審核頁所見一致（排除三忠等）
+        flow_semester_id = get_flow_semester_id(cursor)
+        current_semester_id = flow_semester_id or get_current_semester_id(cursor)
+        student_id_prefix = None
+        if flow_semester_id:
+            cursor.execute("SELECT code FROM semesters WHERE id = %s", (flow_semester_id,))
+            row = cursor.fetchone()
+            if row and row.get('code') and len(str(row['code'])) >= 3:
+                try:
+                    year_part = int(str(row['code'])[:3])
+                    student_id_prefix = year_part - 3  # 113 → 110
+                except (ValueError, TypeError):
+                    pass
 
-        # 取得當前學期ID
-        current_semester_id = get_current_semester_id(cursor)
-
-        # 查詢班上學生及其志願（只匯出已通過的志願序）
-        if current_semester_id:
-            cursor.execute("""
-                SELECT 
-                    u.id AS student_id,
-                    u.name AS student_name,
-                    u.username AS student_number, 
-                    sp.preference_order,
-                    ic.company_name,
-                    sp.submitted_at
-                FROM users u
-                INNER JOIN student_preferences sp ON u.id = sp.student_id
-                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-                WHERE u.class_id = %s 
-                  AND u.role = 'student'
-                  AND sp.status = 'approved'
-                  AND sp.semester_id = %s
-                ORDER BY u.name, sp.preference_order
-            """, (class_id, current_semester_id))
-        else:
-            # 如果沒有設定當前學期，只匯出已通過的志願序
-            cursor.execute("""
-                SELECT 
-                    u.id AS student_id,
-                    u.name AS student_name,
-                    u.username AS student_number, 
-                    sp.preference_order,
-                    ic.company_name,
-                    sp.submitted_at
-                FROM users u
-                INNER JOIN student_preferences sp ON u.id = sp.student_id
-                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-                WHERE u.class_id = %s 
-                  AND u.role = 'student'
-                  AND sp.status = 'approved'
-                ORDER BY u.name, sp.preference_order
-            """, (class_id,))
-        results = cursor.fetchall()
-
-        # 創建 Excel 工作簿
-        wb = Workbook()
-        ws = wb.active
-        ws.title = f"{class_name}志願序"
-
-        # 設定樣式
+        # 設定樣式（共用）
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="0066CC", end_color="0066CC", fill_type="solid")
         header_alignment = Alignment(horizontal="center", vertical="center")
-        
         border = Border(
             left=Side(style='thin'),
             right=Side(style='thin'),
@@ -1170,111 +1133,156 @@ def export_preferences_excel():
             bottom=Side(style='thin')
         )
 
-        # 寫入標題
-        ws.merge_cells('A1:G1')
-        title_cell = ws['A1']
-        title_cell.value = f"{class_name} - 已通過學生實習志願序統計表"
-        title_cell.font = Font(bold=True, size=16)
-        title_cell.alignment = Alignment(horizontal="center", vertical="center")
-        ws.row_dimensions[1].height = 30
+        wb = Workbook()
+        sheet_index = 0
+        exported_class_names = []
+        for class_info in class_rows:
+            class_id = class_info['class_id']
+            class_name = class_info['class_name']
 
-        # 寫入導出時間
-        ws.merge_cells('A2:G2')
-        time_cell = ws['A2']
-        time_cell.value = f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}"
-        time_cell.alignment = Alignment(horizontal="right")
+            if current_semester_id:
+                if student_id_prefix is not None:
+                    prefix_str = str(student_id_prefix) + '%'
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                               sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN classes c ON u.class_id = c.id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved' AND sp.semester_id = %s
+                          AND (COALESCE(c.admission_year, u.admission_year) = %s OR u.username LIKE %s)
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id, current_semester_id, student_id_prefix, prefix_str))
+                else:
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                               sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved' AND sp.semester_id = %s
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id, current_semester_id))
+            else:
+                if student_id_prefix is not None:
+                    prefix_str = str(student_id_prefix) + '%'
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                               sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN classes c ON u.class_id = c.id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved'
+                          AND (COALESCE(c.admission_year, u.admission_year) = %s OR u.username LIKE %s)
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id, student_id_prefix, prefix_str))
+                else:
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                               sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved'
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id,))
+            results = cursor.fetchall()
+            if not results:
+                continue  # 該班無四年級學生（如三忠），不匯出此班
 
-        # 寫入欄位名稱
-        headers = ['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']
-        ws.row_dimensions[4].height = 25
-        for col_num, header in enumerate(headers, 1):
-            col_letter = get_column_letter(col_num)
-            cell = ws[f'{col_letter}4']
-            cell.value = header
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = header_alignment
-            cell.border = border
-            if col_num in [3, 4, 5, 6, 7]:
-                ws.column_dimensions[col_letter].width = 25
+            exported_class_names.append(class_name)
+            ws = wb.create_sheet(title=f"{class_name}志願序"[:31], index=sheet_index)
+            sheet_index += 1
 
-        ws.column_dimensions['A'].width = 15
-        ws.column_dimensions['B'].width = 15
+            ws.merge_cells('A1:G1')
+            title_cell = ws['A1']
+            title_cell.value = f"{class_name} - 已通過學生實習志願序統計表"
+            title_cell.font = Font(bold=True, size=16)
+            title_cell.alignment = Alignment(horizontal="center", vertical="center")
+            ws.row_dimensions[1].height = 30
 
-        # 整理學生資料
-        student_data = defaultdict(lambda: {
-            'name': '',
-            'student_number': '',
-            'preferences': [''] * 5,
-            'submitted_times': [''] * 5
-        })
+            ws.merge_cells('A2:G2')
+            time_cell = ws['A2']
+            time_cell.value = f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}"
+            time_cell.alignment = Alignment(horizontal="right")
 
-        for row in results:
-            student_name = row['student_name']
-            if student_name:
-                student_data[student_name]['name'] = student_name
-                student_data[student_name]['student_number'] = row['student_number'] or ''
-                
-                if row['preference_order'] and row['company_name']:
-                    order = row['preference_order'] - 1 # 轉為 0-based index
-                    if 0 <= order < 5:
-                        student_data[student_name]['preferences'][order] = row['company_name']
-                        if row['submitted_at']:
-                            student_data[student_name]['submitted_times'][order] = row['submitted_at'].strftime('%m/%d %H:%M')
-
-        # 寫入學生資料
-        row_num = 5
-        for student_name in sorted(student_data.keys()):
-            data = student_data[student_name]
-            
-            # 學生姓名
-            name_cell = ws.cell(row=row_num, column=1, value=data['name'])
-            name_cell.border = border
-            name_cell.alignment = Alignment(horizontal="center", vertical="center")
-            # 學號
-            number_cell = ws.cell(row=row_num, column=2, value=data['student_number'])
-            number_cell.border = border
-            number_cell.alignment = Alignment(horizontal="center", vertical="center")
-            
-            # 志願序
-            for i in range(5):
-                pref_text = data['preferences'][i] or ''
-                
-                cell = ws.cell(row=row_num, column=3+i, value=pref_text)
+            headers = ['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']
+            ws.row_dimensions[4].height = 25
+            for col_num, header in enumerate(headers, 1):
+                col_letter = get_column_letter(col_num)
+                cell = ws[f'{col_letter}4']
+                cell.value = header
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
                 cell.border = border
-                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-                
-            ws.row_dimensions[row_num].height = 30
-            row_num += 1
+                if col_num in [3, 4, 5, 6, 7]:
+                    ws.column_dimensions[col_letter].width = 25
+            ws.column_dimensions['A'].width = 15
+            ws.column_dimensions['B'].width = 15
 
-        # 添加統計資訊
-        ws.cell(row=row_num + 1, column=1, value="統計資訊：").font = Font(bold=True)
-        
-        # 統計各公司被選擇次數
-        company_counts = defaultdict(int)
-        for data in student_data.values():
-            for pref in data['preferences']:
-                if pref:
-                    company_counts[pref] += 1
+            student_data = defaultdict(lambda: {'name': '', 'student_number': '', 'preferences': [''] * 5, 'submitted_times': [''] * 5})
+            for row in results:
+                student_name = row['student_name']
+                if student_name:
+                    student_data[student_name]['name'] = student_name
+                    student_data[student_name]['student_number'] = row['student_number'] or ''
+                    if row['preference_order'] and row['company_name']:
+                        order = row['preference_order'] - 1
+                        if 0 <= order < 5:
+                            student_data[student_name]['preferences'][order] = row['company_name']
+                            if row['submitted_at']:
+                                student_data[student_name]['submitted_times'][order] = row['submitted_at'].strftime('%m/%d %H:%M')
 
-        stats_row = row_num + 2
-        ws.cell(row=stats_row, column=1, value="公司名稱").font = Font(bold=True)
-        ws.cell(row=stats_row, column=2, value="被選擇次數").font = Font(bold=True)
-        stats_row += 1
-        
-        for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
-            ws.cell(row=stats_row, column=1, value=company).border = border
-            ws.cell(row=stats_row, column=2, value=count).border = border
+            row_num = 5
+            for student_name in sorted(student_data.keys()):
+                data = student_data[student_name]
+                ws.cell(row=row_num, column=1, value=data['name']).border = border
+                ws.cell(row=row_num, column=1).alignment = Alignment(horizontal="center", vertical="center")
+                ws.cell(row=row_num, column=2, value=data['student_number']).border = border
+                ws.cell(row=row_num, column=2).alignment = Alignment(horizontal="center", vertical="center")
+                for i in range(5):
+                    cell = ws.cell(row=row_num, column=3 + i, value=data['preferences'][i] or '')
+                    cell.border = border
+                    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                ws.row_dimensions[row_num].height = 30
+                row_num += 1
+
+            ws.cell(row=row_num + 1, column=1, value="統計資訊：").font = Font(bold=True)
+            company_counts = defaultdict(int)
+            for data in student_data.values():
+                for pref in data['preferences']:
+                    if pref:
+                        company_counts[pref] += 1
+            stats_row = row_num + 2
+            ws.cell(row=stats_row, column=1, value="公司名稱").font = Font(bold=True)
+            ws.cell(row=stats_row, column=2, value="被選擇次數").font = Font(bold=True)
             stats_row += 1
+            for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
+                ws.cell(row=stats_row, column=1, value=company).border = border
+                ws.cell(row=stats_row, column=2, value=count).border = border
+                stats_row += 1
 
+        # 移除預設空白「Sheet」工作表（create_sheet 會插入，預設 Sheet 仍存在）
+        try:
+            for s in list(wb.worksheets):
+                if s.title == 'Sheet':
+                    wb.remove(s)
+                    break
+        except Exception:
+            pass
 
-        # 建立 response
+        if not exported_class_names:
+            return "目前無四年級已通過志願序可匯出", 404
+
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
-        
-        filename = f"{class_name}_已通過實習志願序_{datetime.now().strftime('%Y%m%d')}.xlsx"
-        
+        class_names_str = "、".join(exported_class_names)[:20]
+        filename = f"{class_names_str}_已通過實習志願序_{datetime.now().strftime('%Y%m%d')}.xlsx"
+
         return send_file(
             output,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1305,62 +1313,30 @@ def export_preferences_pdf():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 確認是否為班導（取完結果再重用 cursor，避免 Unread result found）
+        # 確認是否為班導，取得該班導負責的「所有」班級（與審核頁一致）
         cursor.execute("""
         SELECT c.id AS class_id, c.name AS class_name
         FROM classes c
         JOIN classes_teacher ct ON c.id = ct.class_id
         WHERE ct.teacher_id = %s AND ct.role = 'classteacher'
+        ORDER BY c.name
         """, (user_id,))
         class_rows = cursor.fetchall()
-        class_info = class_rows[0] if class_rows else None
-        if not class_info:
+        if not class_rows:
             return "你不是班導，無法導出志願序", 403
 
-        class_id = class_info['class_id']
-        class_name = class_info['class_name']
-
-        # 取得當前學期ID
-        current_semester_id = get_current_semester_id(cursor)
-
-        # 查詢班上學生及其志願（只匯出已通過的志願序）
-        if current_semester_id:
-            cursor.execute("""
-                SELECT 
-                    u.id AS student_id,
-                    u.name AS student_name,
-                    u.username AS student_number, 
-                    sp.preference_order,
-                    ic.company_name,
-                    sp.submitted_at
-                FROM users u
-                INNER JOIN student_preferences sp ON u.id = sp.student_id
-                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-                WHERE u.class_id = %s 
-                  AND u.role = 'student'
-                  AND sp.status = 'approved'
-                  AND sp.semester_id = %s
-                ORDER BY u.name, sp.preference_order
-            """, (class_id, current_semester_id))
-        else:
-            # 如果沒有設定當前學期，只匯出已通過的志願序
-            cursor.execute("""
-                SELECT 
-                    u.id AS student_id,
-                    u.name AS student_name,
-                    u.username AS student_number, 
-                    sp.preference_order,
-                    ic.company_name,
-                    sp.submitted_at
-                FROM users u
-                INNER JOIN student_preferences sp ON u.id = sp.student_id
-                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-                WHERE u.class_id = %s 
-                  AND u.role = 'student'
-                  AND sp.status = 'approved'
-                ORDER BY u.name, sp.preference_order
-            """, (class_id,))
-        results = cursor.fetchall()
+        flow_semester_id = get_flow_semester_id(cursor)
+        current_semester_id = flow_semester_id or get_current_semester_id(cursor)
+        student_id_prefix = None
+        if flow_semester_id:
+            cursor.execute("SELECT code FROM semesters WHERE id = %s", (flow_semester_id,))
+            row = cursor.fetchone()
+            if row and row.get('code') and len(str(row['code'])) >= 3:
+                try:
+                    year_part = int(str(row['code'])[:3])
+                    student_id_prefix = year_part - 3
+                except (ValueError, TypeError):
+                    pass
 
         # 創建 PDF 緩衝區
         pdf_buffer = io.BytesIO()
@@ -1427,110 +1403,135 @@ def export_preferences_pdf():
             fontName=font_name if font_name else 'Helvetica'
         )
 
-        # 建立內容
         story = []
-
-        # 標題
-        title = Paragraph(f"{class_name} - 已通過學生實習志願序統計表", title_style)
-        story.append(title)
-        
-        # 日期
+        exported_class_names_pdf = []
         date_text = f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}"
         date_para = Paragraph(date_text, normal_style)
-        story.append(date_para)
-        story.append(Spacer(1, 20))
 
+        for class_info in class_rows:
+            class_id = class_info['class_id']
+            class_name = class_info['class_name']
 
-        # 整理學生資料
-        student_data = defaultdict(lambda: {
-            'name': '',
-            'student_number': '',
-            'preferences': [''] * 5,
-            'submitted_times': [''] * 5
-        })
+            if current_semester_id:
+                if student_id_prefix is not None:
+                    prefix_str = str(student_id_prefix) + '%'
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                               sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN classes c ON u.class_id = c.id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved' AND sp.semester_id = %s
+                          AND (COALESCE(c.admission_year, u.admission_year) = %s OR u.username LIKE %s)
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id, current_semester_id, student_id_prefix, prefix_str))
+                else:
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                               sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved' AND sp.semester_id = %s
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id, current_semester_id))
+            else:
+                if student_id_prefix is not None:
+                    prefix_str = str(student_id_prefix) + '%'
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                               sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN classes c ON u.class_id = c.id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved'
+                          AND (COALESCE(c.admission_year, u.admission_year) = %s OR u.username LIKE %s)
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id, student_id_prefix, prefix_str))
+                else:
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                           sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved'
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id,))
+            results = cursor.fetchall()
+            if not results:
+                continue
 
-        for row in results:
-            student_name = row['student_name']
-            if student_name:
-                student_data[student_name]['name'] = student_name
-                student_data[student_name]['student_number'] = row['student_number'] or ''
-                
-                if row['preference_order'] and row['company_name']:
-                    order = row['preference_order'] - 1 # 轉為 0-based index
-                    if 0 <= order < 5:
-                        company_name = row['company_name']
-                        submitted_at = row['submitted_at'].strftime('%m/%d %H:%M') if row['submitted_at'] else ''
-                        student_data[student_name]['preferences'][order] = company_name
-                        student_data[student_name]['submitted_times'][order] = submitted_at
+            exported_class_names_pdf.append(class_name)
+            title = Paragraph(f"{class_name} - 已通過學生實習志願序統計表", title_style)
+            story.append(title)
+            story.append(date_para)
+            story.append(Spacer(1, 20))
 
+            student_data = defaultdict(lambda: {'name': '', 'student_number': '', 'preferences': [''] * 5, 'submitted_times': [''] * 5})
+            for row in results:
+                student_name = row['student_name']
+                if student_name:
+                    student_data[student_name]['name'] = student_name
+                    student_data[student_name]['student_number'] = row['student_number'] or ''
+                    if row['preference_order'] and row['company_name']:
+                        order = row['preference_order'] - 1
+                        if 0 <= order < 5:
+                            student_data[student_name]['preferences'][order] = row['company_name']
+                            if row['submitted_at']:
+                                student_data[student_name]['submitted_times'][order] = row['submitted_at'].strftime('%m/%d %H:%M')
 
-        # 學生表格
-        table_data = [
-            ['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']
-        ]
-        
-        for student_name in sorted(student_data.keys()):
-            data = student_data[student_name]
-            row = [data['name'], data['student_number']]
-            
-            for i in range(5):
-                pref_text = data['preferences'][i] or ''
-                row.append(pref_text)
-            
-            table_data.append(row)
+            table_data = [['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']]
+            for student_name in sorted(student_data.keys()):
+                data = student_data[student_name]
+                table_data.append([data['name'], data['student_number']] + [data['preferences'][i] or '' for i in range(5)])
 
-        table = Table(table_data, colWidths=[1*inch, 0.8*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.2*inch])
-        
-        table_style = TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('FONTNAME', (0, 0), (-1, -1), font_name if font_name else 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
-        ])
-        table.setStyle(table_style)
-        story.append(table)
-        story.append(Spacer(1, 20))
+            table = Table(table_data, colWidths=[1*inch, 0.8*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.2*inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 0), (-1, -1), font_name if font_name else 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f0f0')])
+            ]))
+            story.append(table)
+            story.append(Spacer(1, 20))
+            story.append(Paragraph("<b>統計資訊：</b>", normal_style))
+            story.append(Spacer(1, 5))
+            company_counts = defaultdict(int)
+            for data in student_data.values():
+                for pref in data['preferences']:
+                    if pref:
+                        company_counts[pref] += 1
+            stats_data = [['公司名稱', '被選擇次數']]
+            for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
+                stats_data.append([company, count])
+            stats_table = Table(stats_data, colWidths=[3*inch, 1*inch])
+            stats_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 0), (-1, -1), font_name if font_name else 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ]))
+            story.append(stats_table)
+            story.append(Spacer(1, 30))
 
-        # 統計資訊
-        story.append(Paragraph("<b>統計資訊：</b>", normal_style))
-        story.append(Spacer(1, 5))
+        if not exported_class_names_pdf:
+            return "目前無四年級已通過志願序可匯出", 404
 
-        company_counts = defaultdict(int)
-        for data in student_data.values():
-            for pref in data['preferences']:
-                if pref:
-                    company_counts[pref] += 1
-
-        stats_data = [
-            ['公司名稱', '被選擇次數']
-        ]
-        
-        for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
-            stats_data.append([company, count])
-
-        stats_table = Table(stats_data, colWidths=[3*inch, 1*inch])
-        stats_table_style = TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0066CC')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('FONTNAME', (0, 0), (-1, -1), font_name if font_name else 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ])
-        stats_table.setStyle(stats_table_style)
-        story.append(stats_table)
-
-        # 建立 PDF
         doc.build(story)
         pdf_buffer.seek(0)
-
-        filename = f"{class_name}_已通過實習志願序_{datetime.now().strftime('%Y%m%d')}.pdf"
+        class_names_str = "、".join(exported_class_names_pdf)[:20]
+        filename = f"{class_names_str}_已通過實習志願序_{datetime.now().strftime('%Y%m%d')}.pdf"
 
         return send_file(
             pdf_buffer,
@@ -1564,144 +1565,151 @@ def export_preferences_docx():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 確認是否為班導（取完結果再重用 cursor，避免 Unread result found）
+        # 確認是否為班導，取得該班導負責的「所有」班級（與審核頁一致）
         cursor.execute("""
         SELECT c.id AS class_id, c.name AS class_name
         FROM classes c
         JOIN classes_teacher ct ON c.id = ct.class_id
         WHERE ct.teacher_id = %s AND ct.role = 'classteacher'
+        ORDER BY c.name
         """, (user_id,))
         class_rows = cursor.fetchall()
-        class_info = class_rows[0] if class_rows else None
-        if not class_info:
+        if not class_rows:
             return "你不是班導，無法導出志願序", 403
 
-        class_id = class_info['class_id']
-        class_name = class_info['class_name']
+        flow_semester_id = get_flow_semester_id(cursor)
+        current_semester_id = flow_semester_id or get_current_semester_id(cursor)
+        student_id_prefix = None
+        if flow_semester_id:
+            cursor.execute("SELECT code FROM semesters WHERE id = %s", (flow_semester_id,))
+            row = cursor.fetchone()
+            if row and row.get('code') and len(str(row['code'])) >= 3:
+                try:
+                    year_part = int(str(row['code'])[:3])
+                    student_id_prefix = year_part - 3
+                except (ValueError, TypeError):
+                    pass
 
-        # 取得當前學期ID
-        current_semester_id = get_current_semester_id(cursor)
-
-        # 查詢班上學生及其志願（只匯出已通過的志願序）
-        if current_semester_id:
-            cursor.execute("""
-                SELECT 
-                    u.id AS student_id,
-                    u.name AS student_name,
-                    u.username AS student_number, 
-                    sp.preference_order,
-                    ic.company_name,
-                    sp.submitted_at
-                FROM users u
-                INNER JOIN student_preferences sp ON u.id = sp.student_id
-                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-                WHERE u.class_id = %s 
-                  AND u.role = 'student'
-                  AND sp.status = 'approved'
-                  AND sp.semester_id = %s
-                ORDER BY u.name, sp.preference_order
-            """, (class_id, current_semester_id))
-        else:
-            # 如果沒有設定當前學期，只匯出已通過的志願序
-            cursor.execute("""
-                SELECT 
-                    u.id AS student_id,
-                    u.name AS student_name,
-                    u.username AS student_number, 
-                    sp.preference_order,
-                    ic.company_name,
-                    sp.submitted_at
-                FROM users u
-                INNER JOIN student_preferences sp ON u.id = sp.student_id
-                LEFT JOIN internship_companies ic ON sp.company_id = ic.id
-                WHERE u.class_id = %s 
-                  AND u.role = 'student'
-                  AND sp.status = 'approved'
-                ORDER BY u.name, sp.preference_order
-            """, (class_id,))
-        results = cursor.fetchall()
-
-        # 整理學生資料
-        student_data = defaultdict(lambda: {
-            'name': '',
-            'student_number': '',
-            'preferences': [''] * 5,
-            'submitted_times': [''] * 5
-        })
-
-        for row in results:
-            student_name = row['student_name']
-            if student_name:
-                student_data[student_name]['name'] = student_name
-                student_data[student_name]['student_number'] = row['student_number'] or ''
-                
-                if row['preference_order'] and row['company_name']:
-                    order = row['preference_order'] - 1
-                    if 0 <= order < 5:
-                        student_data[student_name]['preferences'][order] = row['company_name']
-                        if row['submitted_at']:
-                            student_data[student_name]['submitted_times'][order] = row['submitted_at'].strftime('%m/%d %H:%M')
-
-        # 建立 Word 文件
         doc = Document()
-        title = doc.add_heading(f"{class_name} - 已通過學生實習志願序統計表", 0)
-        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        doc.add_paragraph(f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}")
-        doc.add_paragraph("")
+        exported_class_names_docx = []
+        for class_info in class_rows:
+            class_id = class_info['class_id']
+            class_name = class_info['class_name']
 
-        # 學生表格
-        table = doc.add_table(rows=1, cols=7)
-        table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        table.style = "Table Grid"
+            if current_semester_id:
+                if student_id_prefix is not None:
+                    prefix_str = str(student_id_prefix) + '%'
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                               sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN classes c ON u.class_id = c.id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved' AND sp.semester_id = %s
+                          AND (COALESCE(c.admission_year, u.admission_year) = %s OR u.username LIKE %s)
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id, current_semester_id, student_id_prefix, prefix_str))
+                else:
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                           sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved' AND sp.semester_id = %s
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id, current_semester_id))
+            else:
+                if student_id_prefix is not None:
+                    prefix_str = str(student_id_prefix) + '%'
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                               sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN classes c ON u.class_id = c.id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved'
+                          AND (COALESCE(c.admission_year, u.admission_year) = %s OR u.username LIKE %s)
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id, student_id_prefix, prefix_str))
+                else:
+                    cursor.execute("""
+                        SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                           sp.preference_order, ic.company_name, sp.submitted_at
+                        FROM users u
+                        INNER JOIN student_preferences sp ON u.id = sp.student_id
+                        LEFT JOIN internship_companies ic ON sp.company_id = ic.id
+                        WHERE u.class_id = %s AND u.role = 'student' AND sp.status = 'approved'
+                        ORDER BY u.name, sp.preference_order
+                    """, (class_id,))
+            results = cursor.fetchall()
+            if not results:
+                continue
 
-        headers = ['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']
-        for i, header in enumerate(headers):
-            table.rows[0].cells[i].text = header
-            # 設置標題欄位居中
-            table.rows[0].cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        for student_name in sorted(student_data.keys()):
-            data = student_data[student_name]
-            row = table.add_row().cells
-            row[0].text = data['name']
-            row[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            row[1].text = data['student_number']
-            row[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            
-            for i in range(5):
-                pref_text = data['preferences'][i] or ''
-                row[2+i].text = pref_text
-                # 設置內容置中對齊
-                row[2+i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            exported_class_names_docx.append(class_name)
+            student_data = defaultdict(lambda: {'name': '', 'student_number': '', 'preferences': [''] * 5, 'submitted_times': [''] * 5})
+            for row in results:
+                student_name = row['student_name']
+                if student_name:
+                    student_data[student_name]['name'] = student_name
+                    student_data[student_name]['student_number'] = row['student_number'] or ''
+                    if row['preference_order'] and row['company_name']:
+                        order = row['preference_order'] - 1
+                        if 0 <= order < 5:
+                            student_data[student_name]['preferences'][order] = row['company_name']
+                            if row['submitted_at']:
+                                student_data[student_name]['submitted_times'][order] = row['submitted_at'].strftime('%m/%d %H:%M')
 
-        doc.add_paragraph("")
-        doc.add_heading("統計資訊", level=1)
+            title = doc.add_heading(f"{class_name} - 已通過學生實習志願序統計表", 0)
+            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            doc.add_paragraph(f"導出時間：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}")
+            doc.add_paragraph("")
 
-        # 統計資訊
-        company_counts = defaultdict(int)
-        for data in student_data.values():
-            for pref in data['preferences']:
-                if pref:
-                    company_counts[pref] += 1
-        
-        stats_table = doc.add_table(rows=1, cols=2)
-        stats_table.style = "Table Grid"
-        stats_table.rows[0].cells[0].text = "公司名稱"
-        stats_table.rows[0].cells[1].text = "被選擇次數"
+            table = doc.add_table(rows=1, cols=7)
+            table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            table.style = "Table Grid"
+            headers = ['學生姓名', '學號', '第一志願', '第二志願', '第三志願', '第四志願', '第五志願']
+            for i, header in enumerate(headers):
+                table.rows[0].cells[i].text = header
+                table.rows[0].cells[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for student_name in sorted(student_data.keys()):
+                data = student_data[student_name]
+                row = table.add_row().cells
+                row[0].text = data['name']
+                row[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                row[1].text = data['student_number']
+                row[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for i in range(5):
+                    row[2+i].text = data['preferences'][i] or ''
+                    row[2+i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
-            row = stats_table.add_row().cells
-            row[0].text = company
-            row[1].text = str(count)
+            doc.add_paragraph("")
+            doc.add_heading("統計資訊", level=1)
+            company_counts = defaultdict(int)
+            for data in student_data.values():
+                for pref in data['preferences']:
+                    if pref:
+                        company_counts[pref] += 1
+            stats_table = doc.add_table(rows=1, cols=2)
+            stats_table.style = "Table Grid"
+            stats_table.rows[0].cells[0].text = "公司名稱"
+            stats_table.rows[0].cells[1].text = "被選擇次數"
+            for company, count in sorted(company_counts.items(), key=lambda x: x[1], reverse=True):
+                r = stats_table.add_row().cells
+                r[0].text = company
+                r[1].text = str(count)
+            doc.add_paragraph("")
 
+        if not exported_class_names_docx:
+            return "目前無四年級已通過志願序可匯出", 404
 
-        # 建立 response
         output = io.BytesIO()
         doc.save(output)
         output.seek(0)
-        
-        filename = f"{class_name}_已通過實習志願序_{datetime.now().strftime('%Y%m%d')}.docx"
+        class_names_str = "、".join(exported_class_names_docx)[:20]
+        filename = f"{class_names_str}_已通過實習志願序_{datetime.now().strftime('%Y%m%d')}.docx"
         
         return send_file(
             output,
