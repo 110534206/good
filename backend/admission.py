@@ -5036,6 +5036,60 @@ def vendor_second_round_participation_save():
 
 
 # =========================================================
+# API: 廠商二輪 - 主任已指派的學生列表（GET）
+# =========================================================
+@admission_bp.route("/api/second_round/vendor/assigned_students", methods=["GET"])
+def vendor_second_round_assigned_students():
+    """廠商查看主任已指派至本公司（或所屬公司）的二輪學生名單。資料來源：second_round_assignments。"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    vendor_id = session.get("user_id")
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        sid = get_flow_semester_id(cursor)
+        if not sid:
+            return jsonify({"success": False, "message": "無法取得流程學期"}), 500
+        company_ids = _vendor_company_ids_for_second_round(cursor, vendor_id)
+        if not company_ids:
+            return jsonify({"success": True, "students": [], "semester_id": sid})
+        placeholders = ",".join(["%s"] * len(company_ids))
+        cursor.execute("""
+            SELECT sra.id, sra.student_id, sra.company_id, sra.job_id, sra.status, sra.assigned_at,
+                   u.name AS student_name, u.username AS student_number,
+                   ic.company_name
+            FROM second_round_assignments sra
+            JOIN users u ON u.id = sra.student_id
+            JOIN internship_companies ic ON ic.id = sra.company_id
+            WHERE sra.semester_id = %s AND sra.company_id IN (""" + placeholders + """)
+            ORDER BY ic.company_name, u.username
+        """, [sid] + company_ids)
+        rows = cursor.fetchall() or []
+        students = []
+        for r in rows:
+            students.append({
+                "id": r.get("id"),
+                "student_id": r.get("student_id"),
+                "student_name": r.get("student_name") or "",
+                "student_number": r.get("student_number") or "",
+                "company_id": r.get("company_id"),
+                "company_name": r.get("company_name") or "",
+                "status": r.get("status") or "pending",
+                "assigned_at": r.get("assigned_at").strftime("%Y-%m-%d %H:%M") if getattr(r.get("assigned_at"), "strftime", None) else str(r.get("assigned_at") or ""),
+            })
+        return jsonify({"success": True, "students": students, "semester_id": sid})
+    except Exception as e:
+        traceback.print_exc()
+        err_msg = str(e)
+        if "1146" in err_msg or "doesn't exist" in err_msg.lower() or "second_round_assignments" in err_msg:
+            return jsonify({"success": True, "students": [], "semester_id": sid})
+        return jsonify({"success": False, "message": err_msg}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
 # API: 主任二輪 - 未錄取學生列表（GET，與科助未錄取名單一致）
 # =========================================================
 @admission_bp.route("/api/second_round/director/unadmitted", methods=["GET"])

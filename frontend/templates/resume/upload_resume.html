@@ -575,6 +575,34 @@
             </table>
 
             <div class="card p-4 mb-3">
+              <h5 class="text-secondary">成績單上傳 <span class="text-danger">*</span></h5>
+              <div class="row g-3">
+                <div class="col-12">
+                  <label class="form-label">上傳學期成績單 (JPG/PNG) <span class="text-danger">*</span></label>
+                  <div class="image-preview-box" id="transcriptPreviewBox">
+                    <span class="placeholder-text">選擇或上傳後顯示預覽</span>
+                  </div>
+                  
+                  <div class="input-group mt-2">
+                    <input type="file" id="transcript_file" name="transcript_file" class="form-control" accept="image/jpeg, image/png" required />
+                    <button type="button" class="btn btn-outline-primary" id="btn-transcript-ocr">
+                      <i class="bi bi-magic"></i> AI 辨識
+                    </button>
+                  </div>
+                  <div class="form-text">💡 提示：上傳後可點擊「AI 辨識」來自動讀取成績單內容。</div>
+
+                  <!-- OCR 結果顯示區域 -->
+                  <div id="transcript-ocr-result-container" class="mt-3 d-none">
+                      <div class="card card-body bg-light border-0">
+                          <h6 class="card-title fw-bold text-primary mb-3"><i class="bi bi-file-text"></i> AI 辨識結果 (僅供參考)</h6>
+                          <div id="transcript-ocr-content" class="markdown-body" style="font-size: 0.9rem; background: white; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;"></div>
+                      </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card p-4 mb-3">
               <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
                 <div>
                   <h5 class="text-secondary mb-1">相關證照</h5>
@@ -632,34 +660,6 @@
               <h5 class="mb-3">自傳 <span class="text-danger">*</span></h5>
               <textarea name="autobiography" rows="6" class="form-control" placeholder="請描述家庭生活、求學經過、個人專長、未來規劃等..."
                 required></textarea>
-            </div>
-
-            <div class="card p-4 mb-3">
-              <h5 class="text-secondary">成績單上傳 <span class="text-danger">*</span></h5>
-              <div class="row g-3">
-                <div class="col-12">
-                  <label class="form-label">上傳學期成績單 (JPG/PNG) <span class="text-danger">*</span></label>
-                  <div class="image-preview-box" id="transcriptPreviewBox">
-                    <span class="placeholder-text">選擇或上傳後顯示預覽</span>
-                  </div>
-                  
-                  <div class="input-group mt-2">
-                    <input type="file" id="transcript_file" name="transcript_file" class="form-control" accept="image/jpeg, image/png" required />
-                    <button type="button" class="btn btn-outline-primary" id="btn-transcript-ocr">
-                      <i class="bi bi-magic"></i> AI 辨識
-                    </button>
-                  </div>
-                  <div class="form-text">💡 提示：上傳後可點擊「AI 辨識」來自動讀取成績單內容。</div>
-
-                  <!-- OCR 結果顯示區域 -->
-                  <div id="transcript-ocr-result-container" class="mt-3 d-none">
-                      <div class="card card-body bg-light border-0">
-                          <h6 class="card-title fw-bold text-primary mb-3"><i class="bi bi-file-text"></i> AI 辨識結果 (僅供參考)</h6>
-                          <div id="transcript-ocr-content" class="markdown-body" style="font-size: 0.9rem; background: white; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;"></div>
-                      </div>
-                  </div>
-                </div>
-              </div>
             </div>
 
             <div class="card mb-4">
@@ -793,26 +793,26 @@
                 </div>
               </div>
               <div class="mt-2">
-                <label class="form-label small text-muted mb-1">偏好類別（單選，選填）</label>
+                <label class="form-label small text-muted mb-1">偏好類別（複選，選填）</label>
                 <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
                   <div class="form-check form-check-inline">
-                    <input class="form-check-input ai-keyword-radio" type="radio" name="ai-keyword-category" id="kw-hardware" value="硬體">
+                    <input class="form-check-input ai-keyword-checkbox" type="checkbox" name="ai-keyword-category" id="kw-hardware" value="硬體">
                     <label class="form-check-label" for="kw-hardware">硬體</label>
                   </div>
                   <div class="form-check form-check-inline">
-                    <input class="form-check-input ai-keyword-radio" type="radio" name="ai-keyword-category" id="kw-software" value="軟體">
+                    <input class="form-check-input ai-keyword-checkbox" type="checkbox" name="ai-keyword-category" id="kw-software" value="軟體">
                     <label class="form-check-label" for="kw-software">軟體</label>
                   </div>
                   <div class="form-check form-check-inline">
-                    <input class="form-check-input ai-keyword-radio" type="radio" name="ai-keyword-category" id="kw-marketing" value="行銷">
+                    <input class="form-check-input ai-keyword-checkbox" type="checkbox" name="ai-keyword-category" id="kw-marketing" value="行銷">
                     <label class="form-check-label" for="kw-marketing">行銷</label>
                   </div>
                   <div class="form-check form-check-inline">
-                    <input class="form-check-input ai-keyword-radio" type="radio" name="ai-keyword-category" id="kw-service" value="客服">
+                    <input class="form-check-input ai-keyword-checkbox" type="checkbox" name="ai-keyword-category" id="kw-service" value="客服">
                     <label class="form-check-label" for="kw-service">客服</label>
                   </div>
                   <div class="form-check form-check-inline">
-                    <input class="form-check-input ai-keyword-radio" type="radio" name="ai-keyword-category" id="kw-accounting" value="會計">
+                    <input class="form-check-input ai-keyword-checkbox" type="checkbox" name="ai-keyword-category" id="kw-accounting" value="會計">
                     <label class="form-check-label" for="kw-accounting">會計</label>
                   </div>
                 </div>
@@ -822,7 +822,7 @@
                     placeholder="可輸入其他類別"
                     maxlength="200">
                 </div>
-                <small class="text-muted">選擇或填寫一項後，AI 會針對該類別調整自傳內容。</small>
+                <small class="text-muted">可勾選多項類別，AI 會針對所選類別調整自傳內容。</small>
               </div>
             </div>
 
@@ -4551,13 +4551,16 @@
       const editStyle = document.getElementById('ai-edit-style').value;
       const toneStyle = document.getElementById('ai-tone-style').value;
       let keywords = '';
-      const checkedRadio = document.querySelector('input[name="ai-keyword-category"]:checked');
-      if (checkedRadio && checkedRadio.value) {
-        keywords = checkedRadio.value.trim();
-      } else {
-        const keywordsInput = document.getElementById('ai-keywords-input');
-        if (keywordsInput && keywordsInput.value.trim()) {
-          keywords = keywordsInput.value.trim().split(/[,，、]/)[0].trim();
+      const checkedBoxes = document.querySelectorAll('input[name="ai-keyword-category"]:checked');
+      const selected = Array.from(checkedBoxes).map(function(el) { return el.value.trim(); }).filter(Boolean);
+      if (selected.length > 0) {
+        keywords = selected.join('、');
+      }
+      const keywordsInput = document.getElementById('ai-keywords-input');
+      if (keywordsInput && keywordsInput.value.trim()) {
+        const other = keywordsInput.value.trim().split(/[,，、]/).map(function(s) { return s.trim(); }).filter(Boolean);
+        if (other.length > 0) {
+          keywords = keywords ? keywords + '、' + other.join('、') : other.join('、');
         }
       }
 
