@@ -181,104 +181,50 @@
     }
 
 
-    .weekly-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-      gap: 20px;
-    }
-    @media (max-width: 992px) {
-      .weekly-layout {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .card {
-      border-radius: 16px;
-      border: 1px solid #e2e8f0;
-      box-shadow: 0 1px 3px rgba(15,23,42,0.08);
-      background: #fff;
-    }
-    .card-header {
-      border-bottom: 1px solid #e5e7eb;
-      padding: 14px 18px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-    .card-header h2 {
-      font-size: 1rem;
-      margin: 0;
-      font-weight: 600;
-      color: #0f172a;
-    }
-    .card-body {
-      padding: 16px 18px 18px;
-    }
-
-    .week-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      max-height: 480px;
-      overflow-y: auto;
-    }
-    .week-item {
+    /* 週記列表表格風格（參考你提供的截圖） */
+    .weekly-table-card {
       border-radius: 12px;
-      border: 1px solid #e2e8f0;
-      padding: 10px 12px;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      padding: 10px 14px 16px;
     }
-    .week-item:hover {
-      background: #f8fafc;
-      border-color: #cbd5e1;
-      box-shadow: 0 2px 8px rgba(15,23,42,0.08);
-    }
-    .week-item.active {
-      background: #e0f2fe;
-      border-color: #0ea5e9;
-    }
-    .week-title {
+    .weekly-table-card-title {
+      font-size: 1rem;
       font-weight: 600;
       color: #0f172a;
-    }
-    .week-meta {
-      font-size: 0.8rem;
-      color: #64748b;
-    }
-
-    .week-content-empty {
-      padding: 32px 16px;
-      text-align: center;
-      color: #94a3b8;
-      font-size: 0.95rem;
-    }
-    .week-content {
-      white-space: pre-wrap;
-      line-height: 1.7;
-      color: #1f2933;
-      font-size: 0.95rem;
-    }
-    .week-tags {
       margin-bottom: 10px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      font-size: 0.8rem;
     }
-    .tag-pill {
-      border-radius: 999px;
-      padding: 4px 10px;
-      background: #eff6ff;
-      color: #1d4ed8;
+    .weekly-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .weekly-table thead th {
+      background: #1e293b;
+      color: #fff;
+      padding: 6px 10px;
+      text-align: center;
+    }
+    .weekly-table tbody td {
+      padding: 6px 10px;
+      text-align: center;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .weekly-table tbody tr:nth-child(odd) {
+      background-color: #edf2ff;
+    }
+    .weekly-table tbody tr:nth-child(even) {
+      background-color: #ffffff;
+    }
+    .weekly-table tbody tr:hover {
+      background-color: #e0f2fe;
+    }
+    .weekly-status-done {
+      color: #16a34a;
+      font-weight: 600;
+    }
+    .weekly-status-empty {
+      color: #9ca3af;
     }
   </style>
 </head>
@@ -343,30 +289,23 @@
       </button>
     </section>
 
-    <section class="weekly-layout" aria-label="實習週記內容">
-      <div class="card" aria-label="週次列表">
-        <div class="card-header">
-          <h2>週次列表</h2>
-          <small class="text-muted">點選左側週次可在右側檢視內容</small>
-        </div>
-        <div class="card-body">
-          <ul class="week-list" id="weekList">
+    <section class="weekly-table-card" aria-label="實習週記列表">
+      <div class="weekly-table-card-title">實習週記列表</div>
+      <div class="table-responsive">
+        <table class="weekly-table">
+          <thead>
+            <tr>
+              <th style="width: 8%;">序號</th>
+              <th style="width: 32%;">標題</th>
+              <th style="width: 20%;">應填日期</th>
+              <th style="width: 20%;">填寫日期</th>
+              <th style="width: 20%;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="weeklyTableBody">
             <!-- 週記列表將由 JavaScript 動態載入 -->
-          </ul>
-        </div>
-      </div>
-
-      <div class="card" aria-label="週記詳情">
-        <div class="card-header">
-          <h2 id="weekDetailTitle">請先選擇左側週次</h2>
-        </div>
-        <div class="card-body">
-          <div id="weekDetailMeta" class="week-meta" style="margin-bottom: 8px;"></div>
-          <div id="weekDetailTags" class="week-tags"></div>
-          <div id="weekDetailContent" class="week-content-empty">
-            尚未選擇任何週記，或本週尚未撰寫。請點選左側週次，或按右上角「新增週記」開始撰寫。
-          </div>
-        </div>
+          </tbody>
+        </table>
       </div>
     </section>
   </main>
@@ -391,56 +330,71 @@
 
     // TODO: 未來可改成從後端 API 載入真實資料
     const mockWeeks = [
-      { id: 1, title: '第 1 週：適應環境', period: '第 1 週', created_at: '2026-03-02', tags: ['新人訓練', '了解公司流程'], content: '這一週主要在熟悉公司環境與團隊成員，參與新人訓練...' },
-      { id: 2, title: '第 2 週：接觸專案', period: '第 2 週', created_at: '2026-03-09', tags: ['專案導入'], content: '開始接觸實際專案，了解需求並試著完成指定的任務...' }
+      {
+        id: 1,
+        title: '2/17~2/27實習週記',
+        due_date: '2025-02-17',
+        filled_at: '2025-02-28 19:20:10',
+        reviewed: true
+      },
+      {
+        id: 2,
+        title: '3/3~3/14實習週記',
+        due_date: '2025-03-03',
+        filled_at: '2025-03-14 21:24:14',
+        reviewed: true
+      },
+      {
+        id: 3,
+        title: '3/17~3/28實習週記',
+        due_date: '2025-03-17',
+        filled_at: '2025-03-28 23:22:47',
+        reviewed: true
+      },
+      {
+        id: 4,
+        title: '3/31~4/11實習週記',
+        due_date: '2025-03-31',
+        filled_at: '2025-04-11 23:32:50',
+        reviewed: true
+      },
+      {
+        id: 5,
+        title: '4/14~4/25實習週記',
+        due_date: '2025-04-14',
+        filled_at: '2025-04-26 00:00:19',
+        reviewed: true
+      }
     ];
 
-    const weekListEl = document.getElementById('weekList');
-    const weekDetailTitleEl = document.getElementById('weekDetailTitle');
-    const weekDetailMetaEl = document.getElementById('weekDetailMeta');
-    const weekDetailTagsEl = document.getElementById('weekDetailTags');
-    const weekDetailContentEl = document.getElementById('weekDetailContent');
+    const weeklyTableBody = document.getElementById('weeklyTableBody');
 
-    function renderWeekList(weeks) {
-      if (!weekListEl) return;
-      weekListEl.innerHTML = '';
+    function renderWeeklyTable(weeks) {
+      if (!weeklyTableBody) return;
+      weeklyTableBody.innerHTML = '';
       if (!weeks || weeks.length === 0) {
-        weekListEl.innerHTML = '<li class="week-content-empty">目前尚未有任何週記，點右上角「新增週記」開始撰寫。</li>';
+        weeklyTableBody.innerHTML = `
+          <tr>
+            <td colspan="5" class="weekly-status-empty">目前尚未有任何週記，點右上角「新增週記」開始撰寫。</td>
+          </tr>
+        `;
         return;
       }
       weeks.forEach((w, idx) => {
-        const li = document.createElement('li');
-        li.className = 'week-item' + (idx === 0 ? ' active' : '');
-        li.dataset.weekId = w.id;
-        li.innerHTML = `
-          <div>
-            <div class="week-title">${w.title || ('第 ' + (idx + 1) + ' 週')}</div>
-            <div class="week-meta">${w.period || ''} · 建立於 ${w.created_at || ''}</div>
-          </div>
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${idx + 1}</td>
+          <td>${w.title || ''}</td>
+          <td>${w.due_date || ''}</td>
+          <td>${w.filled_at || ''}</td>
+          <td>
+            <span class="${w.reviewed ? 'weekly-status-done' : 'weekly-status-empty'}">
+              ${w.reviewed ? '已批閱' : '未批閱'}
+            </span>
+          </td>
         `;
-        li.addEventListener('click', () => selectWeek(w.id));
-        weekListEl.appendChild(li);
+        weeklyTableBody.appendChild(tr);
       });
-      selectWeek(weeks[0].id);
-    }
-
-    function selectWeek(weekId) {
-      const week = mockWeeks.find(w => w.id === weekId);
-      if (!week || !weekDetailTitleEl || !weekDetailContentEl) return;
-      document.querySelectorAll('.week-item').forEach(el => {
-        el.classList.toggle('active', el.dataset.weekId === String(weekId));
-      });
-      weekDetailTitleEl.textContent = week.title;
-      weekDetailMetaEl.textContent = (week.period || '') + (week.created_at ? ' · 建立於 ' + week.created_at : '');
-      weekDetailTagsEl.innerHTML = '';
-      (week.tags || []).forEach(t => {
-        const span = document.createElement('span');
-        span.className = 'tag-pill';
-        span.textContent = t;
-        weekDetailTagsEl.appendChild(span);
-      });
-      weekDetailContentEl.className = 'week-content';
-      weekDetailContentEl.textContent = week.content || '';
     }
 
     async function loadInternSummary() {
@@ -464,7 +418,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       loadInternSummary();
-      renderWeekList(mockWeeks);
+      renderWeeklyTable(mockWeeks);
       const newBtn = document.getElementById('newWeeklyBtn');
       if (newBtn) {
         newBtn.addEventListener('click', () => {
