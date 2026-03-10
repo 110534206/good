@@ -2,6 +2,7 @@ from flask import Blueprint, request, send_file, session,jsonify, render_templat
 from werkzeug.security import generate_password_hash
 from config import get_db
 from datetime import datetime
+import re
 import traceback
 
 admin_bp = Blueprint("admin_bp", __name__, url_prefix='/admin')
@@ -98,6 +99,36 @@ def _post_process_users(users, active_semester_year=None):
                 user['class_display'] = '-'
         else:
             user['class_display'] = '-'
+        # 帶班列表、指導學生所屬班級：由「110屆資管科忠」改為「資管科四忠」（年級數字）
+        grade_chars = ('一', '二', '三', '四', '五', '六')
+        def _format_class_with_grade(s):
+            if not s or not isinstance(s, str):
+                return s
+            out = []
+            for part in [p.strip() for p in s.split(',') if p.strip()]:
+                m = re.match(r'^(\d+)屆(.+)$', part)
+                if m and active_semester_year is not None:
+                    try:
+                        ay = int(m.group(1))
+                        suffix = (m.group(2) or '').strip()
+                        grade_num = active_semester_year - ay + 1
+                        if 1 <= grade_num <= 6 and suffix:
+                            gc = grade_chars[grade_num - 1]
+                            if len(suffix) >= 1 and suffix[-1] in '忠孝仁愛義禮':
+                                out.append(suffix[:-1] + gc + suffix[-1])
+                            else:
+                                out.append(suffix + gc)
+                        else:
+                            out.append(part)
+                    except (ValueError, TypeError):
+                        out.append(part)
+                else:
+                    out.append(part)
+            return ', '.join(out) if out else s
+        if user.get('teaching_classes'):
+            user['teaching_classes'] = _format_class_with_grade(user['teaching_classes'])
+        if user.get('guided_classes'):
+            user['guided_classes'] = _format_class_with_grade(user['guided_classes'])
     return users
 
 @admin_bp.route('/api/current_semester_year', methods=['GET'])
