@@ -120,9 +120,9 @@
     }
 
     main {
-      max-width: 1200px;
+      max-width: 1320px;
       margin: 0 auto;
-      padding: 24px 20px 40px;
+      padding: 24px 24px 40px;
     }
     .page-header {
       display: flex;
@@ -148,28 +148,31 @@
       align-items: center;
       gap: 6px;
     }
+    .weekly-container-card {
+      border-radius: 16px;
+      border: 1px solid #d4d4d8;
+      background: #ffffff;
+      padding: 16px 22px 22px;
+      box-shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
+    }
     .intern-summary-card {
-      border-radius: 12px;
-      border: 1px solid #cbd5e1;
-      background: #f8fafc;
-      padding: 10px 16px 12px;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
     }
     .intern-summary-title {
-      font-size: 0.9rem;
+      font-size: 1.1rem;
       font-weight: 600;
       color: #0f172a;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
     .intern-summary-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.9rem;
+      font-size: 1.1rem;
     }
     .intern-summary-table thead th {
       background: #3b82f6;
       color: #fff;
-      padding: 6px 10px;
+      padding: 8px 10px;
       text-align: center;
       font-weight: 600;
     }
@@ -178,37 +181,36 @@
       text-align: center;
       background: #fff;
       border-bottom: 1px solid #e5e7eb;
+      color: #0f172a;
     }
 
 
     /* 週記列表表格風格（參考你提供的截圖） */
     .weekly-table-card {
-      border-radius: 12px;
-      border: 1px solid #cbd5e1;
-      background: #fff;
-      padding: 10px 14px 16px;
+      padding: 4px 0 0;
     }
     .weekly-table-card-title {
-      font-size: 1rem;
+      font-size: 1.1rem;
       font-weight: 600;
       color: #0f172a;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
     .weekly-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.9rem;
+      font-size: 1.1rem;
     }
     .weekly-table thead th {
-      background: #1e293b;
+      background: #3b82f6;
       color: #fff;
-      padding: 6px 10px;
+      padding: 8px 10px;
       text-align: center;
     }
     .weekly-table tbody td {
       padding: 6px 10px;
       text-align: center;
       border-bottom: 1px solid #e5e7eb;
+      color: #0f172a;
     }
     .weekly-table tbody tr:nth-child(odd) {
       background-color: #edf2ff;
@@ -259,56 +261,107 @@
   </nav>
 
   <main>
-    <section class="intern-summary-card" aria-label="實習課程資訊">
-      <div class="intern-summary-title">實習課程資訊</div>
-      <table class="intern-summary-table">
-        <thead>
-          <tr>
-            <th style="width: 15%;">學期別</th>
-            <th style="width: 35%;">課程名稱</th>
-            <th style="width: 50%;">實習單位</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td id="weeklySemester">—</td>
-            <td id="weeklyCourseName">—</td>
-            <td id="weeklyCompanyName">—</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="page-header" aria-label="實習週記標題">
-      <div>
-        <div class="page-header-title">實習週記</div>
-        <div class="page-header-subtitle">記錄每一週的學習重點、遇到的挑戰，以及你的成長。</div>
-      </div>
-      <button id="newWeeklyBtn" class="btn btn-primary btn-primary-round">
-        <span>＋ 新增週記</span>
-      </button>
-    </section>
-
-    <section class="weekly-table-card" aria-label="實習週記列表">
-      <div class="weekly-table-card-title">實習週記列表</div>
-      <div class="table-responsive">
-        <table class="weekly-table">
+    <section class="weekly-container-card" aria-label="實習課程與週記">
+      <section class="intern-summary-card" aria-label="實習課程資訊">
+        <div class="intern-summary-title">實習課程資訊</div>
+        <table class="intern-summary-table">
           <thead>
             <tr>
-              <th style="width: 8%;">序號</th>
-              <th style="width: 32%;">標題</th>
-              <th style="width: 20%;">應填日期</th>
-              <th style="width: 20%;">填寫日期</th>
-              <th style="width: 20%;">操作</th>
+              <th style="width: 15%;">學期別</th>
+              <th style="width: 35%;">課程名稱</th>
+              <th style="width: 50%;">實習單位</th>
             </tr>
           </thead>
-          <tbody id="weeklyTableBody">
-            <!-- 週記列表將由 JavaScript 動態載入 -->
+          <tbody>
+            <tr>
+              <td id="weeklySemester">—</td>
+              <td id="weeklyCourseName">—</td>
+              <td id="weeklyCompanyName">—</td>
+            </tr>
           </tbody>
         </table>
-      </div>
+      </section>
+
+      <section class="weekly-table-card" aria-label="實習週記列表">
+        <div class="weekly-table-card-title">實習週記列表</div>
+        <div class="table-responsive">
+          <table class="weekly-table">
+            <thead>
+              <tr>
+                <th style="width: 8%;">序號</th>
+                <th style="width: 32%;">週次 / 標題</th>
+                <th style="width: 18%;">應繳日期</th>
+                <th style="width: 18%;">實際繳交</th>
+                <th style="width: 14%;">批閱狀態</th>
+                <th style="width: 10%;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="weeklyTableBody">
+              <!-- 週記列表將由 JavaScript 動態載入 -->
+            </tbody>
+          </table>
+        </div>
+      </section>
     </section>
   </main>
+
+  <!-- 週記填寫 / 檢視 Modal -->
+  <div class="modal fade" id="weeklyDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">實習週記內容</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">學期別</label>
+            <input type="text" class="form-control" id="detailSemester" readonly>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">標題</label>
+            <input type="text" class="form-control" id="detailTitle" placeholder="請輸入本週週記標題">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">實習單位</label>
+            <input type="text" class="form-control" id="detailCompany" readonly>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">實習工作記要</label>
+            <textarea class="form-control" id="detailWorkNotes" rows="4" placeholder="請描述本週主要工作內容與任務"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">學習心得</label>
+            <textarea class="form-control" id="detailReflection" rows="4" placeholder="請分享本週的收穫、感想或需要改進之處"></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">上傳檔案</label>
+            <input type="text" class="form-control mb-2" id="detailFileName" placeholder="目前上傳檔案名稱" readonly>
+            <input type="file" class="form-control">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">填寫日期</label>
+            <input type="text" class="form-control" id="detailFilledAt" readonly>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">老師評語</label>
+            <textarea class="form-control" id="detailTeacherComment" rows="3" readonly></textarea>
+          </div>
+          <div class="mb-0">
+            <label class="form-label">老師批閱時間</label>
+            <input type="text" class="form-control" id="detailReviewedAt" readonly>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+          <button type="button" class="btn btn-primary">暫存週記</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS（供 Modal 使用） -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
     // 開關側邊選單（與其他頁面一致）
@@ -335,35 +388,65 @@
         title: '2/17~2/27實習週記',
         due_date: '2025-02-17',
         filled_at: '2025-02-28 19:20:10',
-        reviewed: true
+        reviewed: true,
+        company: '卓航科技股份有限公司',
+        work_notes: '本週熟悉公司開發流程，協助撰寫簡單的功能模組並參加部門會議。',
+        reflection: '透過實作了解版本控制與 code review 的重要性，也發現自己在時間管理上還可以再調整。',
+        file_name: 'week1_report.docx',
+        teacher_comment: '表現積極，能主動詢問並按時完成指派的任務。',
+        reviewed_at: '2025-03-01 10:15:00'
       },
       {
         id: 2,
         title: '3/3~3/14實習週記',
         due_date: '2025-03-03',
         filled_at: '2025-03-14 21:24:14',
-        reviewed: true
+        reviewed: true,
+        company: '卓航科技股份有限公司',
+        work_notes: '本週協助撰寫測試案例，並觀摩正式上線流程。',
+        reflection: '開始能獨立完成指定的測試項目，但還需要加強文件整理能力。',
+        file_name: 'week2_report.docx',
+        teacher_comment: '對系統測試流程已有基本概念，建議多練習撰寫測試報告。',
+        reviewed_at: '2025-03-16 09:40:00'
       },
       {
         id: 3,
         title: '3/17~3/28實習週記',
         due_date: '2025-03-17',
         filled_at: '2025-03-28 23:22:47',
-        reviewed: true
+        reviewed: true,
+        company: '卓航科技股份有限公司',
+        work_notes: '嘗試修改既有功能的 bug，並與同事合作排查問題來源。',
+        reflection: '學到如何使用除錯工具追蹤問題，也更了解團隊協作的重要性。',
+        file_name: 'week3_report.docx',
+        teacher_comment: '能主動找出問題並提出解決方式，值得肯定。',
+        reviewed_at: '2025-03-30 15:22:00'
       },
       {
         id: 4,
         title: '3/31~4/11實習週記',
         due_date: '2025-03-31',
         filled_at: '2025-04-11 23:32:50',
-        reviewed: true
+        reviewed: true,
+        company: '卓航科技股份有限公司',
+        work_notes: '本週協助撰寫使用說明文件，並與同事討論畫面優化建議。',
+        reflection: '發現自己在說明技術內容時還不夠精簡，未來會多練習表達與整理。',
+        file_name: 'week4_report.docx',
+        teacher_comment: '文件內容完整，但可以再精簡重點，方便讀者快速了解。',
+        reviewed_at: '2025-04-13 11:05:00'
       },
       {
         id: 5,
         title: '4/14~4/25實習週記',
         due_date: '2025-04-14',
         filled_at: '2025-04-26 00:00:19',
-        reviewed: true
+        reviewed: true,
+        company: '卓航科技股份有限公司',
+        work_notes: '協助整理專案收尾相關資料，並參與成果簡報準備。',
+        reflection: '回顧整體實習過程，對未來職涯方向有更清楚的想法。',
+        file_name: 'week5_report.docx',
+        teacher_comment: '整體實習表現穩定，具備良好的學習態度與合作精神。',
+        reviewed_at: '2025-04-28 14:30:00'
       }
     ];
 
@@ -375,7 +458,7 @@
       if (!weeks || weeks.length === 0) {
         weeklyTableBody.innerHTML = `
           <tr>
-            <td colspan="5" class="weekly-status-empty">目前尚未有任何週記，點右上角「新增週記」開始撰寫。</td>
+            <td colspan="6" class="weekly-status-empty">目前尚未有任何週記紀錄。</td>
           </tr>
         `;
         return;
@@ -384,17 +467,67 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${idx + 1}</td>
-          <td>${w.title || ''}</td>
-          <td>${w.due_date || ''}</td>
-          <td>${w.filled_at || ''}</td>
+          <td>${w.title || '—'}</td>
+          <td>${w.due_date || '—'}</td>
+          <td>${w.filled_at || '—'}</td>
           <td>
             <span class="${w.reviewed ? 'weekly-status-done' : 'weekly-status-empty'}">
               ${w.reviewed ? '已批閱' : '未批閱'}
             </span>
           </td>
+          <td>
+            <button type="button"
+                    class="btn btn-sm btn-outline-primary"
+                    onclick="handleWeeklyAction(${w.id || 'null'})">
+              填寫 / 檢視
+            </button>
+          </td>
         `;
         weeklyTableBody.appendChild(tr);
       });
+    }
+
+    function handleWeeklyAction(id) {
+      if (!id) {
+        alert('尚未取得此週記的代號。');
+        return;
+      }
+      const week = mockWeeks.find(w => w.id === id);
+      const semesterEl = document.getElementById('detailSemester');
+      const titleEl = document.getElementById('detailTitle');
+      const companyEl = document.getElementById('detailCompany');
+      const workEl = document.getElementById('detailWorkNotes');
+      const reflectionEl = document.getElementById('detailReflection');
+      const fileEl = document.getElementById('detailFileName');
+      const filledDateEl = document.getElementById('detailFilledAt');
+      const teacherCommentEl = document.getElementById('detailTeacherComment');
+      const reviewedAtEl = document.getElementById('detailReviewedAt');
+
+      if (week) {
+        titleEl.value = week.title || '';
+        companyEl.value = week.company || (document.getElementById('weeklyCompanyName')?.textContent || '');
+        workEl.value = week.work_notes || '';
+        reflectionEl.value = week.reflection || '';
+        fileEl.value = week.file_name || '';
+        filledDateEl.value = week.filled_at || '';
+        teacherCommentEl.value = week.teacher_comment || '';
+        reviewedAtEl.value = week.reviewed_at || '';
+      } else {
+        titleEl.value = '';
+        companyEl.value = document.getElementById('weeklyCompanyName')?.textContent || '';
+        workEl.value = '';
+        reflectionEl.value = '';
+        fileEl.value = '';
+        filledDateEl.value = '';
+        teacherCommentEl.value = '';
+        reviewedAtEl.value = '';
+      }
+
+      semesterEl.value = document.getElementById('weeklySemester')?.textContent || '';
+
+      const modalEl = document.getElementById('weeklyDetailModal');
+      const modal = new bootstrap.Modal(modalEl);
+      modal.show();
     }
 
     async function loadInternSummary() {
@@ -418,13 +551,8 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       loadInternSummary();
-      renderWeeklyTable(mockWeeks);
-      const newBtn = document.getElementById('newWeeklyBtn');
-      if (newBtn) {
-        newBtn.addEventListener('click', () => {
-          alert('未來可在此導向「新增週記」編輯頁面或彈窗。');
-        });
-      }
+      // 初始不帶任何週記資料，讓表格保持空白（之後串接後端再載入）
+      renderWeeklyTable([]);
     });
   </script>
 </body>
