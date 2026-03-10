@@ -532,11 +532,6 @@
                           <option value="3">3 學分</option>
                         </select>
                       </div>
-                      <div class="col-md-3">
-                        <button type="button" class="btn btn-outline-danger btn-sm w-100" id="toggle-diff-courses-btn">
-                          只看差異課程：關
-                        </button>
-                      </div>
                     </div>
                   </th>
                 </tr>
@@ -573,6 +568,12 @@
               </tfoot>
 
             </table>
+
+            <div class="mb-2">
+              <button type="button" class="btn btn-outline-danger btn-sm" id="toggle-diff-courses-btn">
+                只看差異課程：關
+              </button>
+            </div>
 
             <div class="card p-4 mb-3">
               <h5 class="text-secondary">成績單上傳 <span class="text-danger">*</span></h5>
@@ -4915,9 +4916,9 @@
                         </table>
                     </div>
                     <div class="form-check mt-2">
-                        <input class="form-check-input" type="checkbox" id="onlyUpdateCheck">
+                        <input class="form-check-input" type="checkbox" id="onlyUpdateCheck" checked disabled>
                         <label class="form-check-label small" for="onlyUpdateCheck">
-                            僅執行「更新」操作 (忽略新增課程)
+                            僅執行「更新」、不新增 AI 辨識的科目
                         </label>
                     </div>
                 </div>
@@ -4935,7 +4936,7 @@
             }).then((result) => {
                 if (!result.isConfirmed) return;
 
-                const onlyUpdate = document.getElementById('onlyUpdateCheck').checked;
+                const onlyUpdate = true;
                 let updatedCount = 0;
                 let newCount = 0;
 
@@ -4950,8 +4951,8 @@
                             allCoursesData[matchIndex].isNotTaken = false;
                             updatedCount++;
                         }
-                    } else if (action === 'add' && !onlyUpdate) {
-                        // 新增
+                    } else if (action === 'add' && false) {
+                        // 不新增 AI 辨識的科目
                         allCoursesData.push(ocrCourse);
                         newCount++;
                     }
@@ -5111,7 +5112,7 @@
                             importBtn.id = 'btn-import-ocr-courses';
                             importBtn.type = 'button'; // 🟢 [修正] 明確指定 type="button" 防止觸發表單提交
                             importBtn.className = 'btn btn-success btn-sm mt-3 w-100';
-                            importBtn.innerHTML = `<i class="bi bi-search"></i> AI 成績單比對：以 Excel 為正確來源，檢查 AI 識別與成績檔的差異（可手動修改）`;
+                            importBtn.innerHTML = `<i class="bi bi-search"></i> AI 成績單比對：以 Excel「已修習必修科目」為準，AI 只辨識成績單上第一～三學年必修並比對差異（可手動修改）`;
                             importBtn.onclick = () => importOcrCourses_v2(parsedCourses);
                             
                             // Insert button before disclaimer logic (modified for split view)
@@ -5195,7 +5196,7 @@
             if (!allCoursesData || allCoursesData.length === 0) {
                 Swal.fire({
                     title: '請先匯入成績檔',
-                    text: 'Excel 成績檔為正確來源。請先匯入 Excel，再上傳成績單圖片，由 AI 識別課程與成績並比對差異，若有不同可手動修改。',
+                    text: '請先匯入 Excel「已修習專業核心科目」（必修）。AI 只會辨識成績單上第一學年到第三學年的必修科目，再與 Excel 比對差異。',
                     icon: 'warning',
                     confirmButtonText: '我知道了'
                 });
@@ -5368,7 +5369,7 @@
                             </div>
                         </div>
                     </div>
-                    <p class="small text-muted mb-2">以<strong>當年實習學期</strong>的成績檔（Excel）為正確答案，AI 只辨識成績單上對應的課程與成績並比對。有不一樣的地方可以在下面課程表手動改，或按「套用」一次更新。</p>
+                    <p class="small text-muted mb-2">以<strong>Excel「已修習必修科目」</strong>為正確答案；AI 只辨識成績單上<strong>第一學年到第三學年的必修</strong>並比對。有不一樣的地方可以在下面課程表手動改，或按「套用」一次更新。</p>
                     ${totalDiffCount > 0 ? `
                         <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
                             <table class="table table-sm table-bordered align-middle">
@@ -5394,16 +5395,16 @@
                         </div>
                     `}
                     <div class="form-check mt-2">
-                        <input class="form-check-input" type="checkbox" id="onlyUpdateCheck">
+                        <input class="form-check-input" type="checkbox" id="onlyUpdateCheck" checked disabled>
                         <label class="form-check-label small" for="onlyUpdateCheck">
-                            只修正「不一樣」的（以 Excel 為準），不加入 AI 多抓的課
+                            只修正「不一樣」的（以 Excel 為準），<strong>不新增</strong> AI 多抓的課
                         </label>
                     </div>
                 </div>
             `;
 
             Swal.fire({
-                title: `AI 成績單比對結果（依實習學期成績檔）`,
+                title: `AI 成績單比對結果（Excel 必修 · 第一～三學年）`,
                 html: previewHtml,
                 icon: 'info',
                 showCancelButton: true,
@@ -5413,7 +5414,7 @@
             }).then((result) => {
                 if (!result.isConfirmed) return;
 
-                const onlyUpdate = document.getElementById('onlyUpdateCheck').checked;
+                const onlyUpdate = true;
                 let updatedCount = 0;
                 let newCount = 0;
                 clearCourseDiffMarkers();
@@ -5439,7 +5440,7 @@
                             allCoursesData[matchIndex].diffStatus = 'updated';
                             updatedCount++;
                         }
-                    } else if (action === 'add' && !onlyUpdate) {
+                    } else if (action === 'add' && false) {
                         ocrCourse.diffStatus = 'added';
                         allCoursesData.push(ocrCourse);
                         newCount++;
@@ -5456,7 +5457,7 @@
                 applyFilterAndSearch();
                 saveFormData(); 
 
-                Swal.fire('比對完成', `已套用：修正 ${updatedCount} 筆、新增 AI 辨識的 ${newCount} 筆。Excel 才有 ${missingCount} 筆僅供參考，可隨時在課程表手動改。`, 'success');
+                Swal.fire('比對完成', `已套用：修正 ${updatedCount} 筆（未新增任何 AI 多抓的科目）。Excel 才有 ${missingCount} 筆僅供參考，可隨時在課程表手動改。`, 'success');
                 
                 // Highlight updated rows
                 // 🟢 [修正] 明確指定要捲動到的課程表格 (courseTableBody 的父表格)
