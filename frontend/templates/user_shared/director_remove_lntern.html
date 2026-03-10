@@ -211,23 +211,88 @@
     .alert-danger { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
     #errorMessage { display: none; }
     #errorMessage.show { display: block; }
+    /* 預覽彈窗與老師退實習詳情頁相同設定 */
     .preview-backdrop {
       position: fixed; inset: 0; background: rgba(15,23,42,0.4); z-index: 2000;
       display: none; align-items: center; justify-content: center; padding: 24px;
     }
     .preview-backdrop.show { display: flex; }
     .preview-content {
-      max-width: 560px; max-height: 85vh; background: #fff; border-radius: 14px;
-      box-shadow: 0 16px 48px rgba(0,0,0,0.2); overflow: hidden; display: flex; flex-direction: column;
+      max-width: 1160px; width: 100%; max-height: 90vh; background: #fff; border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06); border: 1px solid rgba(255,255,255,0.8);
+      overflow: hidden; display: flex; flex-direction: column;
     }
-    .preview-header { padding: 16px 20px; border-bottom: 1px solid #e2e8f0; font-weight: 700; font-size: 1.1rem; color: #0f172a; }
-    .preview-body { padding: 20px; overflow-y: auto; flex: 1; }
-    .preview-body .detail-block { background: #f8fafc; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; border: 1px solid #e2e8f0; }
-    .preview-body .detail-block h3 { font-size: 0.95rem; color: #334155; margin-bottom: 8px; }
-    .preview-body .detail-block .value { color: #1e293b; white-space: pre-wrap; word-break: break-word; font-size: 0.9rem; }
-    .preview-body .detail-block .label { color: #64748b; font-size: 0.9rem; margin-right: 6px; }
-    .preview-body .attachment-img-wrap { max-height: 200px; overflow: hidden; border-radius: 8px; margin-bottom: 8px; }
-    .preview-body .attachment-img-wrap img { max-height: 200px; width: auto; max-width: 100%; object-fit: contain; }
+    .preview-header {
+      padding: 32px 32px 12px; font-weight: 700; font-size: 1.2rem; color: #0f172a;
+      border-bottom: 2px solid #e2e8f0; margin-bottom: 0;
+    }
+    .preview-body { padding: 32px; overflow-y: auto; flex: 1; }
+    .preview-body .detail-block {
+      background: #f8fafc; border-radius: 12px; padding: 18px 20px; margin-bottom: 20px;
+      border: 1px solid #e2e8f0;
+    }
+    .preview-body .detail-block h3 { font-size: 1rem; color: #334155; margin-bottom: 10px; }
+    .preview-body .detail-block .label { color: #64748b; font-size: 0.9rem; }
+    .preview-body .detail-block .value { color: #1e293b; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+    .preview-body .detail-block.attachment-card {
+      background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;
+    }
+    .preview-body .attachment-title { font-size: 1.15rem; font-weight: 700; color: #334155; margin-bottom: 4px; }
+    /* 與老師退實習詳情一致的佐證區塊 */
+    .preview-body .attachment-links { list-style: none; padding: 0; margin: 0; }
+    .preview-body .attachment-links li.attachment-item-image {
+      margin-bottom: 20px; padding: 0; background: transparent; border: none; box-shadow: none;
+      display: flex; flex-direction: row; align-items: flex-start; gap: 12px;
+    }
+    .preview-body .attachment-img-card {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;
+      margin-bottom: 0; max-width: 50%; margin-left: 0; margin-right: auto;
+    }
+    .preview-body .attachment-img-wrap {
+      position: relative; height: 250px; width: 100%; overflow: hidden; border-radius: 10px;
+      background: #fafbfc; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      border: 1px solid #e2e8f0; transition: box-shadow 0.2s ease;
+    }
+    .preview-body .attachment-img-wrap:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .preview-body .attachment-img-wrap img {
+      max-height: 250px; width: auto; max-width: 100%; object-fit: contain; display: block; border-radius: 12px;
+    }
+    .preview-body .attachment-img-caption { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .preview-body .attachment-img-caption .caption-filename {
+      color: #2563eb; font-size: 0.9rem; text-decoration: none; min-width: 0;
+    }
+    .preview-body .attachment-img-caption .caption-filename:hover { color: #1d4ed8; text-decoration: underline; }
+    .preview-body .attachment-files-section {
+      background: #fff; border-radius: 12px; padding: 14px 18px; margin-top: 4px;
+    }
+    .preview-body .attachment-file-row {
+      padding: 10px 0; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 12px; width: 100%;
+    }
+    .preview-body .attachment-files-section .attachment-file-row:last-child { border-bottom: none; }
+    .preview-body .attachment-file-row .file-info { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+    .preview-body .attachment-file-row .file-info a { color: #0454a3; text-decoration: none; font-size: 0.95rem; }
+    .preview-body .attachment-file-row .file-info a:hover { text-decoration: underline; }
+    .preview-body .attachment-file-size { font-size: 0.85rem; color: #94a3b8; margin-left: 4px; }
+    /* 圖片全圖預覽彈窗（與老師一致） */
+    .img-preview-backdrop {
+      position: fixed; inset: 0; background: rgba(15,23,42,0.4); z-index: 2100;
+      display: none; align-items: center; justify-content: center; padding: 24px;
+    }
+    .img-preview-backdrop.show { display: flex; }
+    .img-preview-backdrop .preview-content {
+      max-width: 50vw; max-height: 82vh; background: #fff; border-radius: 14px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.2); position: relative;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .img-preview-backdrop .preview-content img {
+      display: block; max-width: 100%; max-height: 75vh; width: auto; height: auto; border-radius: 10px; object-fit: contain;
+    }
+    .img-preview-close {
+      position: absolute; top: -12px; right: -12px; width: 36px; height: 36px;
+      border-radius: 50%; border: none; background: #1e293b; color: #fff; font-size: 1.4rem; line-height: 1;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .img-preview-close:hover { background: #475569; }
     .preview-close {
       position: absolute; top: 12px; right: 16px; width: 32px; height: 32px;
       border-radius: 50%; border: none; background: #1e293b; color: #fff; font-size: 1.2rem; cursor: pointer;
@@ -299,7 +364,7 @@
     </div>
   </div>
 
-  <!-- 退實習案件預覽彈窗（唯讀） -->
+  <!-- 退實習案件預覽彈窗（唯讀，版面與老師退實習詳情一致） -->
   <div id="previewBackdrop" class="preview-backdrop" role="dialog" aria-modal="true" aria-label="退實習案件預覽">
     <div class="preview-content" style="position: relative;">
       <button type="button" class="preview-close" id="previewCloseBtn" aria-label="關閉預覽">×</button>
@@ -307,18 +372,37 @@
       <div class="preview-body" id="previewBody">
         <div class="detail-block">
           <h3>解約報告</h3>
-          <p class="value"><span class="label">原因類別：</span><span id="previewReasonCategory">—</span></p>
-          <p class="value" style="margin-top: 8px;"><span class="label">具體說明：</span><span id="previewReasonDetail">—</span></p>
+          <p class="label">原因類別</p>
+          <p class="value" id="previewReasonCategory">—</p>
+          <p class="label" style="margin-top: 12px;">具體說明</p>
+          <p class="value" id="previewReasonDetail">—</p>
+        </div>
+        <div class="detail-block attachment-card" id="previewAttachmentsBlock" style="display: none;">
+          <h3 class="attachment-title">廠商佐證 (圖片/檔案)</h3>
+          <ul id="previewAttachmentsList" class="attachment-links"></ul>
+        </div>
+        <div class="detail-block">
+          <h3>實習生資訊</h3>
+          <p class="label">學生姓名</p>
+          <p class="value" id="previewStudentName">—</p>
+          <p class="label" style="margin-top: 8px;">學號</p>
+          <p class="value" id="previewStudentNumber">—</p>
+          <p class="label" style="margin-top: 8px;">實習單位／職缺</p>
+          <p class="value" id="previewCompanyJob">—</p>
         </div>
         <div class="detail-block" id="previewMeetingBlock">
           <h3>與學生訪談紀錄</h3>
+          <p class="label">指導老師填寫的與該學生訪談紀錄</p>
           <p class="value" id="previewMeetingNotes">—</p>
         </div>
-        <div class="detail-block" id="previewAttachmentsBlock" style="display: none;">
-          <h3>廠商佐證 (圖片/檔案)</h3>
-          <div id="previewAttachmentsList"></div>
-        </div>
       </div>
+    </div>
+  </div>
+  <!-- 圖片全圖預覽（與老師一致） -->
+  <div id="imgPreviewBackdrop" class="img-preview-backdrop" role="dialog" aria-modal="true" aria-label="預覽圖片">
+    <div class="preview-content">
+      <button type="button" class="img-preview-close" id="imgPreviewCloseBtn" aria-label="關閉預覽">×</button>
+      <img id="imgPreviewImg" src="" alt="佐證圖片預覽">
     </div>
   </div>
 
@@ -421,6 +505,19 @@
 
       var previewBackdrop = document.getElementById('previewBackdrop');
       var previewCloseBtn = document.getElementById('previewCloseBtn');
+      var imgPreviewBackdrop = document.getElementById('imgPreviewBackdrop');
+      var imgPreviewImg = document.getElementById('imgPreviewImg');
+      var imgPreviewCloseBtn = document.getElementById('imgPreviewCloseBtn');
+      function showImgPreview(url) {
+        if (url && imgPreviewImg) imgPreviewImg.src = url.replace(/&amp;/g, '&');
+        if (imgPreviewBackdrop) { imgPreviewBackdrop.classList.add('show'); imgPreviewBackdrop.setAttribute('aria-hidden', 'false'); }
+      }
+      function closeImgPreview() {
+        if (imgPreviewBackdrop) { imgPreviewBackdrop.classList.remove('show'); imgPreviewBackdrop.setAttribute('aria-hidden', 'true'); }
+      }
+      if (imgPreviewCloseBtn && imgPreviewBackdrop) imgPreviewCloseBtn.addEventListener('click', closeImgPreview);
+      if (imgPreviewBackdrop) imgPreviewBackdrop.addEventListener('click', function (e) { if (e.target === imgPreviewBackdrop) closeImgPreview(); });
+
       function openPreview(recordId) {
         if (!recordId) return;
         fetch('/director/api/withdraw_case_detail?id=' + encodeURIComponent(recordId), { credentials: 'same-origin' })
@@ -433,18 +530,46 @@
             var d = res.data;
             document.getElementById('previewReasonCategory').textContent = d.reason_category || '—';
             document.getElementById('previewReasonDetail').textContent = d.reason_detail || '—';
+            document.getElementById('previewStudentName').textContent = d.student_name || '—';
+            document.getElementById('previewStudentNumber').textContent = d.student_number || '—';
+            document.getElementById('previewCompanyJob').textContent = ((d.company_name || '') + (d.job_title ? '／' + d.job_title : '')) || '—';
             document.getElementById('previewMeetingNotes').textContent = (d.teacher_meeting_notes || '').trim() || '—';
+
             var list = document.getElementById('previewAttachmentsList');
             var block = document.getElementById('previewAttachmentsBlock');
             if (d.attachments && d.attachments.length > 0) {
               block.style.display = 'block';
-              list.innerHTML = d.attachments.map(function (a) {
-                var url = (a.url || '').replace(/^\/*/, '/');
-                if ((a.file_type || '').toLowerCase() === 'image' || /\.(jpg|jpeg|png|gif|webp)$/i.test(a.original_filename || '')) {
-                  return '<div class="detail-block"><div class="attachment-img-wrap"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener"><img src="' + escapeHtml(url) + '" alt=""></a></div><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' + escapeHtml(a.original_filename || '') + '</a></div>';
+              var images = [];
+              var fileRows = [];
+              d.attachments.forEach(function (a) {
+                var isImg = (a.file_type || '').toLowerCase() === 'image' || /\.(jpg|jpeg|png|gif|webp)$/i.test(a.original_filename || '');
+                var text = a.original_filename || '佐證檔案';
+                var url = (a.url || '').replace(/^\/*/, '/').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                var rawUrl = (a.url || '').replace(/^\/*/, '/').replace(/"/g, '&quot;');
+                if (isImg) {
+                  images.push('<li class="attachment-item-image">' +
+                    '<div class="attachment-img-card">' +
+                    '<div class="attachment-img-wrap" data-preview-url="' + url + '" role="button" tabindex="0" title="點擊查看全圖">' +
+                    '<img src="' + rawUrl + '" alt="" loading="lazy">' +
+                    '</div>' +
+                    '<div class="attachment-img-caption">' +
+                    '<a href="' + url + '" target="_blank" rel="noopener" class="caption-filename">' + escapeHtml(text) + '</a>' +
+                    '</div></div></li>');
+                } else {
+                  var sizeHtml = (a.file_size ? ' <span class="attachment-file-size">(' + escapeHtml(a.file_size) + ')</span>' : '');
+                  fileRows.push('<div class="attachment-file-row">' +
+                    '<div class="file-info"><a href="' + url + '" target="_blank" rel="noopener">' + escapeHtml(text) + '</a>' + sizeHtml + '</div>' +
+                    '</div>');
                 }
-                return '<div class="detail-block"><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' + escapeHtml(a.original_filename || '下載檔案') + '</a></div>';
-              }).join('');
+              });
+              list.innerHTML = images.join('') + (fileRows.length ? '<li class="attachment-item-file"><div class="attachment-files-section">' + fileRows.join('') + '</div></li>' : '');
+
+              list.querySelectorAll('.attachment-img-wrap').forEach(function (el) {
+                el.addEventListener('click', function () {
+                  var u = el.getAttribute('data-preview-url');
+                  if (u) showImgPreview(u.replace(/&amp;/g, '&'));
+                });
+              });
             } else {
               block.style.display = 'none';
               list.innerHTML = '';

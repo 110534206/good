@@ -5982,7 +5982,6 @@ def director_get_withdraw_case_detail():
         cursor.execute("""
             SELECT ir.id, ir.semester_id, ir.vendor_id, ir.company_id, ir.student_id,
                    ir.reason_category, ir.reason_detail, ir.status, ir.created_at,
-                   ir.teacher_reason, ir.teacher_meeting_notes,
                    ic.company_name
             FROM internship_records ir
             JOIN internship_companies ic ON ic.id = ir.company_id
@@ -5993,7 +5992,8 @@ def director_get_withdraw_case_detail():
             cursor.close()
             conn.close()
             return jsonify({"success": False, "message": "案件不存在或尚未經指導老師確認"}), 404
-        row["teacher_meeting_notes"] = (row.get("teacher_reason") or row.get("teacher_meeting_notes") or "").strip()
+        # internship_records 目前 schema 無 teacher_reason / teacher_meeting_notes，預覽時留空
+        row["teacher_meeting_notes"] = ""
         cursor.execute("SELECT u.id, u.name AS student_name, u.username AS student_number FROM users u WHERE u.id = %s", (row["student_id"],))
         student = cursor.fetchone()
         cursor.execute("""
