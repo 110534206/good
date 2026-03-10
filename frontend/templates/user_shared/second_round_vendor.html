@@ -12,6 +12,11 @@
     .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
     .company-block { border: 1px solid #e2e8f0; border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; background: #fff; }
     .company-block h6 { margin-bottom: 1rem; color: #1e293b; }
+    .assigned-table { font-size: 0.9rem; }
+    .assigned-table th { background: #f8fafc; font-weight: 600; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-accepted { background: #d1fae5; color: #065f46; }
+    .badge-rejected { background: #fee2e2; color: #991b1b; }
   </style>
 </head>
 <body>
@@ -32,6 +37,26 @@
       <div class="mt-3">
         <button type="button" class="btn btn-primary" id="btnSaveAll"><i class="fas fa-save me-1"></i>全部儲存</button>
       </div>
+      <hr class="my-4">
+      <h6 class="mb-3"><i class="fas fa-user-graduate me-2"></i>主任已指派的學生</h6>
+      <p class="text-muted small mb-2">以下為主任於二輪分發中指派至貴公司（或所屬公司）的學生，可在此查看學生資料。</p>
+      <div id="assignedSection" class="d-none">
+        <div class="table-responsive">
+          <table class="table table-bordered assigned-table">
+            <thead>
+              <tr>
+                <th>學生姓名</th>
+                <th>學號</th>
+                <th>公司</th>
+                <th>狀態</th>
+                <th>指派時間</th>
+              </tr>
+            </thead>
+            <tbody id="assignedTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="assignedEmpty" class="text-muted small py-2 d-none">目前尚無主任指派的學生。</div>
     </div>
     <div id="loading" class="text-center py-5 text-muted">
       <div class="spinner-border" role="status"></div>
@@ -53,6 +78,56 @@
         alertPlace.innerHTML = '<div class="alert alert-' + type + ' alert-dismissible fade show">' + msg + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
       }
 
+      function escapeHtml(s) {
+        if (s == null || s === '') return '';
+        var div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+      }
+
+      function statusLabel(status) {
+        if (status === 'accepted') return { text: '接受', cls: 'badge-accepted' };
+        if (status === 'rejected') return { text: '不適合', cls: 'badge-rejected' };
+        return { text: '待確認', cls: 'badge-pending' };
+      }
+
+      async function loadAssigned() {
+        var section = document.getElementById('assignedSection');
+        var emptyEl = document.getElementById('assignedEmpty');
+        var tbody = document.getElementById('assignedTableBody');
+        if (!section || !emptyEl || !tbody) return;
+        try {
+          var res = await fetch('/admission/api/second_round/vendor/assigned_students', { credentials: 'include' });
+          var data = await res.json();
+          if (!data.success || !Array.isArray(data.students)) {
+            section.classList.add('d-none');
+            emptyEl.classList.remove('d-none');
+            return;
+          }
+          var students = data.students;
+          if (students.length === 0) {
+            section.classList.add('d-none');
+            emptyEl.classList.remove('d-none');
+            return;
+          }
+          emptyEl.classList.add('d-none');
+          section.classList.remove('d-none');
+          tbody.innerHTML = students.map(function(s) {
+            var st = statusLabel(s.status || 'pending');
+            return '<tr>'
+              + '<td>' + escapeHtml(s.student_name || '—') + '</td>'
+              + '<td>' + escapeHtml(s.student_number || '—') + '</td>'
+              + '<td>' + escapeHtml(s.company_name || '—') + '</td>'
+              + '<td><span class="badge ' + st.cls + '">' + escapeHtml(st.text) + '</span></td>'
+              + '<td>' + escapeHtml(s.assigned_at || '—') + '</td>'
+              + '</tr>';
+          }).join('');
+        } catch (e) {
+          section.classList.add('d-none');
+          emptyEl.classList.remove('d-none');
+        }
+      }
+
       async function load() {
         try {
           const [statusRes, partRes] = await Promise.all([
@@ -71,8 +146,7 @@
           contentCard.classList.remove('d-none');
           if (!partData.success || !partData.companies || !partData.companies.length) {
             companyList.innerHTML = '<p class="text-muted">尚無可填寫的公司，或您尚未關聯任何已審核通過的公司。</p>';
-            return;
-          }
+          } else {
           companyList.innerHTML = partData.companies.map(function(c) {
             return '<div class="company-block" data-company-id="' + c.company_id + '">'
               + '<h6><i class="fas fa-building me-2"></i>' + (c.company_name || '') + '</h6>'
@@ -84,6 +158,8 @@
               + '<div class="mb-2"><label class="form-label small">二輪職缺名稱（可與第一輪不同）</label><input type="text" class="form-control form-control-sm sr-jobtitle" value="' + (c.job_title || '').replace(/"/g, '&quot;') + '" placeholder="例：實習生"></div>'
               + '</div>';
           }).join('');
+          }
+          loadAssigned();
         } catch (e) {
           loading.classList.add('d-none');
           showAlert('載入失敗：' + (e.message || '連線錯誤'), 'danger');
