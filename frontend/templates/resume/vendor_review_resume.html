@@ -789,6 +789,27 @@
         });
       }
       
+      // 面試開始/結束時間變更時，更新學生勾選的唯讀狀態（同天衝突或間隔<2h 則不可選）
+      const bindConflictUpdate = () => {
+        const tStart = document.getElementById('interviewTimeStart');
+        const tEnd = document.getElementById('interviewTimeEnd');
+        if (tStart && !tStart.dataset.conflictBound) {
+          tStart.dataset.conflictBound = '1';
+          tStart.addEventListener('input', updateStudentConflictDisabledState);
+          tStart.addEventListener('change', updateStudentConflictDisabledState);
+        }
+        if (tEnd && !tEnd.dataset.conflictBound) {
+          tEnd.dataset.conflictBound = '1';
+          tEnd.addEventListener('input', updateStudentConflictDisabledState);
+          tEnd.addEventListener('change', updateStudentConflictDisabledState);
+        }
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bindConflictUpdate);
+      } else {
+        bindConflictUpdate();
+      }
+      
       // 全選/取消全選功能
       const selectAllCheckbox = document.getElementById("selectAllCheckbox");
       if (selectAllCheckbox) {
@@ -2004,7 +2025,7 @@
     // 注意：不再從 localStorage 載入，完全依賴資料庫
     loadAllVendorSchedules(); // 載入所有廠商的面試排程
 
-    // 填充職缺下拉選單
+    // 填充職缺下拉選單（只顯示「有學生投遞履歷」的職缺）
     function populateJobDropdown() {
       const jobSelect = document.getElementById('interviewJob');
       if (!jobSelect) return;
@@ -2012,32 +2033,39 @@
       // 清空現有選項（保留第一個「所有職缺」選項）
       jobSelect.innerHTML = '<option value="">所有職缺</option>';
       
-      // 從 allPositions 獲取職缺列表（使用 job_id 作為值）
+      // 先從 allResumes 收集「有投遞的職缺」job_id 集合，下拉只顯示這些職缺
+      const jobIdsWithApplicants = new Set();
+      (allResumes || []).forEach(r => {
+        const jid = r.job_id || r.jobId || null;
+        if (jid) jobIdsWithApplicants.add(String(jid));
+      });
+      
+      // 從 allPositions 獲取職缺列表，但只加入有學生投遞的職缺
       if (allPositions && allPositions.length > 0) {
-        // 使用 Map 避免重複 job_id，並保存職缺名稱
         const jobMap = new Map();
         allPositions.forEach(position => {
           const jobId = position.id || position.job_id || null;
           const jobTitle = position.title || position.job_title || '';
-          if (jobId && jobTitle && jobTitle.trim() && !jobMap.has(String(jobId))) {
-            jobMap.set(String(jobId), jobTitle.trim());
-            const opt = document.createElement('option');
-            opt.value = String(jobId); // 使用 job_id 作為值
-            opt.textContent = jobTitle.trim(); // 顯示職缺名稱
-            jobSelect.appendChild(opt);
-          }
+          if (!jobId || !jobTitle || !jobTitle.trim() || jobMap.has(String(jobId))) return;
+          if (jobIdsWithApplicants.size > 0 && !jobIdsWithApplicants.has(String(jobId))) return; // 只顯示有投遞的職缺
+          jobMap.set(String(jobId), jobTitle.trim());
+          const opt = document.createElement('option');
+          opt.value = String(jobId);
+          opt.textContent = jobTitle.trim();
+          jobSelect.appendChild(opt);
         });
-      } else {
-        // 如果沒有職缺資料，嘗試從履歷資料中提取職缺（使用 job_id）
+      }
+      // 若 allPositions 為空或過濾後無選項，改從履歷資料提取職缺（本身即為有投遞的職缺）
+      if (jobSelect.options.length <= 1) {
         const jobMap = new Map();
-        allResumes.forEach(r => {
+        (allResumes || []).forEach(r => {
           const jobId = r.job_id || r.jobId || null;
           const jobTitle = r.job_title || r.jobTitle || '';
           if (jobId && jobTitle && jobTitle.trim() && !jobMap.has(String(jobId))) {
             jobMap.set(String(jobId), jobTitle.trim());
             const opt = document.createElement('option');
-            opt.value = String(jobId); // 使用 job_id 作為值
-            opt.textContent = jobTitle.trim(); // 顯示職缺名稱
+            opt.value = String(jobId);
+            opt.textContent = jobTitle.trim();
             jobSelect.appendChild(opt);
           }
         });
@@ -2165,6 +2193,56 @@
       return null;
     }
     
+    /** 取得該生在「所有日期」的既有面試時段（日期＋時間） */
+    function getExistingInterviewSlotsForStudent(studentId) {
+      const slots = [];
+      if (!studentId || !allVendorSchedules || allVendorSchedules.size === 0) return slots;
+      const sid = String(studentId);
+      allVendorSchedules.forEach((schedules, dateKey) => {
+        schedules.forEach(s => {
+          if (String(s.student_id) !== sid) return;
+          const timeStr = (s.time_start && s.time_end) ? `${(s.time_start + '').substring(0, 5)}-${(s.time_end + '').substring(0, 5)}` : (s.time_start ? (s.time_start + '').substring(0, 5) : '');
+          if (!timeStr) return;
+          const parts = (dateKey + '').split('-');
+          const dateDisplay = parts.length >= 3 ? `${parseInt(parts[1], 10)}/${parseInt(parts[2], 10)}` : dateKey;
+          slots.push({ dateKey, dateDisplay, timeStr, company_name: s.company_name, time_start: s.time_start, time_end: s.time_end });
+        });
+      });
+      slots.sort((a, b) => (a.dateKey || '').localeCompare(b.dateKey || ''));
+      return slots;
+    }
+    
+    /** 僅取得與「目前所選日期、時間」衝突的既有面試（同天重疊或間隔<2h）；不衝突則不顯示 */
+    function getConflictingInterviewSlotsForStudent(studentId) {
+      const allSlots = getExistingInterviewSlotsForStudent(studentId);
+      if (!selectedInterviewDate || allSlots.length === 0) return [];
+      const dateStr = formatDate(selectedInterviewDate);
+      const timeStartEl = document.getElementById('interviewTimeStart');
+      const timeEndEl = document.getElementById('interviewTimeEnd');
+      const timeStart = timeStartEl ? timeStartEl.value.trim() : '';
+      const timeEnd = timeEndEl ? timeEndEl.value.trim() : '';
+      if (!timeStart || !timeEnd) return [];
+      const timeToMinutes = (t) => {
+        if (!t) return null;
+        const parts = (t + '').substring(0, 5).split(':').map(Number);
+        return (parts[0] || 0) * 60 + (parts[1] || 0);
+      };
+      const newStart = timeToMinutes(timeStart);
+      const newEnd = timeToMinutes(timeEnd);
+      if (newStart == null || newEnd == null) return [];
+      const minGap = 120;
+      return allSlots.filter(slot => {
+        if ((slot.dateKey || '') !== dateStr) return false;
+        const otherStart = timeToMinutes(slot.time_start);
+        const otherEnd = timeToMinutes(slot.time_end) || otherStart;
+        if (otherStart == null) return false;
+        if (newStart < otherEnd && newEnd > otherStart) return true;
+        const gapBefore = otherStart - newEnd;
+        const gapAfter = newStart - otherEnd;
+        return (gapBefore >= 0 && gapBefore < minGap) || (gapAfter >= 0 && gapAfter < minGap);
+      });
+    }
+
     // 填充學生下拉選單（可複選）
     // isEditMode: true 表示編輯模式，false 表示新增模式
     // currentScheduleStudents: 當前編輯排程的學生ID列表（編輯模式下使用）
@@ -2429,6 +2507,7 @@
         checkbox.value = String(item.studentId);
         checkbox.className = 'student-checkbox';
         checkbox.disabled = isDisabled;
+        checkbox.dataset.jobScheduled = isDisabled ? 'true' : 'false'; // 供 updateStudentConflictDisabledState 區分「已安排」與「時段衝突」
         
         // 保存該職缺的 application_id 和 job_id 到 data 屬性
         if (item.job.applicationId) {
@@ -2457,8 +2536,13 @@
           label.style.color = '#6c757d'; // 使用灰色表示唯讀狀態
           label.style.fontWeight = '600';
         }
-        label.textContent = labelText;
-        
+        // 僅在「所選日期、時間」與既有面試衝突時顯示「已有面試：…」；不衝突則不顯示
+        const conflictingSlots = getConflictingInterviewSlotsForStudent(item.studentId);
+        const conflictSuffix = conflictingSlots.length > 0
+          ? ` — 已有面試：${conflictingSlots.map(s => `${s.dateDisplay} ${s.timeStr}`).join('、')}`
+          : '';
+        label.textContent = labelText + conflictSuffix;
+        itemDiv.dataset.baseLabel = labelText; // 供時間變更時只更新「已有面試」後綴
         itemDiv.appendChild(checkbox);
         itemDiv.appendChild(label);
         
@@ -2478,7 +2562,77 @@
         studentsContainer.appendChild(itemDiv);
       });
       
+      // 依目前所選日期、時間更新「時段衝突」唯讀狀態（同天重疊或間隔<2h 則該生不可選）
+      updateStudentConflictDisabledState();
       // 更新選中學生計數
+      updateSelectedStudentsCount();
+    }
+    
+    /** 所選日期+時間是否與該生當日既有面試衝突（重疊或間隔<2小時） */
+    function studentHasConflictOnSelectedDateTime(studentId) {
+      if (!selectedInterviewDate || !allVendorSchedules) return false;
+      const dateStr = formatDate(selectedInterviewDate);
+      const timeStartEl = document.getElementById('interviewTimeStart');
+      const timeEndEl = document.getElementById('interviewTimeEnd');
+      const timeStart = timeStartEl ? timeStartEl.value.trim() : '';
+      const timeEnd = timeEndEl ? timeEndEl.value.trim() : '';
+      if (!timeStart || !timeEnd) return false;
+      const schedules = allVendorSchedules.get(dateStr);
+      if (!schedules || schedules.length === 0) return false;
+      const sid = String(studentId);
+      const timeToMinutes = (t) => {
+        if (!t) return null;
+        const parts = t.split(':').map(Number);
+        return (parts[0] || 0) * 60 + (parts[1] || 0);
+      };
+      const newStart = timeToMinutes(timeStart);
+      const newEnd = timeToMinutes(timeEnd);
+      if (newStart == null || newEnd == null) return false;
+      const minGap = 120;
+      for (const s of schedules) {
+        if (String(s.student_id) !== sid) continue;
+        const otherStart = timeToMinutes(s.time_start ? (s.time_start + '').substring(0, 5) : '');
+        const otherEnd = timeToMinutes(s.time_end ? (s.time_end + '').substring(0, 5) : '') || otherStart;
+        if (otherStart == null) continue;
+        if (newStart < otherEnd && newEnd > otherStart) return true;
+        const gapBefore = otherStart - newEnd;
+        const gapAfter = newStart - otherEnd;
+        if ((gapBefore >= 0 && gapBefore < minGap) || (gapAfter >= 0 && gapAfter < minGap)) return true;
+      }
+      return false;
+    }
+    
+    /** 依所選日期、時間將「時段衝突」的學生 checkbox 設為唯讀，並更新「已有面試」僅顯示衝突時段 */
+    function updateStudentConflictDisabledState() {
+      const container = document.getElementById('interviewStudents');
+      if (!container) return;
+      container.querySelectorAll('.student-checkbox').forEach(checkbox => {
+        const jobScheduled = checkbox.dataset.jobScheduled === 'true';
+        const hasConflict = studentHasConflictOnSelectedDateTime(checkbox.value);
+        const shouldDisable = jobScheduled || hasConflict;
+        checkbox.disabled = shouldDisable;
+        const itemDiv = checkbox.closest('.student-checkbox-item');
+        if (itemDiv) {
+          if (shouldDisable) {
+            itemDiv.style.opacity = '0.6';
+            itemDiv.style.cursor = 'not-allowed';
+            itemDiv.title = hasConflict && !jobScheduled ? '該生在此日期、此時段已有其他面試或間隔不足 2 小時，無法勾選' : (itemDiv.title || '');
+          } else {
+            itemDiv.style.opacity = '';
+            itemDiv.style.cursor = '';
+            if (itemDiv.title && itemDiv.title.includes('已有其他面試')) itemDiv.title = '';
+          }
+          const label = itemDiv.querySelector('label');
+          if (label) {
+            const baseLabel = itemDiv.dataset.baseLabel || '';
+            const conflictingSlots = getConflictingInterviewSlotsForStudent(checkbox.value);
+            const suffix = conflictingSlots.length > 0
+              ? ` — 已有面試：${conflictingSlots.map(s => `${s.dateDisplay} ${s.timeStr}`).join('、')}`
+              : '';
+            label.textContent = baseLabel + suffix;
+          }
+        }
+      });
       updateSelectedStudentsCount();
     }
     
@@ -4236,18 +4390,7 @@
             });
           } else {
             console.error("記錄面試排程到資料庫失敗:", data.message);
-            // 即使後端記錄失敗，也更新前端狀態
-            selectedStudents.forEach(studentId => {
-              allResumes.forEach(resume => {
-                const resumeStudentId = String(resume.student_id || resume.id || '');
-                if (resumeStudentId === String(studentId)) {
-                  resume.has_interview = true;
-                  const key = String(resume.preference_id || resume.preferenceId || resume.id);
-                  interviewedSet.add(key);
-                }
-              });
-            });
-            applyFilters();
+            alert("❌ " + (data.message || "記錄面試排程失敗，請稍後再試"));
           }
         })
         .catch(err => {

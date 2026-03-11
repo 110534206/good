@@ -158,6 +158,40 @@ def get_flow_semester_code(cursor):
 
 
 # =========================================================
+# Helper: 依流程學期取得「實習學期」起訖日（1131 開始 → 實習周期為 1132）
+# =========================================================
+def get_internship_semester_dates(cursor, flow_semester_id):
+    """
+    回傳 (internship_start_date, internship_end_date) 對應的實習周期。
+    流程學期 1131 → 實習學期 1132（110 學年入學學生實習周期）；1132 → 1132。
+    回傳值為 (start_date_str, end_date_str) 或 (None, None)。
+    """
+    if not flow_semester_id:
+        return (None, None)
+    cursor.execute("SELECT code, start_date, end_date FROM semesters WHERE id = %s", (flow_semester_id,))
+    row = cursor.fetchone()
+    if not row:
+        return (None, None)
+    code = str(row.get('code') or '').strip()
+    if len(code) < 4:
+        return (None, None)
+    # 流程學期末位 1（上學期）→ 實習學期為同學年下學期（末位 2）；已是 2 則實習學期即自身
+    intern_code = code[:-1] + '2' if code[-1] == '1' else code
+    cursor.execute(
+        "SELECT start_date, end_date FROM semesters WHERE code = %s LIMIT 1",
+        (intern_code,)
+    )
+    intern = cursor.fetchone()
+    if not intern or not intern.get('start_date') or not intern.get('end_date'):
+        return (None, None)
+    start_val = intern['start_date']
+    end_val = intern['end_date']
+    start_str = start_val.strftime('%Y-%m-%d') if hasattr(start_val, 'strftime') else str(start_val)
+    end_str = end_val.strftime('%Y-%m-%d') if hasattr(end_val, 'strftime') else str(end_val)
+    return (start_str, end_str)
+
+
+# =========================================================
 # Helper: 公司開放狀態使用的學期代碼（實習在下學期，媒合在上學期完成，故下學期沿用上學期開放）
 # =========================================================
 def get_semester_code_for_company_openings(cursor):

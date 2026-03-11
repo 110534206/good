@@ -1235,11 +1235,16 @@
       gap: 8px;
     }
 
-    .btn-confirm:hover {
+    .btn-confirm:hover:not(:disabled) {
       background-color: #b91c1c;
       color: #fff;
       transform: translateY(-2px);
       box-shadow: 0 4px 8px rgba(220, 38, 38, 0.3);
+    }
+
+    .btn-confirm:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
     }
 
     .btn-unadmitted {
@@ -1932,14 +1937,14 @@
         <input type="text" id="studentNameFilter" placeholder="輸入學生姓名或學號">
       </div>
       <div class="filter-buttons">
-        <a href="/admission/unadmitted_list" class="btn-unadmitted" title="查看未錄取學生名單">
-          <i class="fas fa-users"></i> 查看未錄取名單
-        </a>
-        <button id="exportExcelBtn" class="btn-excel">
-          <i class="fas fa-file-excel"></i> 匯出媒合名單
-        </button>
         <button id="confirmBtn" class="btn-confirm">
           <i class="fas fa-check"></i> 送出最終媒合結果
+        </button>
+        <a href="/admission/unadmitted_list" class="btn-unadmitted" id="viewMatchingResultBtn" title="查看未錄取名單>
+          <i class="fas fa-users"></i> 查看未錄取名單
+        </a>
+        <button id="exportExcelBtn" class="btn-excel" style="display: none;" title="送出媒合結果後才可匯出">
+          <i class="fas fa-file-excel"></i> 匯出媒合名單
         </button>
       </div>
     </div>
@@ -2268,8 +2273,10 @@
             confirmBtn.style.display = directorReadOnly ? 'none' : '';
             if (directorAlreadyConfirmed) {
               confirmBtn.innerHTML = '<i class="fas fa-check"></i> 已送出最終媒合結果';
+              confirmBtn.disabled = true;  // 已送出後不可再點擊
             }
           }
+          // 匯出未錄取名單請至「查看媒合結果」頁面操作，此處不顯示匯出按鈕
           const readOnlyBanner = document.getElementById('directorReadOnlyBanner');
           if (readOnlyBanner) {
             readOnlyBanner.style.display = directorReadOnly ? 'block' : 'none';
@@ -4328,11 +4335,18 @@
 
     // 顯示確認媒合結果的彈跳視窗
     function showConfirmMatchingModal() {
+      if (directorAlreadyConfirmed) {
+        showAlreadyConfirmedModal();
+        return;
+      }
       // 移除已存在的彈跳視窗
       const existingModal = document.getElementById('confirmMatchingModal');
       if (existingModal) {
         existingModal.remove();
       }
+
+      const confirmBtn = document.getElementById('confirmBtn');
+      if (confirmBtn) confirmBtn.disabled = true;  // 開啟彈窗時先唯讀，避免重複點擊
 
       // 創建彈跳視窗
       const modalOverlay = document.createElement('div');
@@ -4345,13 +4359,13 @@
               <i class="fas fa-check-circle"></i>
               確認媒合結果
             </h3>
-            <button class="confirm-modal-close" onclick="closeConfirmMatchingModal()">&times;</button>
+            <button class="confirm-modal-close" onclick="closeConfirmMatchingModal(true)">&times;</button>
           </div>
           <div class="confirm-modal-body">
             <p>已送出媒合排序，確定要送出嗎？</p>
           </div>
           <div class="confirm-modal-footer">
-            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeConfirmMatchingModal()">取消</button>
+            <button class="confirm-modal-btn confirm-modal-btn-cancel" onclick="closeConfirmMatchingModal(true)">取消</button>
             <button class="confirm-modal-btn confirm-modal-btn-confirm" onclick="handleConfirmMatching()">
               <i class="fas fa-check"></i> 確認
             </button>
@@ -4369,43 +4383,45 @@
       // 點擊背景關閉
       modalOverlay.addEventListener('click', (e) => {
         if (e.target === modalOverlay) {
-          closeConfirmMatchingModal();
+          closeConfirmMatchingModal(true);
         }
       });
 
       // ESC 鍵關閉
       const handleEsc = (e) => {
         if (e.key === 'Escape') {
-          closeConfirmMatchingModal();
+          closeConfirmMatchingModal(true);
           document.removeEventListener('keydown', handleEsc);
         }
       };
       document.addEventListener('keydown', handleEsc);
     }
 
-    // 關閉確認媒合結果的彈跳視窗
-    function closeConfirmMatchingModal() {
+    // 關閉確認媒合結果的彈跳視窗；byCancel=true 表示使用者按取消/關閉，會還原主按鈕可點
+    function closeConfirmMatchingModal(byCancel) {
       const modal = document.getElementById('confirmMatchingModal');
       if (modal) {
         modal.classList.remove('show');
         setTimeout(() => {
           modal.remove();
+          if (byCancel && !directorAlreadyConfirmed) {
+            const confirmBtn = document.getElementById('confirmBtn');
+            if (confirmBtn) confirmBtn.disabled = false;
+          }
         }, 200);
       }
     }
 
     // 處理確認媒合結果（防止重複點擊）
     async function handleConfirmMatching() {
+      const confirmBtn = document.getElementById('confirmBtn');
+      if (confirmBtn) confirmBtn.disabled = true;  // 按完確認立即唯讀
       const modal = document.getElementById('confirmMatchingModal');
       if (modal) {
         const btn = modal.querySelector('.confirm-modal-btn-confirm');
-        if (btn) {
-          btn.disabled = true;
-        }
+        if (btn) btn.disabled = true;
       }
-      
-      // 關閉彈跳視窗並執行確認邏輯
-      closeConfirmMatchingModal();
+      closeConfirmMatchingModal(false);  // 非取消關閉，不還原主按鈕
       await confirmMatching();
     }
 
@@ -4938,9 +4954,10 @@
         const data = await res.json();
         
         if (data.success) {
-          // 成功後：更新按鈕文字，但保留可點擊（之後只顯示提示彈窗，不再送出）
+          directorAlreadyConfirmed = true;
+          // 成功後：改為已送出文字並禁用，不可再點擊；匯出未錄取名單請至「查看媒合結果」頁面
           if (confirmBtn) {
-            confirmBtn.disabled = false;
+            confirmBtn.disabled = true;
             confirmBtn.innerHTML = '<i class="fas fa-check"></i> 已送出最終媒合結果';
           }
           try {

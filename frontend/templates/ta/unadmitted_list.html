@@ -459,10 +459,6 @@
 
       <div id="statsRow" class="stats-row">
         <div class="stat-card">
-          <div class="label">學生總數</div>
-          <div id="statTotal" class="value">-</div>
-        </div>
-        <div class="stat-card">
           <div class="label">未錄取人數</div>
           <div id="statUnadmitted" class="value">-</div>
         </div>
@@ -492,7 +488,6 @@
     const menuBtn = document.getElementById('menu-btn');
     const closeBtn = document.getElementById('close-btn');
     const statsRow = document.getElementById('statsRow');
-    const statTotal = document.getElementById('statTotal');
     const statUnadmitted = document.getElementById('statUnadmitted');
     const tableContainer = document.getElementById('tableContainer');
     const loadingState = document.getElementById('loadingState');
@@ -596,7 +591,7 @@
 
       const rows = students.map(s => {
         const statusClass = s.is_matched ? 'badge-matched' : 'badge-unmatched';
-        const statusText = s.is_matched ? '已媒合' : '未媒合';
+        const statusText = s.is_matched ? '已錄取' : '未錄取';
         const name = escapeHtml(s.student_name || '-');
         const number = escapeHtml(s.student_number || '-');
         // 班級顯示（包含年級）
@@ -607,13 +602,8 @@
       tableContainer.innerHTML = '<table><thead><tr><th>姓名</th><th>學號</th><th>班級</th><th>狀態</th></tr></thead><tbody>' + rows + '</tbody></table>';
     }
 
-    function updateStats(displayedList, totalUnadmittedInSemester) {
+    function updateStats(displayedList) {
       const list = displayedList || [];
-      if (totalUnadmittedInSemester !== undefined) {
-        statTotal.textContent = totalUnadmittedInSemester;
-      } else {
-        statTotal.textContent = list.length;
-      }
       statUnadmitted.textContent = list.length;
     }
 
@@ -635,8 +625,7 @@
         });
       }
 
-      const totalUnadmittedInSemester = allStudents.filter(s => s && !s.is_matched).length;
-      updateStats(filtered, totalUnadmittedInSemester);
+      updateStats(filtered);
       renderTable(filtered);
     }
 

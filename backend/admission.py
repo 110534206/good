@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session, render_template, redirect, send_file
 from config import get_db
 from datetime import datetime
-from semester import get_current_semester_code, get_current_semester_id, get_flow_semester_id, get_flow_semester_code
+from semester import get_current_semester_code, get_current_semester_id, get_flow_semester_id, get_flow_semester_code, get_internship_semester_dates
 from notification import create_notification
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -452,7 +452,9 @@ def record_admission():
                 LIMIT 1
             """, (student_id,))
         existing_mr = cursor.fetchone()
-        today_str = datetime.now().strftime('%Y-%m-%d')
+        intern_start, intern_end = get_internship_semester_dates(cursor, current_semester_id)
+        if not intern_start or not intern_end:
+            intern_start = intern_end = datetime.now().strftime('%Y-%m-%d')
         if existing_mr:
             set_parts, set_args = [], []
             set_parts.append("company_id = %s")
@@ -494,7 +496,7 @@ def record_admission():
                 ins_vals.append(job_title_val or ' ')
             if mr_has_internship_dates:
                 ins_cols.extend(["internship_start_date", "internship_end_date"])
-                ins_vals.extend([today_str, today_str])
+                ins_vals.extend([intern_start, intern_end])
             if mr_has_matched_at:
                 ins_cols.append("matched_at")
                 ins_vals.append(current_datetime_str)
@@ -627,6 +629,13 @@ def get_my_admission():
         if offer_info:
             print(f"✅ [DEBUG] 找到 matching_results 記錄")
             print(f"    job_id={offer_info.get('job_id')}, company_id={offer_info.get('company_id')}")
+            # 載入時以流程學期對應的實習學期起訖為準（1131→1132），覆蓋錯誤的儲存值
+            sid = offer_info.get('semester_id')
+            if sid:
+                _istart, _iend = get_internship_semester_dates(cursor, sid)
+                if _istart and _iend:
+                    offer_info['internship_start_date'] = _istart
+                    offer_info['internship_end_date'] = _iend
             
             # 如果 company_id 為 NULL，嘗試從 student_preferences 獲取公司資訊
             company_id = offer_info.get('company_id')
@@ -983,7 +992,6 @@ def sync_internship_offers():
     
     try:
         current_semester_id = get_current_semester_id(cursor)
-        today_str = datetime.now().strftime('%Y-%m-%d')
         # 獲取有 approved 志願但尚無 matching_results 的學生（以 student_id + semester_id 為準）
         cursor.execute("""
             SELECT DISTINCT
@@ -1080,11 +1088,18 @@ def sync_internship_offers():
                 cols.append("job_title")
                 vals.append(job_title_val)
             if has_start_sync:
+                _istart, _iend = get_internship_semester_dates(cursor, semester_id)
+                if not _istart or not _iend:
+                    _istart = _iend = datetime.now().strftime('%Y-%m-%d')
                 cols.append("internship_start_date")
-                vals.append(today_str)
+                vals.append(_istart)
             if has_end_sync:
+                if not has_start_sync:
+                    _istart, _iend = get_internship_semester_dates(cursor, semester_id)
+                    if not _istart or not _iend:
+                        _istart = _iend = datetime.now().strftime('%Y-%m-%d')
                 cols.append("internship_end_date")
-                vals.append(today_str)
+                vals.append(_iend)
             if has_matched_sync:
                 cols.append("matched_at")
                 vals.append(admitted_at)
@@ -4346,7 +4361,9 @@ def director_confirm_matching():
         mr_has_status = "status" in mr_cols
         mr_has_comment = "comment" in mr_cols
         
-        today_str = datetime.now().strftime('%Y-%m-%d')
+        intern_start, intern_end = get_internship_semester_dates(cursor, current_semester_id)
+        if not intern_start or not intern_end:
+            intern_start = intern_end = datetime.now().strftime('%Y-%m-%d')
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         inserted_count = 0
         updated_count = 0
@@ -4424,10 +4441,10 @@ def director_confirm_matching():
                     vals.append(job_title_val)
                 if mr_has_start_date:
                     cols.append("internship_start_date")
-                    vals.append(today_str)
+                    vals.append(intern_start)
                 if mr_has_end_date:
                     cols.append("internship_end_date")
-                    vals.append(today_str)
+                    vals.append(intern_end)
                 if mr_has_matched_at:
                     cols.append("matched_at")
                     vals.append(now_str)
@@ -4658,7 +4675,9 @@ def ta_confirm_matching():
         mr_has_internship_dates = 'internship_start_date' in mr_columns and 'internship_end_date' in mr_columns
         mr_has_comment = 'comment' in mr_columns
 
-        today_str = datetime.now().strftime('%Y-%m-%d')
+        intern_start, intern_end = get_internship_semester_dates(cursor, current_semester_id)
+        if not intern_start or not intern_end:
+            intern_start = intern_end = datetime.now().strftime('%Y-%m-%d')
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         inserted_count = 0
         updated_count = 0
@@ -4739,7 +4758,7 @@ def ta_confirm_matching():
                 if mr_has_internship_dates:
                     ins_cols.extend(["internship_start_date", "internship_end_date"])
                     ins_placeholders.extend(["%s", "%s"])
-                    ins_vals.extend([today_str, today_str])
+                    ins_vals.extend([intern_start, intern_end])
                 if mr_has_matched_at:
                     ins_cols.append("matched_at")
                     ins_placeholders.append("%s")
@@ -6517,9 +6536,8 @@ def ta_export_unadmitted_students_excel():
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
 
-        # 已在媒合結果中的學生（Approved/Pending）- 使用 student_preferences.semester_id 篩選
-        # md.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
-        # 需要通過 student_job_applications 來 JOIN student_preferences
+        # 未媒合名單以主任排序頁籤為準：每位學生只能有一個實習單位，已媒合 = 在 manage_director 為 Approved/Pending 的學生
+        # md.preference_id 引用 student_job_applications.id；用 DISTINCT student_id 表示每位學生只計一次
         cursor.execute("""
             SELECT DISTINCT md.student_id
             FROM manage_director md

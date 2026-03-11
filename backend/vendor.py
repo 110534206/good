@@ -964,7 +964,7 @@ def get_vendor_resumes():
             
             # 根據 resume_teacher 表是否存在，選擇不同的 EXISTS 子查詢
             if resume_teacher_exists:
-                # 使用 resume_teacher 表查詢（新架構）
+                # 使用 resume_teacher 表查詢（新架構）；指導老師或班導審核通過皆算（teacher / class_teacher）
                 exists_clause = """
                     AND EXISTS (
                         SELECT 1 FROM resumes r
@@ -973,11 +973,11 @@ def get_vendor_resumes():
                         INNER JOIN users reviewer ON rt.teacher_id = reviewer.id
                         WHERE r.user_id = sp.student_id
                         AND rt.review_status = 'approved'
-                        AND reviewer.role = 'teacher'
+                        AND reviewer.role IN ('teacher', 'class_teacher')
                     )
                 """
             else:
-                # 使用舊架構（reviewed_by 欄位）
+                # 使用舊架構（reviewed_by 欄位）；指導老師或班導審核通過皆算
                 exists_clause = """
                     AND EXISTS (
                         SELECT 1 FROM resumes r
@@ -986,7 +986,7 @@ def get_vendor_resumes():
                         AND EXISTS (
                             SELECT 1 FROM users reviewer
                             WHERE reviewer.id = r.reviewed_by
-                            AND reviewer.role = 'teacher'
+                            AND reviewer.role IN ('teacher', 'class_teacher')
                         )
                     )
                 """
@@ -1187,7 +1187,7 @@ def get_vendor_resumes():
             print("⚠️ 廠商沒有關聯公司，顯示所有志願序")
             # 根據 resume_teacher 表是否存在，選擇不同的 EXISTS 子查詢
             if resume_teacher_exists:
-                # 使用 resume_teacher 表查詢（新架構）
+                # 使用 resume_teacher 表查詢（新架構）；指導老師或班導審核通過皆算（teacher / class_teacher）
                 exists_clause = """
                     AND EXISTS (
                         SELECT 1 FROM resumes r
@@ -1196,11 +1196,11 @@ def get_vendor_resumes():
                         INNER JOIN users reviewer ON rt.teacher_id = reviewer.id
                         WHERE r.user_id = sp.student_id
                         AND rt.review_status = 'approved'
-                        AND reviewer.role = 'teacher'
+                        AND reviewer.role IN ('teacher', 'class_teacher')
                     )
                 """
             else:
-                # 使用舊架構（reviewed_by 欄位）
+                # 使用舊架構（reviewed_by 欄位）；指導老師或班導審核通過皆算
                 exists_clause = """
                     AND EXISTS (
                         SELECT 1 FROM resumes r
@@ -1209,7 +1209,7 @@ def get_vendor_resumes():
                         AND EXISTS (
                             SELECT 1 FROM users reviewer
                             WHERE reviewer.id = r.reviewed_by
-                            AND reviewer.role = 'teacher'
+                            AND reviewer.role IN ('teacher', 'class_teacher')
                         )
                     )
                 """
@@ -1311,6 +1311,19 @@ def get_vendor_resumes():
                     preference_id = pref.get('preference_id')
                     preference_order = pref.get('preference_order')
                     break
+            # 若 preferences_map 無該生（例如審核為班導、或對應的 sja 與 resume_applications 不同筆），直接查 student_preferences
+            if preference_id is None:
+                cursor.execute("""
+                    SELECT sp.id AS preference_id, sp.preference_order
+                    FROM student_preferences sp
+                    WHERE sp.student_id = %s AND sp.company_id = %s AND sp.job_id = %s
+                    ORDER BY sp.preference_order ASC
+                    LIMIT 1
+                """, (student_id, company_id, job_id))
+                pref_row = cursor.fetchone()
+                if pref_row:
+                    preference_id = pref_row.get('preference_id')
+                    preference_order = pref_row.get('preference_order')
             
             # 映射狀態
             status_map = {
@@ -1530,15 +1543,7 @@ def vendor_review_resume(resume_id):
             job_id = pref_info.get('job_id')
             preference_order = pref_info.get('preference_order')
             
-            # 更新 student_preferences 表的狀態
-            cursor.execute("""
-                UPDATE student_preferences
-                SET status = %s
-                WHERE id = %s
-            """, (status, preference_id))
-            updated_pref_rows = cursor.rowcount
-            print(f"✅ [vendor_review_resume] 更新 student_preferences: preference_id={preference_id}, status={status}, updated_rows={updated_pref_rows}")
-            
+            # 不更新 student_preferences：志願序審核狀態為班導專用，廠商通過/未通過只寫入 resume_applications，不影響班導的志願序頁面
             # 更新 resume_applications 表的狀態
             # 需要找到對應的 application_id（student_job_applications.id）
             # 使用與 get_vendor_resumes 相同的查詢條件：student_id, company_id, job_id
@@ -3305,6 +3310,21 @@ def get_all_interview_schedules():
         all_schedules = cursor.fetchall()
         print(f"📋 [all_interview_schedules] 查詢到 {len(all_schedules)} 筆排程記錄")
         
+        # 僅顯示：1) 自家公司的排程  2) 有「投遞本廠」的學生在其他公司的排程（供避開時段、唯讀判斷）
+        # 以「有投遞本廠」為準（student_job_applications），不是「已有本廠排程」，否則他廠先排的時段不會帶出
+        student_ids_with_our_company = set()
+        if company_ids:
+            placeholders = ','.join(['%s'] * len(company_ids))
+            cursor.execute("""
+                SELECT DISTINCT student_id FROM student_job_applications
+                WHERE company_id IN ({})
+            """.format(placeholders), tuple(company_ids))
+            for row in cursor.fetchall() or []:
+                sid = row.get('student_id')
+                if sid is not None:
+                    student_ids_with_our_company.add(sid)
+        print(f"📋 [all_interview_schedules] 有投遞本廠的學生數: {len(student_ids_with_our_company)}")
+        
         # 解析面試資訊
         import re
         parsed_schedules = []
@@ -3318,6 +3338,10 @@ def get_all_interview_schedules():
             
             # 判斷是否為當前廠商的排程
             is_own = company_id and company_id in company_ids
+            student_id = schedule.get('student_id')
+            # 非自家排程：僅在「該生有填本廠商志願」時才顯示（供避開時段），否則不顯示他廠資料
+            if not is_own and student_id is not None and student_id not in student_ids_with_our_company:
+                continue
             
             # 從 interview_time 提取日期和開始時間
             # 從 interview_timeEnd 提取結束時間
@@ -3518,6 +3542,67 @@ def schedule_interviews():
                         print(f"  ✅ 學生 {sid}: application_id={app_info.get('application_id')}, job_id={app_info.get('job_id')}")
         else:
             print(f"⚠️ [schedule_interviews] 前端未傳遞 student_applications 或格式不正確")
+        
+        # 同天不可同時段，且需間隔至少 2 小時：檢查每位學生當日是否已有其他面試（重疊或間隔<2h 則拒絕）
+        conflict_students = []
+        if interview_date and interview_time_start and student_ids:
+            try:
+                from datetime import timedelta
+                date_str = interview_date if isinstance(interview_date, str) else (interview_date.strftime('%Y-%m-%d') if hasattr(interview_date, 'strftime') else '')
+                start_dt = datetime.strptime(f"{date_str} {interview_time_start}", '%Y-%m-%d %H:%M')
+                end_dt = datetime.strptime(f"{date_str} {interview_time_end}", '%Y-%m-%d %H:%M') if interview_time_end else start_dt
+            except Exception:
+                date_str = None
+                start_dt = end_dt = None
+            if date_str and start_dt and end_dt:
+                try:
+                    placeholders = ','.join(['%s'] * len(student_ids))
+                    cursor.execute("""
+                        SELECT sja.student_id, ra.interview_time AS existing_start, ra.interview_timeEnd AS existing_end
+                        FROM resume_applications ra
+                        JOIN student_job_applications sja ON ra.application_id = sja.id
+                        WHERE sja.student_id IN ({})
+                        AND ra.interview_status IN ('scheduled', 'finished')
+                        AND ra.interview_time IS NOT NULL
+                        AND DATE(ra.interview_time) = %s
+                    """.format(placeholders), list(student_ids) + [date_str])
+                    two_h = timedelta(hours=2)
+                    for row in cursor.fetchall() or []:
+                        sid = row.get('student_id')
+                        if sid in conflict_students:
+                            continue
+                        ex_start = row.get('existing_start')
+                        ex_end = row.get('existing_end') or ex_start
+                        if ex_start is None:
+                            continue
+                        if isinstance(ex_start, str):
+                            ex_start = datetime.strptime(ex_start[:19], '%Y-%m-%d %H:%M:%S') if len(ex_start) >= 19 else datetime.strptime(ex_start[:16], '%Y-%m-%d %H:%M')
+                        if isinstance(ex_end, str):
+                            ex_end = datetime.strptime(ex_end[:19], '%Y-%m-%d %H:%M:%S') if len(ex_end) >= 19 else datetime.strptime(ex_end[:16], '%Y-%m-%d %H:%M')
+                        # 重疊：新開始 < 現有結束 且 新結束 > 現有開始
+                        if start_dt < ex_end and end_dt > ex_start:
+                            conflict_students.append(sid)
+                            continue
+                        # 間隔不足 2 小時：現有結束後 2 小時內開始新面試，或新結束後 2 小時內開始現有面試
+                        if ex_end <= start_dt < ex_end + two_h:
+                            conflict_students.append(sid)
+                        elif end_dt <= ex_start < end_dt + two_h:
+                            conflict_students.append(sid)
+                    if conflict_students:
+                        names = []
+                        for sid in conflict_students:
+                            cursor.execute("SELECT name FROM users WHERE id = %s", (sid,))
+                            r = cursor.fetchone()
+                            names.append(r.get('name', str(sid)) if r else str(sid))
+                        cursor.close()
+                        conn.close()
+                        return jsonify({
+                            "success": False,
+                            "message": "以下學生在該日此時段已有其他面試或與現有面試間隔不足 2 小時，請選擇其他日期或時段：{}".format("、".join(names)),
+                            "conflict_student_ids": conflict_students
+                        }), 400
+                except Exception as e:
+                    print(f"⚠️ [schedule_interviews] 檢查時段衝突時發生錯誤: {e}")
         
         print(f"📋 [schedule_interviews] 處理 {len(student_ids)} 個學生的面試排程")
         for student_id in student_ids:

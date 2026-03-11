@@ -533,7 +533,7 @@
                 <span>狀態：${isDraft ? '草稿' : isReady ? '正式版本' : '未知'}</span>
               </div>
             </div>
-            ${resume.comment ? `<div class="alert alert-info mb-0"><strong>審核意見：</strong>${resume.comment}</div>` : ''}
+            ${resume.comment && !isReady ? `<div class="alert alert-info mb-0"><strong>審核意見：</strong>${resume.comment}</div>` : ''}
           </div>
         `;
       }).join('');
