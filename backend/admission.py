@@ -552,12 +552,12 @@ def get_my_admission():
     cursor = conn.cursor(dictionary=True, buffered=True)
     
     try:
-        # 檢查是否已被退實習（internship_records 有 withdrawing 或 confirmed）
+        # 檢查是否已被退實習（僅指導老師確認後 confirmed 才鎖住）
         is_withdrawn = False
         try:
             cursor.execute("""
                 SELECT 1 FROM internship_records
-                WHERE student_id = %s AND status IN ('withdrawing', 'confirmed')
+                WHERE student_id = %s AND status = 'confirmed'
                 LIMIT 1
             """, (student_id,))
             if cursor.fetchone():

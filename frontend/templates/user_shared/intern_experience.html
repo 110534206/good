@@ -350,9 +350,9 @@ body {
         <div class="filter-card"><div class="row g-3">
           <div class="col-md-12 text-end">
             <button id="btnAddExperience" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal">+ 上傳心得</button>
-            <p id="withdrawnNotice" class="text-muted mb-0 mt-2" style="display: none;">您已退實習，無法新增心得；以下為既有心得（僅供檢視）。</p>
           </div>
         </div></div>
+        <div id="withdrawnNotice" style="display: none; text-align: center; font-size: 1.4rem; color: #6c757d; padding: 80px 0;">您已退實習，無法新增心得。</div>
         <div id="myExperienceList" class="row g-3 mt-3"></div>
         <nav aria-label="我的心得分頁" id="myExperiencesPagination" class="mt-4"></nav>
       </div>
@@ -846,7 +846,11 @@ body {
             });
           }
         } else {
-          list.innerHTML = '<p class="text-muted">' + (isWithdrawn ? '目前沒有既有心得可檢視。' : '您還沒有上傳任何心得') + '</p>';
+          if (isWithdrawn) {
+            list.innerHTML = '';
+          } else {
+            list.innerHTML = '<p class="text-muted">您還沒有上傳任何心得</p>';
+          }
           document.getElementById('myExperiencesPagination').innerHTML = '';
         }
       } catch (error) {

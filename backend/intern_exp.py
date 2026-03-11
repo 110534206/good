@@ -166,8 +166,7 @@ def get_experience_list():
             params.append(f"%{keyword}%")
 
         if year:
-            # year 前端傳民國年（如110），資料庫也儲存為民國年
-            query += " AND ie.year = %s"
+            query += " AND COALESCE(LEFT((SELECT s.code FROM semesters s WHERE s.is_active = 1 LIMIT 1), 3), ie.year) = %s"
             params.append(year)
 
         if company_id:
@@ -224,7 +223,7 @@ def get_experience_list():
             count_params.append(f"%{keyword}%")
         
         if year:
-            count_query += " AND ie.year = %s"
+            count_query += " AND COALESCE(LEFT((SELECT s.code FROM semesters s WHERE s.is_active = 1 LIMIT 1), 3), ie.year) = %s"
             count_params.append(year)
         
         if company_id:
