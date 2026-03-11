@@ -1796,15 +1796,27 @@ def vendor_matching_results():
         
         teacher_id = teacher_row["id"]
         
-        # 找到該指導老師對接的公司（只回傳已審核通過的公司）
+        # 找到該廠商自己的公司（透過 created_by_vendor_id 反向查找，確保只看到自己的公司）
         cursor.execute("""
             SELECT DISTINCT ic.id, ic.company_name
-            FROM internship_companies ic
-            WHERE ic.advisor_user_id = %s AND ic.status = 'approved'
+            FROM internship_jobs ij
+            JOIN internship_companies ic ON ij.company_id = ic.id
+            WHERE ij.created_by_vendor_id = %s AND ic.status = 'approved'
             ORDER BY ic.company_name
-        """, (teacher_id,))
+        """, (vendor_id,))
         companies = cursor.fetchall() or []
         company_ids = [c['id'] for c in companies] if companies else []
+        
+        if not company_ids:
+            # 備用：如果廠商沒有建立過職缺，嘗試用 uploaded_by_user_id 查找
+            cursor.execute("""
+                SELECT DISTINCT ic.id, ic.company_name
+                FROM internship_companies ic
+                WHERE ic.uploaded_by_user_id = %s AND ic.status = 'approved'
+                ORDER BY ic.company_name
+            """, (vendor_id,))
+            companies = cursor.fetchall() or []
+            company_ids = [c['id'] for c in companies] if companies else []
         
         if not company_ids:
             return jsonify({
