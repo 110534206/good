@@ -106,6 +106,7 @@ def get_jobs_by_company(company_id):
 # --------------------
 # API：心得列表（搜尋、年份篩選）- 顯示所有公開心得
 # 移除 is_public 限制以確保所有使用者都能看到心得（避免資料庫欄位類型問題）
+# 退實習生仍可呼叫此 API 並瀏覽「所有心得」（其他人的心得），不因退實習而阻擋
 # --------------------
 @intern_exp_bp.route('/api/list', methods=['GET'])
 def get_experience_list():

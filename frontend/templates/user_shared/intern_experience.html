@@ -321,7 +321,7 @@ body {
 
     <!-- 分頁內容 -->
     <div class="tab-content border p-3 bg-white" id="experienceTabContent">
-      <!-- 所有心得分頁 -->
+      <!-- 所有心得分頁（退實習生仍可瀏覽，查看其他人的心得） -->
       <div class="tab-pane fade show active" id="all-experiences" role="tabpanel" aria-labelledby="all-tab">
         <div class="filter-card"><div class="row g-3">
           <div class="col-md-3">
@@ -744,7 +744,7 @@ body {
       container.innerHTML = html;
     }
 
-    // 載入心得列表（所有心得）
+    // 載入心得列表（所有心得）；退實習生仍可查看其他人的心得，不因 isWithdrawn 而阻擋
     async function loadExperiences(page = null) {
       try {
         if (page !== null) {
@@ -846,7 +846,7 @@ body {
             });
           }
         } else {
-          list.innerHTML = '<p class="text-muted">您還沒有上傳任何心得</p>';
+          list.innerHTML = '<p class="text-muted">' + (isWithdrawn ? '目前沒有既有心得可檢視。' : '您還沒有上傳任何心得') + '</p>';
           document.getElementById('myExperiencesPagination').innerHTML = '';
         }
       } catch (error) {
@@ -1121,7 +1121,7 @@ body {
       });
     }
 
-    // 初始載入
+    // 初始載入（退實習生仍可瀏覽「所有心得」，僅「我的心得」隱藏上傳按鈕並顯示退實習提示）
     window.onload = async function () {
       const admissionInfo = await loadStudentAdmission();
       const btnAdd = document.getElementById('btnAddExperience');
@@ -1131,7 +1131,7 @@ body {
         withdrawnNotice.style.display = 'block';
       }
       loadCompanies();
-      loadExperiences();
+      loadExperiences();  // 所有心得：退實習生與一般學生皆可查看
     };
 
     // 選單開關邏輯
