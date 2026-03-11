@@ -797,26 +797,26 @@
                 </div>
               </div>
               <div class="mt-2">
-                <label class="form-label small text-muted mb-1">偏好類別（複選，選填）</label>
+                <label class="form-label small text-muted mb-1">偏好類別（單選，選填）</label>
                 <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
                   <div class="form-check form-check-inline">
-                    <input class="form-check-input ai-keyword-checkbox" type="checkbox" name="ai-keyword-category" id="kw-hardware" value="硬體">
+                    <input class="form-check-input ai-keyword-checkbox" type="radio" name="ai-keyword-category" id="kw-hardware" value="硬體">
                     <label class="form-check-label" for="kw-hardware">硬體</label>
                   </div>
                   <div class="form-check form-check-inline">
-                    <input class="form-check-input ai-keyword-checkbox" type="checkbox" name="ai-keyword-category" id="kw-software" value="軟體">
+                    <input class="form-check-input ai-keyword-checkbox" type="radio" name="ai-keyword-category" id="kw-software" value="軟體">
                     <label class="form-check-label" for="kw-software">軟體</label>
                   </div>
                   <div class="form-check form-check-inline">
-                    <input class="form-check-input ai-keyword-checkbox" type="checkbox" name="ai-keyword-category" id="kw-marketing" value="行銷">
+                    <input class="form-check-input ai-keyword-checkbox" type="radio" name="ai-keyword-category" id="kw-marketing" value="行銷">
                     <label class="form-check-label" for="kw-marketing">行銷</label>
                   </div>
                   <div class="form-check form-check-inline">
-                    <input class="form-check-input ai-keyword-checkbox" type="checkbox" name="ai-keyword-category" id="kw-service" value="客服">
+                    <input class="form-check-input ai-keyword-checkbox" type="radio" name="ai-keyword-category" id="kw-service" value="客服">
                     <label class="form-check-label" for="kw-service">客服</label>
                   </div>
                   <div class="form-check form-check-inline">
-                    <input class="form-check-input ai-keyword-checkbox" type="checkbox" name="ai-keyword-category" id="kw-accounting" value="會計">
+                    <input class="form-check-input ai-keyword-checkbox" type="radio" name="ai-keyword-category" id="kw-accounting" value="會計">
                     <label class="form-check-label" for="kw-accounting">會計</label>
                   </div>
                 </div>
@@ -826,7 +826,10 @@
                     placeholder="可輸入其他類別"
                     maxlength="200">
                 </div>
-                <small class="text-muted">可勾選多項類別，AI 會針對所選類別調整自傳內容。</small>
+                <small class="text-muted">
+                  類別為單選，會搭配上方任務與語氣，讓 AI
+                  在「不大改原本履歷草稿」的前提下，讓內容更貼近您選的關鍵字與語氣。
+                </small>
               </div>
             </div>
 
