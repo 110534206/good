@@ -522,6 +522,19 @@
       return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
+    /** 跳脫字串用於放在 HTML 屬性內（避免屬性被引號或換行截斷），供 data-* 使用 */
+    function escapeForHtmlAttr(text) {
+      if (text === null || text === undefined) return '';
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;")
+        .replace(/\r/g, "&#13;")
+        .replace(/\n/g, "&#10;");
+    }
+
     // 獲取包含 company_id 的 API URL
     function getResumeApiUrl() {
       const urlParams = new URLSearchParams(window.location.search);
@@ -1145,18 +1158,27 @@
         const hasComment = row.comment && row.comment.trim() !== '';
         const btnClass = hasComment ? 'text-success' : '';
         const btnText = hasComment ? '已填寫' : '未填寫';
-        
-        // 如果是老師，只顯示查看模式（只讀）
+        const commentAttr = escapeForHtmlAttr(row.comment || '');
+        const pidVal = pid ? pid : 'null';
         const isReadOnly = userRole && userRole !== 'vendor';
+        const readonlyVal = isReadOnly ? 'true' : 'false';
+        // 使用 data-* 傳遞留言，避免留言中的引號/換行造成 onclick 語法錯誤，廠商才能正常看到自己新增的留言
         if (isReadOnly) {
             if (hasComment) {
-                return `<button class="btn btn-sm btn-outline-secondary text-success" onclick="openCommentModal(${row.id}, '${escapeHtml(row.comment || '')}', ${pid ? pid : 'null'}, true)">已填寫</button>`;
+                return `<button class="btn btn-sm btn-outline-secondary text-success" data-id="${row.id}" data-pid="${pidVal}" data-readonly="true" data-comment="${commentAttr}" onclick="openCommentModalFromBtn(this)">已填寫</button>`;
             } else {
                 return `<span style="color:#aaa; font-size:0.9em;">未填寫</span>`;
             }
         }
-        
-        return `<button class="btn btn-sm btn-outline-secondary ${btnClass}" onclick="openCommentModal(${row.id}, '${escapeHtml(row.comment || '')}', ${pid ? pid : 'null'}, false)">${btnText}</button>`;
+        return `<button class="btn btn-sm btn-outline-secondary ${btnClass}" data-id="${row.id}" data-pid="${pidVal}" data-readonly="false" data-comment="${commentAttr}" onclick="openCommentModalFromBtn(this)">${btnText}</button>`;
+    }
+
+    function openCommentModalFromBtn(btn) {
+        const id = btn.getAttribute('data-id');
+        const pid = btn.getAttribute('data-pid');
+        const readonly = btn.getAttribute('data-readonly') === 'true';
+        const comment = btn.getAttribute('data-comment') || '';
+        openCommentModal(id, comment, pid === 'null' ? null : pid, readonly);
     }
 
     function renderActionBtns(row, pid) {
