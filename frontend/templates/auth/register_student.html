@@ -185,9 +185,13 @@
     }
   });
 
-  // 表單提交 + 前端驗證 + 回傳訊息處理
+  // 表單提交 + 前端驗證 + 回傳訊息處理（防止雙重送出導致誤顯示重複帳號錯誤）
+  let isSubmitting = false;
+  let hasRegistrationSucceeded = false;
+
   document.getElementById("registerForm").addEventListener("submit", async function (e) {
     e.preventDefault();
+    if (isSubmitting) return;
 
     const username = studentIdInput.value.trim();
     const password = document.getElementById("password").value.trim();
@@ -195,6 +199,7 @@
     const usernameError = document.getElementById("usernameError");
     const passwordError = document.getElementById("passwordError");
     const responseMessage = document.getElementById("responseMessage");
+    const submitBtn = document.querySelector("#registerForm input[type=submit]");
 
     const studentIdPattern = /^\d{9}$/;
     const idPattern = /^[A-Z][1-2]\d{8}$/;
@@ -219,6 +224,12 @@
 
     if (!valid) return;
 
+    isSubmitting = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.value = "註冊中...";
+    }
+
     try {
       const res = await fetch("/api/register_student", {
         method: "POST",
@@ -231,19 +242,36 @@
       const data = await res.json();
 
       if (data.success) {
+        hasRegistrationSucceeded = true;
         responseMessage.style.color = "green";
-        responseMessage.textContent = data.message || "註冊成功，將為您導向登入頁...";
-        setTimeout(() => {
-          window.location.href = "/login";
-        }, 1500);
+        responseMessage.textContent = data.message || "註冊成功，正在為您導向學生主頁。";
+        if (data.redirect) {
+          setTimeout(() => {
+            window.location.href = data.redirect;
+          }, 800);
+        }
       } else {
-        responseMessage.style.color = "red";
-        responseMessage.textContent = data.message || "註冊失敗，請重試";
+        if (!hasRegistrationSucceeded) {
+          responseMessage.style.color = "red";
+          responseMessage.textContent = data.message || "註冊失敗，請重試";
+        }
+        isSubmitting = false;
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.value = "註冊";
+        }
       }
     } catch (err) {
-      responseMessage.style.color = "red";
-      responseMessage.textContent = "伺服器錯誤，請稍後再試";
+      if (!hasRegistrationSucceeded) {
+        responseMessage.style.color = "red";
+        responseMessage.textContent = "伺服器錯誤，請稍後再試";
+      }
       console.error(err);
+      isSubmitting = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.value = "註冊";
+      }
     }
   });
 </script>

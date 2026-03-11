@@ -342,9 +342,18 @@
             <textarea id="transportation" name="transportation" class="form-control" rows="3" placeholder="請說明交通方式"></textarea>
           </div>
           <div class="col-md-6">
-            <label for="email" class="form-label">E-mail</label>
+            <label for="廠商email" class="form-label">廠商E-mail</label>
             <input type="email" id="email" name="email" class="form-control" placeholder="請輸入電子郵件">
           </div>
+          {% if user_role in ['teacher', 'director'] %}
+          <div class="col-12">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="createVendorAccountCheckbox" name="create_vendor_account" required>
+              <label class="form-check-label" for="createVendorAccountCheckbox"><span class="text-danger">*</span> 建立廠商帳號：勾選後，系統會寄送預設帳密給 上方 E-mail ，廠商即可登入系統查看資料。</label>
+            </div>
+            <p class="text-muted small mb-0">此 E-mail 會作為廠商登入用的信箱，也會存入公司聯絡信箱。</p>
+          </div>
+          {% endif %}
           <div class="col-12">
             <label for="company_intro" class="form-label">單位簡介</label>
             <textarea id="company_intro" name="company_intro" class="form-control" rows="4" placeholder="請輸入公司簡介"></textarea>
@@ -460,11 +469,6 @@
 
       <!-- 送出按鈕 -->
       <div class="card">
-        {% if user_role in ['teacher', 'director'] %}
-        <div class="alert alert-info mb-3" role="alert">
-          <i class="bi bi-info-circle"></i> <strong>提示：</strong>您新增的實習公司將自動設定您為指導老師。
-        </div>
-        {% endif %}
         <button type="submit" class="btn btn-primary w-100" id="submitBtn">
           <span id="btnText">送出並生成 Word 檔</span>
           <div id="spinner" class="spinner-border spinner-border-sm ms-2 d-none"></div>
@@ -499,7 +503,15 @@
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
+    {% if user_role == 'vendor' %}
+    <a href="/vendor_home">首頁</a>
+    {% elif user_role == 'director' %}
+    <a href="/director_home">首頁</a>
+    {% elif user_role == 'ta' %}
+    <a href="/ta_home">首頁</a>
+    {% else %}
     <a href="/teacher_home">首頁</a>
+    {% endif %}
     <a href="/profile">個人資料</a>
     <a href="/notifications">通知</a>
     <a href="/upload_company">建立實習機會</a>
@@ -622,6 +634,7 @@
           sideMenu.setAttribute('aria-hidden', 'true');
         }
       });
+
     });
 
     // === 表單提交 ===
@@ -664,7 +677,9 @@
         const source = Array.from(document.querySelectorAll('input[name="source"]:checked')).map(cb => cb.value);
         const sourceOtherText = document.getElementById('source_other_text')?.value || '';
 
-        // 構建 JSON 資料
+        // 情境二：指導老師/主任可勾選「建立廠商帳號」，使用表單 E-mail（contact_email）寄送帳密至廠商
+        const createVendorCheckbox = document.getElementById('createVendorAccountCheckbox');
+        const createVendorAccount = !!(createVendorCheckbox && createVendorCheckbox.checked);
         const data = {
           serial_number: formData.get('serial_number') || '',
           company_name: formData.get('company_name'),
@@ -685,6 +700,17 @@
           source: source,
           source_other_text: sourceOtherText
         };
+        if (createVendorAccount) {
+          data.create_vendor_account = true;
+          const formEmail = (formData.get('email') || '').trim();
+          if (!formEmail) {
+            msg.innerHTML = `<div class="alert alert-danger">勾選建立廠商帳號時，請填寫上方「E-mail」欄位（帳密將寄至該信箱）。</div>`;
+            btn.disabled = false;
+            text.textContent = "送出並生成 Word 檔";
+            spinner.classList.add("d-none");
+            return;
+          }
+        }
 
         const res = await fetch("/api/upload_company", {
           method: "POST",
@@ -698,9 +724,8 @@
 
         if (result.success) {
           msg.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
-          // 如果有檔案下載連結，提供下載
-          if (result.download_url) {
-            msg.innerHTML += `<div class="alert alert-info"><a href="${result.download_url}" class="btn btn-success" download>下載 Word 檔</a></div>`;
+          if (result.vendor_email_sent === false && result.message && result.message.includes('廠商帳號已建立')) {
+            msg.innerHTML += `<div class="alert alert-info mt-2">若廠商未收到信，請廠商檢查垃圾信匣，或由您從「通知中心」查看密碼（可查看明文）後轉交廠商登入。</div>`;
           }
           e.target.reset();
           await initSerialNumber(); // 重新生成編號
@@ -743,11 +768,15 @@
         tbody.innerHTML = data.companies.map((r, idx) => {
           const displayTime = r.upload_time || formatDateTime(r.submitted_at);
           const filename = r.filename || 'N/A';
+          const isFromAdvisor = !!r.is_from_advisor;
+          const companyNameCell = isFromAdvisor
+            ? `${r.company_name || '-'} <span class="badge bg-info text-white ms-1">指導老師建立</span>`
+            : (r.company_name || '-');
 
           return `
           <tr>
             <td>${displayTime}</td>
-            <td>${r.company_name || '-'}</td>
+            <td>${companyNameCell}</td>
             <td>${filename}</td>
             <td>
               <span class="status-badge ${r.status === 'approved' ? 'bg-success text-white'
@@ -759,7 +788,7 @@
             </td>
             <td>
               <button class="btn btn-sm btn-outline-primary" onclick="downloadCompanyFile(${r.id}, '${escapeHtml(r.company_name || '')}')">下載</button>
-              <button class="btn btn-sm btn-outline-danger" onclick="deleteCompany(${r.id})">刪除</button>
+              ${isFromAdvisor ? '' : `<button class="btn btn-sm btn-outline-danger" onclick="deleteCompany(${r.id})">刪除</button>`}
             </td>
           </tr>
         `;
@@ -777,7 +806,7 @@
       if (s === "rejected") return "已退回";
       if (s === "pending") {
         if (uploaderRole === "vendor") {
-          return "待科助開放";
+          return "待審核";
         }
         return "待審核";
       }

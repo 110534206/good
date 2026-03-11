@@ -129,15 +129,46 @@ def send_email_smtp(recipient_email, subject, content):
     except ConnectionRefusedError:
         return False, f"SMTP 連線被拒絕：無法連線到 {SMTP_HOST}:{SMTP_PORT}。請檢查防火牆設定。"
     except OSError as e:
-        if "10060" in str(e) or "timed out" in str(e).lower():
-            return False, f"SMTP 連線超時：無法連線到郵件伺服器。可能原因：1) 防火牆阻擋 2) 網路連線問題 3) SMTP 伺服器無法回應。錯誤：{str(e)}"
-        return False, f"SMTP 連線錯誤：{str(e)}"
+        err_str = str(e)
+        if "10060" in err_str or "timed out" in err_str.lower():
+            return False, f"SMTP 連線超時：無法連線到郵件伺服器。可能原因：1) 防火牆阻擋 2) 網路連線問題 3) SMTP 伺服器無法回應。錯誤：{err_str}"
+        if "534" in err_str or "5.7.9" in err_str or "WebLoginRequired" in err_str:
+            return False, (
+                "Gmail 要求使用「應用程式密碼」登入。\n\n"
+                "請至 Google 帳戶 → 安全性 → 兩步驟驗證 → 應用程式密碼，產生一組密碼後填入 EMAIL.env 的 SMTP_PASSWORD，並重啟程式。\n"
+                "參考：https://support.google.com/mail/answer/185833"
+            )
+        return False, f"SMTP 連線錯誤：{err_str}"
     except smtplib.SMTPAuthenticationError as e:
+        err_str = str(e)
+        if "534" in err_str or "5.7.9" in err_str or "WebLoginRequired" in err_str or "Application-specific" in err_str.lower():
+            return False, (
+                "Gmail 要求使用「應用程式密碼」登入，無法使用一般帳號密碼。\n\n"
+                "請依下列步驟設定：\n"
+                "1. 開啟 Google 帳戶 → 安全性 → 啟用「兩步驟驗證」。\n"
+                "2. 在「兩步驟驗證」頁面下方點「應用程式密碼」，選擇「郵件」與您的裝置，產生一組 16 碼密碼。\n"
+                "3. 將 EMAIL.env 的 SMTP_PASSWORD 改為這組「應用程式密碼」（不是您的 Gmail 登入密碼）。\n"
+                "參考：https://support.google.com/mail/answer/185833"
+            )
         return False, f"SMTP 認證失敗：請確認應用程式密碼是否正確。錯誤：{str(e)}"
     except smtplib.SMTPException as e:
+        err_str = str(e)
+        if "534" in err_str or "5.7.9" in err_str or "WebLoginRequired" in err_str:
+            return False, (
+                "Gmail 要求先透過瀏覽器登入或使用「應用程式密碼」。\n\n"
+                "請至 Google 帳戶啟用兩步驟驗證後，建立「應用程式密碼」，並將 EMAIL.env 的 SMTP_PASSWORD 改為該密碼。\n"
+                "參考：https://support.google.com/mail/?p=WebLoginRequired"
+            )
         return False, f"SMTP 錯誤：{str(e)}"
     except Exception as e:
-        return False, f"SMTP 發送失敗：{str(e)}"
+        err_str = str(e)
+        if "534" in err_str or "5.7.9" in err_str or "WebLoginRequired" in err_str:
+            return False, (
+                "Gmail 要求使用「應用程式密碼」登入。\n\n"
+                "請至 Google 帳戶 → 安全性 → 兩步驟驗證 → 應用程式密碼，產生一組密碼後填入 EMAIL.env 的 SMTP_PASSWORD，並重啟程式。\n"
+                "參考：https://support.google.com/mail/answer/185833"
+            )
+        return False, f"SMTP 發送失敗：{err_str}"
 
 # =========================================================
 # 發送郵件 (Gmail API)
@@ -429,6 +460,60 @@ def send_account_created_email(recipient_email, username, name, role_display, in
 智慧實習平台
 """
     return send_email(recipient_email, subject, content)
+
+
+def send_password_reset_code_email(recipient_email, code):
+    """
+    忘記密碼：寄送驗證碼至註冊 Email。
+    回傳: (success, message, log_id 或 None)
+    """
+    subject = "【智慧實習平台】重設密碼驗證碼"
+    content = f"""
+您好：
+
+您正在重設智慧實習平台的密碼。
+
+驗證碼：{code}
+
+請於 10 分鐘內在登入頁的「忘記密碼」流程中輸入此驗證碼以完成重設。
+
+若您未申請重設密碼，請忽略此信。
+
+此為系統自動發送，請勿直接回覆此郵件。
+
+--
+智慧實習平台
+"""
+    return send_email(recipient_email, subject, content)
+
+
+def send_vendor_credentials_to_vendor_email(vendor_email, company_name, vendor_username, initial_password, login_url):
+    """
+    指導老師建立廠商資料後，將預設帳密寄至表單的廠商 E-mail（contact_email），
+    廠商可直接登入廠商主頁。
+    回傳: (success, message, log_id)
+    """
+    subject = "【智慧實習平台】廠商帳號已建立－請使用以下資訊登入"
+    content = f"""
+您好：
+
+您的智慧實習平台廠商帳號已由指導老師建立（公司：{company_name}），請使用以下資訊登入系統。
+
+登入資訊：
+- 系統登入網址：{login_url}
+- 帳號：{vendor_username}
+- 預設密碼：{initial_password}
+- 角色：廠商
+
+請使用以上帳密直接登入廠商主頁。登入後建議至「個人資料」修改密碼，以確保帳號安全。
+您可於系統中查看實習單位基本資料表。單位資料審核通過後，將可在職位需求管理頁面維護職缺資訊。
+
+此為系統自動發送，請勿直接回覆此郵件。
+
+--
+智慧實習平台
+"""
+    return send_email(vendor_email, subject, content)
 
 
 def send_interview_email(student_email, student_name, company_name, vendor_name="", custom_content=""):
