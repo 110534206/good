@@ -31,6 +31,10 @@
       color: #000000;
     }
 
+    #registerForm {
+      display: flex;
+      flex-direction: column;
+    }
     .field {
       margin-bottom: 20px;
       position: relative;
@@ -123,32 +127,29 @@
     <div id="responseMessage"></div>
 
     <form id="registerForm">
-      <div class="field">
-        <label for="email">Email <span style="font-size: 0.9em; color: #666;">（請輸入公司聯絡 Email）</span></label>
-        <input type="email" name="email" id="email" required autocomplete="off" />
-        <div id="emailError" style="color: red; font-size: 14px; display: none;"></div>
-      </div>
-
-      <div class="field">
+      <!-- 登入帳號放第一欄並設 autocomplete="username"，讓瀏覽器儲存密碼時存的是帳號而非 email -->
+      <div class="field" style="order: 2;">
         <label for="username_display">登入帳號 <span style="font-size: 0.9em; color: #666;">（可自行修改）</span></label>
-        <input type="text" name="username_display" id="username_display" readonly />
+        <input type="text" name="username" id="username_display" autocomplete="username" readonly />
         <div id="usernameError" style="color: red; font-size: 14px; display: none;"></div>
       </div>
-
-      <div class="field">
+      <div class="field" style="order: 1;">
+        <label for="email">Email <span style="font-size: 0.9em; color: #666;">（請輸入公司聯絡 Email）</span></label>
+        <input type="email" name="email" id="email" required autocomplete="email" />
+        <div id="emailError" style="color: red; font-size: 14px; display: none;"></div>
+      </div>
+      <div class="field" style="order: 3;">
         <label for="password">密碼 <span style="font-size: 0.9em; color: #666;">（請輸入自訂密碼，至少 6 個字元）</span></label>
-        <input type="password" name="password" id="password" required autocomplete="off" />
+        <input type="password" name="password" id="password" required autocomplete="new-password" />
         <span class="toggle-password" onclick="togglePassword()">
           <i class="fas fa-eye-slash" id="eyeIcon"></i>
         </span>
         <div id="passwordError" style="color: red; font-size: 14px; display: none;"></div>
       </div>
-
-      <div class="field">
+      <div class="field" style="order: 4;">
         <input type="submit" value="註冊" />
       </div>
-
-      <div class="field">
+      <div class="field" style="order: 5;">
         <button type="button" class="back-button" onclick="window.location.href='{{ url_for('auth_bp.login_page') }}'">返回上一頁</button>
       </div>
     </form>

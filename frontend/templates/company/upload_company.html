@@ -345,6 +345,15 @@
             <label for="廠商email" class="form-label">廠商E-mail</label>
             <input type="email" id="email" name="email" class="form-control" placeholder="請輸入電子郵件">
           </div>
+          {% if user_role in ['teacher', 'director'] %}
+          <div class="col-12">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="createVendorAccountCheckbox" name="create_vendor_account" required>
+              <label class="form-check-label" for="createVendorAccountCheckbox"><span class="text-danger">*</span> 建立廠商帳號：勾選後，系統會寄送預設帳密給 上方 E-mail ，廠商即可登入系統查看資料。</label>
+            </div>
+            <p class="text-muted small mb-0">此 E-mail 會作為廠商登入用的信箱，也會存入公司聯絡信箱。</p>
+          </div>
+          {% endif %}
           <div class="col-12">
             <label for="company_intro" class="form-label">單位簡介</label>
             <textarea id="company_intro" name="company_intro" class="form-control" rows="4" placeholder="請輸入公司簡介"></textarea>
@@ -458,25 +467,8 @@
         </div>
       </div>
 
-      <!-- 情境二：指導老師/主任可選擇同時建立廠商帳號（使用上方 E-mail 欄位，帳密寄至廠商） -->
-      {% if user_role in ['teacher', 'director'] %}
-      <div class="card" id="createVendorAccountCard">
-        <h4 class="section-title">建立廠商帳號（選填）</h4>
-        <div class="form-check mb-2">
-          <input class="form-check-input" type="checkbox" id="createVendorAccountCheckbox" name="create_vendor_account">
-          <label class="form-check-label" for="createVendorAccountCheckbox">同時建立廠商帳號（以本表「E-mail」欄位建立帳號，預設帳密將寄至該 Email，廠商可直接登入廠商主頁）</label>
-        </div>
-        <p class="text-muted small mb-0">請確認上方「I. 基本單位資訊」的 E-mail 欄位已填寫正確，該欄位即為廠商登入帳號用信箱，並會寫入公司聯絡信箱（contact_email）。</p>
-      </div>
-      {% endif %}
-
       <!-- 送出按鈕 -->
       <div class="card">
-        {% if user_role in ['teacher', 'director'] %}
-        <div class="alert alert-info mb-3" role="alert">
-          <i class="bi bi-info-circle"></i> <strong>提示：</strong>您新增的實習公司將自動設定您為指導老師。
-        </div>
-        {% endif %}
         <button type="submit" class="btn btn-primary w-100" id="submitBtn">
           <span id="btnText">送出並生成 Word 檔</span>
           <div id="spinner" class="spinner-border spinner-border-sm ms-2 d-none"></div>
@@ -511,7 +503,15 @@
   <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
+    {% if user_role == 'vendor' %}
+    <a href="/vendor_home">首頁</a>
+    {% elif user_role == 'director' %}
+    <a href="/director_home">首頁</a>
+    {% elif user_role == 'ta' %}
+    <a href="/ta_home">首頁</a>
+    {% else %}
     <a href="/teacher_home">首頁</a>
+    {% endif %}
     <a href="/profile">個人資料</a>
     <a href="/notifications">通知</a>
     <a href="/upload_company">建立實習機會</a>
@@ -806,7 +806,7 @@
       if (s === "rejected") return "已退回";
       if (s === "pending") {
         if (uploaderRole === "vendor") {
-          return "待科助開放";
+          return "待審核";
         }
         return "待審核";
       }
