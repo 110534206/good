@@ -367,7 +367,7 @@
         const tr = document.createElement('tr');
 
         const yearTd = document.createElement('td');
-        yearTd.innerHTML = row.year ? `<span class="badge bg-light text-dark badge-year">${row.year}</span>` : '-';
+        yearTd.textContent = row.year || '-';
 
         const stuTd = document.createElement('td');
         stuTd.textContent = row.author || '未知學生';

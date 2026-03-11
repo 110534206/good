@@ -125,7 +125,9 @@ def get_experience_list():
         # 顯示心得列表
         # 使用 LEFT JOIN 確保即使使用者或公司資料不存在也能顯示心得
         query = """
-            SELECT ie.id, ie.year, ie.content, ie.rating, ie.created_at, ie.is_public,
+            SELECT ie.id, ie.year,
+                   COALESCE(LEFT((SELECT s.code FROM semesters s WHERE s.is_active = 1 LIMIT 1), 3), ie.year) AS semester_year,
+                   ie.content, ie.rating, ie.created_at, ie.is_public,
                    COALESCE(ie.status, 'pending') AS status,
                    u.id AS author_id, COALESCE(u.name, '未知使用者') AS author, 
                    c.id AS company_id, COALESCE(c.company_name, '未填寫公司') AS company_name,
@@ -245,10 +247,9 @@ def get_experience_list():
 
         taiwan_tz = timezone(timedelta(hours=8))
 
-        # 確保 year 為 int（並以民國年輸出）
         for e in experiences:
             try:
-                e['year'] = int(e['year']) if e.get('year') is not None else None
+                e['year'] = int(e['semester_year']) if e.get('semester_year') is not None else (int(e['year']) if e.get('year') is not None else None)
             except:
                 e['year'] = None
 
