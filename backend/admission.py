@@ -2213,30 +2213,6 @@ def director_matching_results():
 
         # 檢查本學期是否已產生最終媒合結果（matching_results），供前端控制「送出最終媒合結果」按鈕行為
         already_confirmed = False
-        try:
-            cursor.execute("""
-                SELECT COLUMN_NAME
-                FROM information_schema.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = 'matching_results'
-                  AND COLUMN_NAME = 'semester_id'
-            """)
-            has_mr_semester_id = cursor.fetchone() is not None
-            cursor.fetchall()
-
-            target_semester_id = active_semester_id or current_semester_id
-            if has_mr_semester_id and target_semester_id:
-                cursor.execute(
-                    "SELECT COUNT(*) AS cnt FROM matching_results WHERE semester_id = %s",
-                    (target_semester_id,),
-                )
-            else:
-                # 舊資料庫沒有 semester_id 時，只要表內已有資料就視為已送出
-                cursor.execute("SELECT COUNT(*) AS cnt FROM matching_results")
-            mr_row = cursor.fetchone() or {}
-            already_confirmed = bool(mr_row.get("cnt") or 0)
-        except Exception as check_err:
-            print(f"⚠️ 檢查 matching_results 是否已存在時發生錯誤（director_matching_results）: {check_err}")
 
         # 優先從 resume_applications 讀取廠商的媒合排序資料
         # 如果 manage_director 表有資料，則合併兩者的資料
