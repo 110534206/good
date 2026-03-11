@@ -345,7 +345,7 @@
           </div>
           <div class="mb-3">
             <label class="form-label">老師評語</label>
-            <textarea class="form-control" id="detailTeacherComment" style="background-color:#e2e2e2;" rows="3" readonly></textarea>
+            <textarea class="form-control" id="detailTeacherComment" style="background-color:#e2e2e2; height:150px; resize:none;" readonly></textarea>
           </div>
           <div class="mb-0">
             <label class="form-label">老師批閱時間</label>
@@ -414,9 +414,9 @@
           </td>
           <td>
             <button type="button"
-                    class="btn btn-sm btn-outline-primary"
+                    class="btn btn-sm ${w.filled_at ? 'btn-outline-secondary' : 'btn-outline-primary'}"
                     onclick="handleWeeklyAction(${w.id || 'null'})">
-              填寫 / 檢視
+              ${w.filled_at ? '檢視' : '填寫'}
             </button>
           </td>
         `;
@@ -464,6 +464,27 @@
       }
 
       semesterEl.value = document.getElementById('weeklySemester')?.textContent || '';
+
+      const isViewOnly = !!(week && week.filled_at);
+      const saveBtn = document.getElementById('saveWeeklyBtn');
+
+      titleEl.readOnly = isViewOnly;
+      workEl.readOnly = isViewOnly;
+      reflectionEl.readOnly = isViewOnly;
+
+      if (isViewOnly) {
+        titleEl.style.backgroundColor = '#e2e2e2';
+        workEl.style.backgroundColor = '#e2e2e2';
+        reflectionEl.style.backgroundColor = '#e2e2e2';
+        if (fileInput) fileInput.style.display = 'none';
+        if (saveBtn) saveBtn.style.display = 'none';
+      } else {
+        titleEl.style.backgroundColor = '';
+        workEl.style.backgroundColor = '';
+        reflectionEl.style.backgroundColor = '';
+        if (fileInput) fileInput.style.display = '';
+        if (saveBtn) saveBtn.style.display = '';
+      }
 
       const modalEl = document.getElementById('weeklyDetailModal');
       const modal = new bootstrap.Modal(modalEl);

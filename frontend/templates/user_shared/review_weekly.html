@@ -317,65 +317,121 @@
 
   <!-- 詳細內容 / 批閱 Modal -->
   <div class="modal fade" id="weeklyReviewModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">實習週記內容</h5>
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+      <div class="modal-content" style="border-radius:14px; overflow:hidden;">
+        <div class="modal-header" style="background:#fff; padding:16px 24px; border-bottom:1px solid #e5e7eb;">
+          <h5 class="modal-title" style="font-weight:600; font-size:1.15rem; color:#0f172a;">實習週記內容</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
-          <div class="row g-3">
-            <div class="col-md-4">
-              <label class="form-label">學號</label>
-              <input type="text" id="rvStudentNumber" class="form-control form-control-sm" readonly>
+        <div class="modal-body" style="padding:24px 28px; font-size:1.05rem;">
+
+          <!-- 學生週記資訊 -->
+          <div style="background:#f8f9fb; border:1px solid #e5e7eb; border-radius:10px; padding:20px 24px; margin-bottom:20px;">
+            <div class="row g-3 mb-3">
+              <div class="col-md-4">
+                <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">學號</label>
+                <input type="text" id="rvStudentNumber" class="form-control" style="background:#e8edf3;" readonly>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">姓名</label>
+                <input type="text" id="rvStudentName" class="form-control" style="background:#e8edf3;" readonly>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">實習單位</label>
+                <input type="text" id="rvCompany" class="form-control" style="background:#e8edf3;" readonly>
+              </div>
             </div>
-            <div class="col-md-4">
-              <label class="form-label">姓名</label>
-              <input type="text" id="rvStudentName" class="form-control form-control-sm" readonly>
+            <div class="mb-3">
+              <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">標題</label>
+              <input type="text" id="rvTitle" class="form-control" style="background:#e8edf3;" readonly>
             </div>
-            <div class="col-md-4">
-              <label class="form-label">實習單位</label>
-              <input type="text" id="rvCompany" class="form-control form-control-sm" readonly>
+            <div class="mb-3">
+              <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">實習工作記要</label>
+              <textarea id="rvWorkNotes" class="form-control" rows="5" style="background:#e8edf3;" readonly></textarea>
             </div>
-          </div>
-          <div class="mt-3">
-            <label class="form-label">標題</label>
-            <input type="text" id="rvTitle" class="form-control form-control-sm" readonly>
-          </div>
-          <div class="mt-3">
-            <label class="form-label">實習工作記要</label>
-            <textarea id="rvWorkNotes" class="form-control form-control-sm" rows="4" readonly></textarea>
-          </div>
-          <div class="mt-3">
-            <label class="form-label">學習心得</label>
-            <textarea id="rvReflection" class="form-control form-control-sm" rows="4" readonly></textarea>
-          </div>
-          <div class="mt-3">
-            <label class="form-label">學生上傳檔案</label>
-            <div id="rvFileArea">
-              <span class="text-muted">尚未上傳檔案</span>
+            <div class="mb-3">
+              <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">學習心得</label>
+              <textarea id="rvReflection" class="form-control" rows="5" style="background:#e8edf3;" readonly></textarea>
             </div>
-          </div>
-          <div class="row g-3 mt-1">
-            <div class="col-md-6">
-              <label class="form-label">學生填寫時間</label>
-              <input type="text" id="rvFilledAt" class="form-control form-control-sm" readonly>
+            <div class="mb-3">
+              <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">學生上傳檔案</label>
+              <div id="rvFileArea" style="padding:6px 0;">
+                <span class="text-muted">尚未上傳檔案</span>
+              </div>
             </div>
-            <div class="col-md-6">
-              <label class="form-label">目前狀態</label>
-              <input type="text" id="rvStatusText" class="form-control form-control-sm" readonly>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">學生填寫時間</label>
+                <input type="text" id="rvFilledAt" class="form-control" style="background:#e8edf3;" readonly>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">目前狀態</label>
+                <input type="text" id="rvStatusText" class="form-control" style="background:#e8edf3;" readonly>
+              </div>
             </div>
           </div>
-          <hr class="my-3">
-          <div class="mt-1">
-            <label class="form-label">老師評語</label>
-            <textarea id="rvTeacherComment" class="form-control form-control-sm" rows="3" placeholder="請填寫給學生的回饋與建議"></textarea>
+
+          <!-- 老師批閱區塊 -->
+          <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:16px 20px;">
+            <div style="font-weight:600; color:#92400e; margin-bottom:14px; font-size:0.95rem;">老師批閱</div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">1. 適應情況是否良好 <span style="color:red;">*</span></label>
+                <select id="rvAdaptation" class="form-select" style="border-color:#fde68a;">
+                  <option value="">請選擇</option>
+                  <option value="良好">良好</option>
+                  <option value="尚可">尚可</option>
+                  <option value="待加強">待加強</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">2. 工作內容是否符合資管專業 <span style="color:red;">*</span></label>
+                <select id="rvWorkMatch" class="form-select" style="border-color:#fde68a;">
+                  <option value="">請選擇</option>
+                  <option value="完全符合">完全符合</option>
+                  <option value="部分符合">部分符合</option>
+                  <option value="不符合">不符合</option>
+                </select>
+              </div>
+            </div>
+            <div class="row g-3 mb-3">
+              <div class="col-md-6">
+                <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">3. 工作表現是否符合單位期待 <span style="color:red;">*</span></label>
+                <select id="rvPerformance" class="form-select" style="border-color:#fde68a;">
+                  <option value="">請選擇</option>
+                  <option value="完全符合">完全符合</option>
+                  <option value="部分符合">部分符合</option>
+                  <option value="不符合">不符合</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">4. 成果報告進行狀況 <span style="color:red;">*</span></label>
+                <select id="rvReportStatus" class="form-select" style="border-color:#fde68a;">
+                  <option value="">請選擇</option>
+                  <option value="尋找題目">尋找題目</option>
+                  <option value="進行中">進行中</option>
+                  <option value="已完成">已完成</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">評語</label>
+              <textarea id="rvTeacherComment" class="form-control" rows="4" placeholder="請填寫給學生的回饋與建議" style="border-color:#fde68a;"></textarea>
+            </div>
+
+            <div>
+              <label class="form-label" style="font-size:0.9rem; color:#6b7280; margin-bottom:2px;">老師批閱時間</label>
+              <input type="text" id="rvReviewedAt" class="form-control" style="background:#e8edf3;" readonly>
+            </div>
           </div>
+
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">關閉</button>
-          <button type="button" class="btn btn-warning btn-sm" id="btnReturnWeekly">退回修改</button>
-          <button type="button" class="btn btn-primary btn-sm" id="btnApproveWeekly">批閱完成</button>
+        <div class="modal-footer" style="padding:14px 28px; border-top:1px solid #e5e7eb;">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">關閉</button>
+          <button type="button" class="btn btn-warning" id="btnReturnWeekly" style="color:#fff;">退回修改</button>
+          <button type="button" class="btn btn-primary" id="btnApproveWeekly">批閱完成</button>
         </div>
       </div>
     </div>
@@ -384,6 +440,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     let allReviewItems = [];
+    let allMatchedStudents = [];
     let currentReviewId = null;
     let isDirectorMode = false;
     let selectedCompanyTab = '';
@@ -395,10 +452,8 @@
       if (!classSelect) return;
       classSelect.innerHTML = '<option value="">所有班級</option>';
       const classSet = new Set();
-      if (isDirectorMode) {
-        classSet.add('忠');
-        classSet.add('孝');
-      }
+      classSet.add('忠');
+      classSet.add('孝');
       items.forEach(i => {
         if (i.class_name && i.class_name.trim()) {
           classSet.add(i.class_name.trim());
@@ -446,16 +501,11 @@
       });
     }
 
-    function buildCompanyTabs(items) {
+    function buildCompanyTabs(companyList) {
       const tabsContainer = document.getElementById('companyTabs');
       if (!tabsContainer) return;
-      const companies = new Set();
-      items.forEach(i => {
-        const name = (i.company_name || '').trim();
-        if (name) companies.add(name);
-      });
       tabsContainer.innerHTML = '<button class="company-tab active" data-company="">全部</button>';
-      Array.from(companies).sort().forEach(c => {
+      (companyList || []).forEach(c => {
         const btn = document.createElement('button');
         btn.className = 'company-tab';
         btn.setAttribute('data-company', c);
@@ -463,6 +513,18 @@
         tabsContainer.appendChild(btn);
       });
       selectedCompanyTab = '';
+    }
+
+    function getFilteredStudentsByCompany() {
+      if (!selectedCompanyTab) return allMatchedStudents;
+      return allMatchedStudents.filter(s => (s.company_name || '').trim() === selectedCompanyTab);
+    }
+
+    function refreshFilters() {
+      const students = getFilteredStudentsByCompany();
+      populateClassFilter(students);
+      populateAccountFilter(students);
+      populateStudentFilter(students);
     }
 
     function getStatusLabel(status) {
@@ -531,7 +593,7 @@
           <td>${item.due_date || '—'}</td>
           <td>${item.filled_at || '—'}</td>
           <td><span class="badge-status ${badgeCls}">${statusLabel}</span></td>
-          <td><button type="button" class="btn btn-sm btn-outline-primary" data-id="${item.id}">查看</button></td>
+          <td><button type="button" class="btn btn-sm ${item.status === 'reviewed' ? 'btn-outline-secondary' : 'btn-outline-primary'}" data-id="${item.id}">${item.status === 'reviewed' ? '檢視' : '批閱'}</button></td>
         `;
         weeklyReviewTableBody.appendChild(tr);
       });
@@ -550,6 +612,7 @@
       document.getElementById('rvReflection').value = item.reflection || '';
       document.getElementById('rvFilledAt').value = item.filled_at || '';
       document.getElementById('rvStatusText').value = getStatusLabel(item.status);
+      document.getElementById('rvReviewedAt').value = item.reviewed_at || '';
 
       const fileArea = document.getElementById('rvFileArea');
       if (item.file_path) {
@@ -568,7 +631,25 @@
 
     async function doReviewAction(action) {
       if (!currentReviewId) return;
+
+      const adaptation = document.getElementById('rvAdaptation').value;
+      const workMatch = document.getElementById('rvWorkMatch').value;
+      const performance = document.getElementById('rvPerformance').value;
+      const reportStatus = document.getElementById('rvReportStatus').value;
+
+      if (!adaptation || !workMatch || !performance || !reportStatus) {
+        alert('請完成前 4 項評估項目後再送出。');
+        return;
+      }
+
       const comment = document.getElementById('rvTeacherComment').value.trim();
+      const reviewData = [
+        `1. 適應情況是否良好:${adaptation}`,
+        `2. 工作內容是否符合資管專業:${workMatch}`,
+        `3. 工作表現是否符合單位期待:${performance}`,
+        `4. 成果報告進行狀況:${reportStatus}`,
+      ].join('\n') + (comment ? `\n${comment}` : '');
+
       const url = action === 'approve'
         ? `/intern_weekly/api/approve/${currentReviewId}`
         : `/intern_weekly/api/return/${currentReviewId}`;
@@ -578,7 +659,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ teacher_comment: comment })
+          body: JSON.stringify({ teacher_comment: reviewData })
         });
         const data = await res.json();
         if (!data.success) {
@@ -607,10 +688,9 @@
           return;
         }
         allReviewItems = data.items || [];
-        buildCompanyTabs(allReviewItems);
-        populateClassFilter(allReviewItems);
-        populateAccountFilter(allReviewItems);
-        populateStudentFilter(allReviewItems);
+        allMatchedStudents = data.students || [];
+        buildCompanyTabs(data.companies || []);
+        refreshFilters();
         renderReviewTable(allReviewItems);
       } catch (e) {
         console.warn('載入週記審核列表失敗', e);
@@ -630,6 +710,7 @@
       document.querySelectorAll('.company-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       selectedCompanyTab = tab.getAttribute('data-company') || '';
+      refreshFilters();
       renderReviewTable(allReviewItems);
     });
 
