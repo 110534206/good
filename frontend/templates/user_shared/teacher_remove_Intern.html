@@ -196,7 +196,7 @@
     .btn-confirm-case:hover { background: #b91c1c; color: #fff; }
     .badge { display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 500; }
     .badge-withdrawing { background: #fecaca; color: #b91c1c; }
-    .badge-confirmed { background: #17a2b8; color: #fff; }
+    .badge-confirmed { background: #dc2626; color: #fff; }
     .detail-block {
       background: #f8fafc; border-radius: 12px; padding: 18px 20px; margin-bottom: 20px;
       border: 1px solid #e2e8f0;
@@ -475,6 +475,66 @@
       font-size: 1.4rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
     }
     .preview-close:hover { background: #475569; }
+    /* 向廠商提出退實習申請 */
+    .btn-apply-withdraw {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
+      border: none; background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); color: #fff;
+      font-size: 0.85rem; font-weight: 500; cursor: pointer;
+    }
+    .btn-apply-withdraw:hover { opacity: 0.95; }
+    .btn-apply-withdraw:disabled { opacity: 0.6; cursor: not-allowed; }
+    .badge-teacher-applying { background: #fef3c7; color: #92400e; }
+    /* 提出申請表單區塊（同頁顯示，非彈窗） */
+    .apply-form-wrap { margin-top: 8px; padding-top: 20px; border-top: 1px solid #e2e8f0; }
+    .apply-form-wrap .btn-back {
+      display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; padding: 8px 0;
+      background: none; border: none; color: #0454a3; font-size: 0.95rem; cursor: pointer;
+    }
+    .apply-form-wrap .btn-back:hover { color: #0369a1; text-decoration: underline; }
+    .apply-form-wrap .section-label {
+      font-size: 1rem; color: #0f172a; margin-bottom: 12px; padding-bottom: 8px;
+      border-bottom: 2px solid #e2e8f0; font-weight: 700;
+    }
+    .apply-form-wrap .intern-info-block { margin-bottom: 24px; }
+    .apply-form-wrap .intern-info-row { margin-bottom: 10px; font-size: 0.95rem; line-height: 1.5; }
+    .apply-form-wrap .intern-info-row .label { color: #64748b; margin-right: 8px; }
+    .apply-form-wrap .intern-info-row .value { color: #1e293b; font-weight: 500; }
+    .apply-form-wrap h2 {
+      font-size: 1.2rem; color: #0f172a; margin-bottom: 12px; padding-bottom: 12px;
+      border-bottom: 2px solid #e2e8f0; font-weight: 700;
+    }
+    .apply-form-wrap .form-group { margin-bottom: 20px; }
+    .apply-form-wrap .form-group label {
+      display: block; font-weight: 600; color: #64748b; margin-bottom: 8px; font-size: 0.95rem;
+    }
+    .apply-form-wrap .form-group label .hint { font-weight: 400; color: #64748b; font-size: 0.85rem; }
+    .apply-form-wrap .form-group select,
+    .apply-form-wrap .form-group textarea {
+      width: 100%; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 8px;
+      font-size: 1rem; color: #1e293b; background: #fff;
+    }
+    .apply-form-wrap .form-group textarea { min-height: 140px; resize: vertical; }
+    .apply-form-wrap .form-group select:focus,
+    .apply-form-wrap .form-group textarea:focus {
+      outline: none; border-color: #0066cc; box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+    }
+    .apply-form-wrap .upload-group { margin-bottom: 20px; }
+    .apply-form-wrap .upload-label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.95rem; color: #64748b; font-weight: 600; margin-bottom: 8px;
+    }
+    .apply-form-wrap .upload-label i { font-size: 1.1rem; color: #64748b; }
+    .apply-form-wrap .upload-box {
+      border: 2px dashed #cbd5e1; border-radius: 12px; padding: 14px 16px;
+      background: #f8fafc;
+    }
+    .apply-form-wrap .upload-box input[type="file"] { font-size: 0.9rem; color: #334155; }
+    .apply-form-wrap .btn-submit {
+      width: 100%; padding: 14px 24px; background: #dc2626; color: #fff; border: none; border-radius: 8px;
+      font-size: 1rem; font-weight: 600; cursor: pointer; margin-top: 8px;
+    }
+    .apply-form-wrap .btn-submit:hover { background: #b91c1c; }
+    .apply-form-wrap .btn-submit:disabled { background: #94a3b8; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -543,6 +603,79 @@
         </table>
       </div>
       <p id="listEmpty" class="empty-msg" style="display: none;">目前沒有待確認的退實習案件。</p>
+    </div>
+
+    <!-- 向廠商提出退實習申請（因廠商問題如性騷擾、與預期工作不符等） -->
+    <div id="applyCard" class="card">
+      <h2><i class="bi bi-send-exclamation" style="margin-right: 8px; color: #dc2626;"></i>向廠商提出退實習申請</h2>
+
+      <!-- 列表檢視 -->
+      <div id="applyListView">
+        <div class="search-wrap">
+          <label for="applyClassFilter">班級</label>
+          <select id="applyClassFilter" aria-label="篩選班級">
+            <option value="">全部班級</option>
+          </select>
+          <label for="applySearchInput">搜尋</label>
+          <input type="text" id="applySearchInput" placeholder="輸入姓名或學號" autocomplete="off" aria-label="搜尋學生">
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>學生姓名</th>
+                <th>學號</th>
+                <th>班級</th>
+                <th>公司</th>
+                <th>職缺</th>
+                <th class="col-status">狀態</th>
+                <th class="col-action">操作</th>
+              </tr>
+            </thead>
+            <tbody id="applyListBody"></tbody>
+          </table>
+        </div>
+        <p id="applyListEmpty" class="empty-msg" style="display: none;">目前沒有可提出申請的實習生（僅顯示您擔任指導老師之公司的實習生）。</p>
+      </div>
+
+      <!-- 表單檢視（點「提出申請」後顯示，同頁不彈窗） -->
+      <div id="applyFormWrap" class="apply-form-wrap" style="display: none;">
+        <h2 class="section-label">被退實習生資訊</h2>
+        <div class="intern-info-block">
+          <div class="intern-info-row"><span class="label">學生姓名</span><span class="value" id="applyModalStudentName">—</span></div>
+          <div class="intern-info-row"><span class="label">學號</span><span class="value" id="applyModalStudentNumber">—</span></div>
+          <div class="intern-info-row"><span class="label">實習單位</span><span class="value" id="applyModalCompanyName">—</span></div>
+          <div class="intern-info-row"><span class="label">職稱</span><span class="value" id="applyModalJobTitle">—</span></div>
+        </div>
+        <h2>填寫退實習原因</h2>
+        <div class="form-group">
+          <label>原因類別 <span class="hint">（必填）</span></label>
+          <select id="applyReasonCategory" aria-required="true">
+            <option value="">請選擇</option>
+            <option value="性騷擾">性騷擾</option>
+            <option value="與預期工作不符">與預期工作不符</option>
+            <option value="工作環境不當">工作環境不當</option>
+            <option value="其他（廠商／實習環境問題）">其他（廠商／實習環境問題）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>具體說明 <span class="hint">（必填）</span></label>
+          <textarea id="applyReasonDetail" placeholder="請輸入退實習原因，供廠商知悉。" aria-required="true"></textarea>
+        </div>
+        <div class="form-group upload-group">
+          <label class="upload-label"><i class="bi bi-image" aria-hidden="true"></i> 上傳圖片 <span class="hint">（可多選）</span></label>
+          <div class="upload-box">
+            <input type="file" id="applyEvidenceImage" accept=".png,.jpg,.jpeg,.gif,.webp" multiple aria-label="選擇圖片佐證（可多選）">
+          </div>
+        </div>
+        <div class="form-group upload-group">
+          <label class="upload-label"><i class="bi bi-file-earmark-arrow-up" aria-hidden="true"></i> 上傳檔案 <span class="hint">（可多選）</span></label>
+          <div class="upload-box">
+            <input type="file" id="applyEvidenceFile" accept=".pdf,.doc,.docx,.xls,.xlsx,.odt,.ods,.txt" multiple aria-label="選擇檔案佐證（可多選）">
+          </div>
+        </div>
+        <button type="button" class="btn-submit" id="applyModalSubmit">送出</button>
+      </div>
     </div>
 
     <!-- 詳情：解約報告、廠商原因、日誌、確認異動 -->
@@ -698,9 +831,10 @@
           var statusClass = (row.status || '') === 'confirmed' ? 'badge-confirmed' : 'badge-withdrawing';
           var statusText = (row.status || '') === 'confirmed' ? '已確認' : '待確認';
           var viewUrl = '/teacher_remove_intern?id=' + row.id;
+          var viewOnlyUrl = viewUrl + '&view=1';
           var isConfirmed = (row.status || '') === 'confirmed';
           var actionBtn = isConfirmed
-            ? '<a class="btn-view" href="' + viewUrl + '"><i class="bi bi-eye"></i> 查看</a>'
+            ? '<a class="btn-view" href="' + viewOnlyUrl + '"><i class="bi bi-eye"></i> 查看</a>'
             : '<a class="btn-confirm-case" href="' + viewUrl + '"><i class="bi bi-check-circle"></i> 確認案件</a>';
           var classDisplay = row.class_display || row.class_name || '—';
           return '<tr>' +
@@ -716,9 +850,9 @@
         }).join('');
       }
 
-      // 載入列表
+      // 載入列表（含廠商提出與老師提出的案件）
       function loadList() {
-        fetch('/teacher/api/withdraw_cases', { credentials: 'same-origin' })
+        fetch('/teacher/api/withdraw_cases?_=' + (Date.now ? Date.now() : 0), { credentials: 'same-origin', cache: 'no-store' })
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (!res.success || !Array.isArray(res.data)) {
@@ -756,8 +890,193 @@
       if (teacherClassFilter) teacherClassFilter.addEventListener('change', applyTeacherFilter);
       if (teacherSearchInput) teacherSearchInput.addEventListener('input', applyTeacherFilter);
 
-      // 載入詳情
-      function loadDetail(id) {
+      // ----- 向廠商提出退實習申請 -----
+      var applyListBody = document.getElementById('applyListBody');
+      var applyListEmpty = document.getElementById('applyListEmpty');
+      var applyClassFilter = document.getElementById('applyClassFilter');
+      var applySearchInput = document.getElementById('applySearchInput');
+      var allApplyRows = [];
+
+      function applyApplyFilter() {
+        var q = (applySearchInput && applySearchInput.value) ? applySearchInput.value.trim().toLowerCase() : '';
+        var classVal = (applyClassFilter && applyClassFilter.value) ? applyClassFilter.value.trim() : '';
+        var filtered = allApplyRows;
+        if (classVal) {
+          filtered = filtered.filter(function (row) {
+            var cd = (row.class_display || row.class_name || '').toString();
+            return cd === classVal;
+          });
+        }
+        if (q) {
+          filtered = filtered.filter(function (row) {
+            var name = (row.student_name || '').toString().toLowerCase();
+            var num = (row.student_number || '').toString().toLowerCase();
+            return name.indexOf(q) !== -1 || num.indexOf(q) !== -1;
+          });
+        }
+        renderApplyTable(filtered);
+      }
+
+      function renderApplyTable(rows) {
+        if (!applyListBody) return;
+        if (!rows || rows.length === 0) {
+          applyListBody.innerHTML = '<tr><td colspan="7" class="empty-msg">查無符合條件的實習生</td></tr>';
+          if (applyListEmpty) applyListEmpty.style.display = 'none';
+          return;
+        }
+        if (applyListEmpty) applyListEmpty.style.display = 'none';
+        applyListBody.innerHTML = rows.map(function (row) {
+          var status = (row.status || '').toLowerCase();
+          var recordId = row.record_id != null ? row.record_id : '';
+          var hasRecord = !!recordId && (status === 'withdrawing' || status === 'confirmed');
+          var statusHtml = hasRecord
+            ? (status === 'confirmed'
+                ? '<span class="badge badge-confirmed">已確認</span>'
+                : '<span class="badge badge-teacher-applying">退實習審核中</span>')
+            : '<span class="badge" style="background:#20B2AE;color:#fff;">實習中</span>';
+          var viewUrl = recordId ? ('/teacher_remove_intern?id=' + encodeURIComponent(recordId) + '&view=1') : '';
+          var actionHtml = hasRecord
+            ? '<a class="btn-view" href="' + viewUrl + '"><i class="bi bi-eye"></i> 查看</a>'
+            : '<button type="button" class="btn-apply-withdraw" data-student-id="' + escapeHtml(String(row.student_id)) + '" data-company-id="' + escapeHtml(String(row.company_id)) + '" data-student-name="' + escapeHtml(row.student_name || '') + '" data-student-number="' + escapeHtml(row.student_number || '') + '" data-company-name="' + escapeHtml(row.company_name || '') + '" data-job-title="' + escapeHtml(row.job_title || '') + '">申請退實習</button>';
+          var classDisplay = row.class_display || row.class_name || '—';
+          return '<tr>' +
+            '<td>' + escapeHtml(row.student_name || '—') + '</td>' +
+            '<td>' + escapeHtml(row.student_number || '—') + '</td>' +
+            '<td>' + escapeHtml(classDisplay) + '</td>' +
+            '<td>' + escapeHtml(row.company_name || '—') + '</td>' +
+            '<td>' + escapeHtml(row.job_title || '—') + '</td>' +
+            '<td class="col-status">' + statusHtml + '</td>' +
+            '<td class="col-action">' + actionHtml + '</td></tr>';
+        }).join('');
+      }
+
+      function loadApplyList() {
+        if (!applyListBody) return;
+        fetch('/teacher/api/withdraw_apply_list', { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (!res.success || !Array.isArray(res.data)) {
+              applyListBody.innerHTML = '<tr><td colspan="7" class="empty-msg">無法載入名單</td></tr>';
+              if (applyListEmpty) applyListEmpty.style.display = 'none';
+              return;
+            }
+            var rows = res.data;
+            allApplyRows = rows;
+            if (rows.length === 0) {
+              applyListBody.innerHTML = '';
+              if (applyListEmpty) applyListEmpty.style.display = 'block';
+              if (applyClassFilter) applyClassFilter.innerHTML = '<option value="">全部班級</option>';
+              return;
+            }
+            var classSet = {};
+            rows.forEach(function (row) {
+              var cd = (row.class_display || row.class_name || '').toString().trim();
+              if (cd) classSet[cd] = true;
+            });
+            if (applyClassFilter) {
+              applyClassFilter.innerHTML = '<option value="">全部班級</option>' +
+                Object.keys(classSet).sort().map(function (c) {
+                  return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+                }).join('');
+            }
+            applyApplyFilter();
+          })
+          .catch(function () {
+            applyListBody.innerHTML = '<tr><td colspan="7" class="empty-msg">載入失敗，請重新整理</td></tr>';
+            if (applyListEmpty) applyListEmpty.style.display = 'none';
+          });
+      }
+
+      if (applyClassFilter) applyClassFilter.addEventListener('change', applyApplyFilter);
+      if (applySearchInput) applySearchInput.addEventListener('input', applyApplyFilter);
+
+      var applyListView = document.getElementById('applyListView');
+      var applyFormWrap = document.getElementById('applyFormWrap');
+      var applyModalStudentNameEl = document.getElementById('applyModalStudentName');
+      var applyModalStudentNumberEl = document.getElementById('applyModalStudentNumber');
+      var applyModalCompanyNameEl = document.getElementById('applyModalCompanyName');
+      var applyModalJobTitleEl = document.getElementById('applyModalJobTitle');
+      var applyReasonCategory = document.getElementById('applyReasonCategory');
+      var applyReasonDetail = document.getElementById('applyReasonDetail');
+      var applyModalSubmit = document.getElementById('applyModalSubmit');
+      var applyModalStudentId = null;
+      var applyModalCompanyId = null;
+
+      function showApplyForm(studentId, companyId, studentName, studentNumber, companyName, jobTitle) {
+        applyModalStudentId = studentId;
+        applyModalCompanyId = companyId;
+        if (applyModalStudentNameEl) applyModalStudentNameEl.textContent = studentName || '—';
+        if (applyModalStudentNumberEl) applyModalStudentNumberEl.textContent = studentNumber || '—';
+        if (applyModalCompanyNameEl) applyModalCompanyNameEl.textContent = companyName || '—';
+        if (applyModalJobTitleEl) applyModalJobTitleEl.textContent = jobTitle || '—';
+        if (applyReasonCategory) applyReasonCategory.value = '';
+        if (applyReasonDetail) applyReasonDetail.value = '';
+        var imgInput = document.getElementById('applyEvidenceImage');
+        var fileInput = document.getElementById('applyEvidenceFile');
+        if (imgInput) imgInput.value = '';
+        if (fileInput) fileInput.value = '';
+        if (applyListView) applyListView.style.display = 'none';
+        if (applyFormWrap) { applyFormWrap.style.display = 'block'; applyFormWrap.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        if (listCard) listCard.style.display = 'none';
+      }
+      function hideApplyForm() {
+        applyModalStudentId = null;
+        applyModalCompanyId = null;
+        if (applyListView) applyListView.style.display = 'block';
+        if (applyFormWrap) applyFormWrap.style.display = 'none';
+        if (listCard) listCard.style.display = 'block';
+      }
+
+      document.addEventListener('click', function (ev) {
+        var btn = ev.target && ev.target.closest && ev.target.closest('.btn-apply-withdraw');
+        if (!btn || btn.disabled) return;
+        var studentId = btn.getAttribute('data-student-id');
+        var companyId = btn.getAttribute('data-company-id');
+        var studentName = btn.getAttribute('data-student-name') || '';
+        var studentNumber = btn.getAttribute('data-student-number') || '';
+        var companyName = btn.getAttribute('data-company-name') || '';
+        var jobTitle = btn.getAttribute('data-job-title') || '';
+        if (studentId && companyId) showApplyForm(studentId, companyId, studentName, studentNumber, companyName, jobTitle);
+      });
+      var applyFormBackBtn = document.getElementById('applyFormBackBtn');
+      if (applyFormBackBtn) applyFormBackBtn.addEventListener('click', hideApplyForm);
+      if (applyModalSubmit) {
+        applyModalSubmit.addEventListener('click', function () {
+          var category = (applyReasonCategory && applyReasonCategory.value) ? applyReasonCategory.value.trim() : '';
+          var detail = (applyReasonDetail && applyReasonDetail.value) ? applyReasonDetail.value.trim() : '';
+          if (!category) { alert('請選擇原因類別'); return; }
+          if (!detail) { alert('請填寫具體說明'); return; }
+          if (!applyModalStudentId || !applyModalCompanyId) return;
+          applyModalSubmit.disabled = true;
+          fetch('/teacher/api/withdraw_apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              student_id: applyModalStudentId,
+              company_id: applyModalCompanyId,
+              reason_category: category,
+              reason_detail: detail
+            })
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+              if (res.success) {
+                hideApplyForm();
+                loadApplyList();
+                loadList();
+              } else {
+                alert(res.message || '送出失敗');
+              }
+            })
+            .catch(function () { alert('網路錯誤，請稍後再試'); })
+            .finally(function () { applyModalSubmit.disabled = false; });
+        });
+      }
+
+      // 載入詳情（viewOnly 為 true 時僅能觀看，不顯示確認按鈕、訪談紀錄唯讀）
+      function loadDetail(id, viewOnly) {
+        viewOnly = !!viewOnly;
         detailCard.style.display = 'block';
         document.getElementById('detailReasonCategory').textContent = '載入中…';
         document.getElementById('detailReasonDetail').textContent = '';
@@ -765,6 +1084,8 @@
         document.getElementById('detailStudentNumber').textContent = '—';
         document.getElementById('detailCompanyJob').textContent = '—';
         confirmBtn.disabled = true;
+        var detailActions = document.querySelector('.detail-actions');
+        if (detailActions) detailActions.style.display = viewOnly ? 'none' : '';
 
         fetch('/teacher/api/withdraw_case_detail?id=' + encodeURIComponent(id), { credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
@@ -895,16 +1216,18 @@
             }
 
             var isConfirmed = (d.status || '') === 'confirmed';
-            confirmBtn.disabled = isConfirmed;
+            var readOnlyMode = isConfirmed || viewOnly;
+            confirmBtn.disabled = readOnlyMode;
+            if (detailActions) detailActions.style.display = viewOnly ? 'none' : '';
             confirmBtn.setAttribute('data-case-id', d.id);
             var notesEl = document.getElementById('teacherMeetingNotes');
             var meetingLabel = document.getElementById('detailMeetingLabel');
             if (notesEl) {
               notesEl.value = d.teacher_meeting_notes || '';
-              notesEl.readOnly = isConfirmed;
-              notesEl.classList.toggle('meeting-notes-readonly', isConfirmed);
+              notesEl.readOnly = readOnlyMode;
+              notesEl.classList.toggle('meeting-notes-readonly', readOnlyMode);
             }
-            if (meetingLabel) meetingLabel.textContent = isConfirmed ? '以下為已儲存的與學生訪談紀錄（唯讀）。' : '請填寫與該學生的面談紀錄，確認異動時一併儲存。';
+            if (meetingLabel) meetingLabel.textContent = readOnlyMode ? '以下為已儲存的與學生訪談紀錄（唯讀）。' : '請填寫與該學生的面談紀錄，確認異動時一併儲存。';
           })
           .catch(function () {
             document.getElementById('detailReasonCategory').textContent = '載入失敗';
@@ -913,12 +1236,16 @@
       }
 
       if (caseId) {
-        // 從列表按「查看」進入時，只顯示詳情卡片，隱藏列表
+        // 從列表按「查看」進入時，只顯示詳情卡片，隱藏列表與申請區；view=1 表示僅能觀看
+        var viewOnly = params.get('view') === '1';
         listCard.style.display = 'none';
-        loadDetail(caseId);
+        var ac = document.getElementById('applyCard');
+        if (ac) ac.style.display = 'none';
+        loadDetail(caseId, viewOnly);
       } else {
-        // 直接進入頁面時，僅顯示列表
+        // 直接進入頁面時，顯示「向廠商提出申請」列表與「待確認案件」列表
         detailCard.style.display = 'none';
+        loadApplyList();
         loadList();
       }
 
