@@ -536,32 +536,49 @@
     // 載入開放中的公司列表
     async function loadOpenCompanies() {
       try {
-        const response = await fetch('/admission/api/get_all_admissions');
-        const data = await response.json();
-        
+        const profileRes = await fetch('/api/profile');
+        const profileData = await profileRes.json();
+        const role = profileData.user?.role || '';
+
         const companyFilter = document.getElementById('companyFilter');
         const currentValue = companyFilter.value;
-        
         companyFilter.innerHTML = '<option value="">所有公司</option>';
-        
-        if (data.success && data.students) {
-          const companyMap = new Map();
-          data.students.forEach(s => {
-            if (s.company_id && s.company_name && s.company_name.trim() && s.company_name !== '-') {
-              companyMap.set(s.company_id, s.company_name.trim());
-            }
-          });
-          
-          Array.from(companyMap.entries())
-            .sort((a, b) => a[1].localeCompare(b[1], 'zh-TW'))
-            .forEach(([id, name]) => {
-              const option = document.createElement('option');
-              option.value = id;
-              option.textContent = name;
-              companyFilter.appendChild(option);
+
+        if (role === 'class_teacher') {
+          const res = await fetch('/api/get_reviewed_companies');
+          const data = await res.json();
+          if (data.success && data.companies) {
+            data.companies
+              .filter(c => c.is_open_current_semester === true)
+              .sort((a, b) => (a.company_name || '').localeCompare(b.company_name || '', 'zh-TW'))
+              .forEach(c => {
+                const option = document.createElement('option');
+                option.value = c.id;
+                option.textContent = c.company_name || '-';
+                companyFilter.appendChild(option);
+              });
+          }
+        } else {
+          const res = await fetch('/admission/api/get_all_admissions');
+          const data = await res.json();
+          if (data.success && data.students) {
+            const companyMap = new Map();
+            data.students.forEach(s => {
+              if (s.company_id && s.company_name && s.company_name.trim() && s.company_name !== '-') {
+                companyMap.set(s.company_id, s.company_name.trim());
+              }
             });
+            Array.from(companyMap.entries())
+              .sort((a, b) => a[1].localeCompare(b[1], 'zh-TW'))
+              .forEach(([id, name]) => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = name;
+                companyFilter.appendChild(option);
+              });
+          }
         }
-        
+
         if (currentValue) {
           companyFilter.value = currentValue;
         }

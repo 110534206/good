@@ -214,6 +214,7 @@
           <option value="approved">通過</option>
         </select>
         <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
+        <button class="btn btn-outline-primary" style="padding: 10px 16px; border-radius: 8px; white-space: nowrap;" onclick="downloadSelected()">下載</button>
         <button id="sendToVendorBtn" class="btn btn-primary" style="padding: 10px 20px; border-radius: 8px; white-space: nowrap;" disabled>
           標記為通過
         </button>
@@ -290,25 +291,8 @@
       return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
 
-    // 禁用所有勾選框和按鈕（當指導老師審核截止時間已過時）
+    // 禁用審核按鈕（當指導老師審核截止時間已過時），但 checkbox 保持可用（供下載使用）
     function disableCheckboxesAndButtons() {
-      // 禁用所有行勾選框
-      const rowCheckboxes = document.querySelectorAll(".row-checkbox");
-      rowCheckboxes.forEach(cb => {
-        cb.disabled = true;
-        cb.style.cursor = 'not-allowed';
-        cb.style.opacity = '0.5';
-      });
-      
-      // 禁用全選勾選框
-      const selectAllCheckbox = document.getElementById("selectAllCheckbox");
-      if (selectAllCheckbox) {
-        selectAllCheckbox.disabled = true;
-        selectAllCheckbox.style.cursor = 'not-allowed';
-        selectAllCheckbox.style.opacity = '0.5';
-      }
-      
-      // 禁用「標記為通過」按鈕
       const sendToVendorBtn = document.getElementById("sendToVendorBtn");
       if (sendToVendorBtn) {
         sendToVendorBtn.disabled = true;
@@ -559,11 +543,6 @@
       
       // 當 checkbox 改變時，顯示/隱藏傳送給廠商按鈕（僅指導老師可見）
       document.addEventListener("change", function(e) {
-        // 如果指導老師審核截止時間已過，阻止勾選
-        if (isTeacherReviewDeadlinePassed && userRole === 'teacher' && e.target.classList.contains("row-checkbox")) {
-          e.target.checked = false;
-          return;
-        }
         if (e.target.classList.contains("row-checkbox") || e.target.id === "selectAllCheckbox") {
           updateSendToVendorButtonVisibility();
         }
@@ -571,16 +550,9 @@
 
       // 全選/取消全選功能
       document.getElementById("selectAllCheckbox").addEventListener("change", function(e) {
-        // 如果指導老師審核截止時間已過，阻止勾選
-        if (isTeacherReviewDeadlinePassed && userRole === 'teacher') {
-          e.target.checked = false;
-          return;
-        }
         const checkboxes = document.querySelectorAll(".row-checkbox");
         checkboxes.forEach(cb => {
-          if (!cb.disabled) {
-            cb.checked = e.target.checked;
-          }
+          cb.checked = e.target.checked;
         });
         updateSendToVendorButtonVisibility();
       });
@@ -992,21 +964,13 @@
            <td style="padding: 14px 16px;">
              <span class="status-badge bg-${statusColor(statusForDisplay)}">${mapStatus(statusForDisplay)}</span>
            </td>`;
-        // 檢查是否應該禁用勾選框（指導老師審核截止時間已過）
-        const isCheckboxDisabled = isTeacherReviewDeadlinePassed && userRole === 'teacher';
-        const checkboxDisabledAttr = isCheckboxDisabled ? 'disabled' : '';
-        const checkboxStyle = isCheckboxDisabled 
-          ? 'cursor: not-allowed; width: 18px; height: 18px; opacity: 0.5;' 
-          : 'cursor: pointer; width: 18px; height: 18px;';
-        
         tr.innerHTML = `
            <td style="padding: 14px 16px; text-align: center;">
              <input type="checkbox" class="row-checkbox" 
                     data-resume-id="${row.id}" 
                     data-preference-id="${row.preference_id || ''}" 
                     data-application-id="${row.application_id || ''}" 
-                    ${checkboxDisabledAttr}
-                    style="${checkboxStyle}">
+                    style="cursor: pointer; width: 18px; height: 18px;">
            </td>
            <td style="padding: 14px 16px;">${row.username}</td>
            <td style="padding: 14px 16px;">${escapeHtml(row.name)}</td>
@@ -1026,16 +990,6 @@
       
       // 更新傳送給廠商按鈕的顯示狀態
       updateSendToVendorButtonVisibility();
-      
-      // 如果指導老師審核截止時間已過，禁用全選勾選框
-      if (isTeacherReviewDeadlinePassed && userRole === 'teacher') {
-        const selectAllCheckbox = document.getElementById("selectAllCheckbox");
-        if (selectAllCheckbox) {
-          selectAllCheckbox.disabled = true;
-          selectAllCheckbox.style.cursor = 'not-allowed';
-          selectAllCheckbox.style.opacity = '0.5';
-        }
-      }
     }
 
     function renderActionBtns(row, isViewOnly, pid, isViewOnlyMode = false) {
@@ -1268,6 +1222,20 @@
         }
         alert("處理過程中發生錯誤，請稍後再試");
       }
+    }
+
+    function downloadSelected() {
+      const checked = document.querySelectorAll('.row-checkbox:checked');
+      if (checked.length === 0) {
+        alert('請先勾選要下載的履歷');
+        return;
+      }
+      checked.forEach(cb => {
+        const resumeId = cb.getAttribute('data-resume-id');
+        if (resumeId) {
+          window.open(`/api/download_resume/${resumeId}`, '_blank');
+        }
+      });
     }
 
   </script>

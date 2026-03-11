@@ -184,6 +184,7 @@
           <option value="rejected">退件</option>
         </select>
         <input type="text" id="searchBox" style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 200px; flex: 1;" placeholder="搜尋帳號/檔案" />
+        <button class="btn btn-outline-primary" style="padding: 10px 16px; border-radius: 8px; white-space: nowrap;" onclick="downloadSelected()">下載</button>
       </div>
 
       <div class="table-wrapper">
@@ -778,6 +779,20 @@
                }
            });
        };
+    }
+
+    function downloadSelected() {
+      const checked = document.querySelectorAll('.row-checkbox:checked');
+      if (checked.length === 0) {
+        alert('請先勾選要下載的履歷');
+        return;
+      }
+      checked.forEach(cb => {
+        const resumeId = cb.getAttribute('data-resume-id');
+        if (resumeId) {
+          window.open(`/api/download_resume/${resumeId}`, '_blank');
+        }
+      });
     }
 
   </script>
