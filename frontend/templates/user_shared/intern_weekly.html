@@ -289,7 +289,7 @@
             <thead>
               <tr>
                 <th style="width: 8%;">序號</th>
-                <th style="width: 32%;">週次 / 標題</th>
+                <th style="width: 32%;">標題</th>
                 <th style="width: 18%;">應繳日期</th>
                 <th style="width: 18%;">實際繳交</th>
                 <th style="width: 14%;">批閱狀態</th>
@@ -337,24 +337,24 @@
           <div class="mb-3">
             <label class="form-label">上傳檔案</label>
             <input type="text" class="form-control mb-2" id="detailFileName" placeholder="目前上傳檔案名稱" readonly>
-            <input type="file" class="form-control">
+            <input type="file" class="form-control" id="detailFileInput">
           </div>
           <div class="mb-3">
             <label class="form-label">填寫日期</label>
-            <input type="text" class="form-control" id="detailFilledAt" readonly>
+            <input type="text" class="form-control" id="detailFilledAt" style="background-color:#e2e2e2;" readonly>
           </div>
           <div class="mb-3">
             <label class="form-label">老師評語</label>
-            <textarea class="form-control" id="detailTeacherComment" rows="3" readonly></textarea>
+            <textarea class="form-control" id="detailTeacherComment" style="background-color:#e2e2e2;" rows="3" readonly></textarea>
           </div>
           <div class="mb-0">
             <label class="form-label">老師批閱時間</label>
-            <input type="text" class="form-control" id="detailReviewedAt" readonly>
+            <input type="text" class="form-control" id="detailReviewedAt" style="background-color:#e2e2e2;" readonly>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
-          <button type="button" class="btn btn-primary">暫存週記</button>
+          <button type="button" class="btn btn-primary" id="saveWeeklyBtn">儲存</button>
         </div>
       </div>
     </div>
@@ -381,74 +381,11 @@
       }
     })();
 
-    // TODO: 未來可改成從後端 API 載入真實資料
-    const mockWeeks = [
-      {
-        id: 1,
-        title: '2/17~2/27實習週記',
-        due_date: '2025-02-17',
-        filled_at: '2025-02-28 19:20:10',
-        reviewed: true,
-        company: '卓航科技股份有限公司',
-        work_notes: '本週熟悉公司開發流程，協助撰寫簡單的功能模組並參加部門會議。',
-        reflection: '透過實作了解版本控制與 code review 的重要性，也發現自己在時間管理上還可以再調整。',
-        file_name: 'week1_report.docx',
-        teacher_comment: '表現積極，能主動詢問並按時完成指派的任務。',
-        reviewed_at: '2025-03-01 10:15:00'
-      },
-      {
-        id: 2,
-        title: '3/3~3/14實習週記',
-        due_date: '2025-03-03',
-        filled_at: '2025-03-14 21:24:14',
-        reviewed: true,
-        company: '卓航科技股份有限公司',
-        work_notes: '本週協助撰寫測試案例，並觀摩正式上線流程。',
-        reflection: '開始能獨立完成指定的測試項目，但還需要加強文件整理能力。',
-        file_name: 'week2_report.docx',
-        teacher_comment: '對系統測試流程已有基本概念，建議多練習撰寫測試報告。',
-        reviewed_at: '2025-03-16 09:40:00'
-      },
-      {
-        id: 3,
-        title: '3/17~3/28實習週記',
-        due_date: '2025-03-17',
-        filled_at: '2025-03-28 23:22:47',
-        reviewed: true,
-        company: '卓航科技股份有限公司',
-        work_notes: '嘗試修改既有功能的 bug，並與同事合作排查問題來源。',
-        reflection: '學到如何使用除錯工具追蹤問題，也更了解團隊協作的重要性。',
-        file_name: 'week3_report.docx',
-        teacher_comment: '能主動找出問題並提出解決方式，值得肯定。',
-        reviewed_at: '2025-03-30 15:22:00'
-      },
-      {
-        id: 4,
-        title: '3/31~4/11實習週記',
-        due_date: '2025-03-31',
-        filled_at: '2025-04-11 23:32:50',
-        reviewed: true,
-        company: '卓航科技股份有限公司',
-        work_notes: '本週協助撰寫使用說明文件，並與同事討論畫面優化建議。',
-        reflection: '發現自己在說明技術內容時還不夠精簡，未來會多練習表達與整理。',
-        file_name: 'week4_report.docx',
-        teacher_comment: '文件內容完整，但可以再精簡重點，方便讀者快速了解。',
-        reviewed_at: '2025-04-13 11:05:00'
-      },
-      {
-        id: 5,
-        title: '4/14~4/25實習週記',
-        due_date: '2025-04-14',
-        filled_at: '2025-04-26 00:00:19',
-        reviewed: true,
-        company: '卓航科技股份有限公司',
-        work_notes: '協助整理專案收尾相關資料，並參與成果簡報準備。',
-        reflection: '回顧整體實習過程，對未來職涯方向有更清楚的想法。',
-        file_name: 'week5_report.docx',
-        teacher_comment: '整體實習表現穩定，具備良好的學習態度與合作精神。',
-        reviewed_at: '2025-04-28 14:30:00'
-      }
-    ];
+    // 之後會改成由後端回傳實際週記資料
+    // allWeeks: 根據學期別與學期起訖日，自動產生的「每兩週一筆」週記清單
+    let allWeeks = [];
+    let currentWeekId = null;
+    let currentCompanyId = null;
 
     const weeklyTableBody = document.getElementById('weeklyTableBody');
 
@@ -467,7 +404,7 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${idx + 1}</td>
-          <td>${w.title || '—'}</td>
+          <td>${w.title || ''}</td>
           <td>${w.due_date || '—'}</td>
           <td>${w.filled_at || '—'}</td>
           <td>
@@ -492,13 +429,15 @@
         alert('尚未取得此週記的代號。');
         return;
       }
-      const week = mockWeeks.find(w => w.id === id);
+      currentWeekId = id;
+      const week = allWeeks.find(w => w.id === id);
       const semesterEl = document.getElementById('detailSemester');
       const titleEl = document.getElementById('detailTitle');
       const companyEl = document.getElementById('detailCompany');
       const workEl = document.getElementById('detailWorkNotes');
       const reflectionEl = document.getElementById('detailReflection');
       const fileEl = document.getElementById('detailFileName');
+      const fileInput = document.getElementById('detailFileInput');
       const filledDateEl = document.getElementById('detailFilledAt');
       const teacherCommentEl = document.getElementById('detailTeacherComment');
       const reviewedAtEl = document.getElementById('detailReviewedAt');
@@ -518,6 +457,7 @@
         workEl.value = '';
         reflectionEl.value = '';
         fileEl.value = '';
+        if (fileInput) fileInput.value = '';
         filledDateEl.value = '';
         teacherCommentEl.value = '';
         reviewedAtEl.value = '';
@@ -530,6 +470,66 @@
       modal.show();
     }
 
+    async function saveWeekly() {
+      if (!currentWeekId) {
+        alert('請先選擇要填寫的週次。');
+        return;
+      }
+      const week = allWeeks.find(w => w.id === currentWeekId);
+      if (!week) {
+        alert('找不到對應的週記週次。');
+        return;
+      }
+      const semester = (document.getElementById('weeklySemester')?.textContent || '').trim();
+      const title = document.getElementById('detailTitle').value.trim();
+      const workNotes = document.getElementById('detailWorkNotes').value.trim();
+      const reflection = document.getElementById('detailReflection').value.trim();
+
+      if (!title || !workNotes || !reflection) {
+        alert('標題、實習工作記要與學習心得請勿留白。');
+        return;
+      }
+
+      try {
+        const resp = await fetch('/intern_weekly/api/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            semester,
+            week_index: week.week_index,
+            title,
+            work_notes: workNotes,
+            reflection,
+            company_id: currentCompanyId,
+            due_date: week.due_date || null
+          })
+        });
+        const data = await resp.json();
+        if (!data.success) {
+          alert(data.message || '儲存週記失敗');
+          return;
+        }
+
+        // 更新前端資料
+        week.title = title;
+        week.work_notes = workNotes;
+        week.reflection = reflection;
+        week.filled_at = data.filled_at || week.filled_at;
+        week.reviewed = week.reviewed || false;
+
+        renderWeeklyTable(allWeeks);
+
+        const modalEl = document.getElementById('weeklyDetailModal');
+        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+        if (modalInstance) modalInstance.hide();
+
+        alert('週記已儲存完成。');
+      } catch (e) {
+        console.warn('儲存週記失敗', e);
+        alert('儲存週記失敗，請稍後再試。');
+      }
+    }
+
     async function loadInternSummary() {
       const semesterEl = document.getElementById('weeklySemester');
       const courseEl = document.getElementById('weeklyCourseName');
@@ -540,19 +540,110 @@
         const data = await res.json();
         if (!data || !data.success || !data.admission) return;
         const a = data.admission;
-        semesterEl.textContent = a.semester || a.semester_code || '—';
+        const semesterCode = a.semester || a.semester_code || '—';
+        semesterEl.textContent = semesterCode;
         const courseName = a.course_name || a.course || a.courseTitle || '實習課程';
         courseEl.textContent = courseName;
         companyEl.textContent = a.company_name || '—';
+        currentCompanyId = a.company_id || null;
+
+        // 根據學期別與學期起訖日，自動產生每兩週一筆的週記清單
+        allWeeks = await generateWeeksBySemester(semesterCode);
+
+        // 從後端載入已儲存的週記內容，合併到 allWeeks
+        try {
+          const listRes = await fetch(`/intern_weekly/api/my_list?semester=${encodeURIComponent(semesterCode)}`, {
+            credentials: 'include'
+          });
+          const listData = await listRes.json();
+          if (listData && listData.success && Array.isArray(listData.weeklies)) {
+            listData.weeklies.forEach(rec => {
+              const target = allWeeks.find(w => w.week_index === rec.week_index);
+              if (target) {
+                target.title = rec.title || '';
+                target.work_notes = rec.work_notes || '';
+                target.reflection = rec.reflection || '';
+                target.due_date = rec.due_date || target.due_date;
+                target.filled_at = rec.filled_at || '';
+                target.reviewed = rec.status === 'reviewed';
+                target.teacher_comment = rec.teacher_comment || '';
+                target.reviewed_at = rec.reviewed_at || '';
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('載入既有週記紀錄失敗', e);
+        }
+
+        renderWeeklyTable(allWeeks);
       } catch (e) {
         console.warn('載入實習課程資訊失敗', e);
       }
     }
 
+    async function generateWeeksBySemester(semesterCode) {
+      if (!semesterCode || semesterCode === '—') return [];
+      try {
+        const res = await fetch('/intern_weekly/api/intern_period', { credentials: 'include' });
+        const data = await res.json();
+        if (!data || !data.success || !data.start_date) return [];
+
+        const start = new Date(data.start_date);
+        const end = data.end_date ? new Date(data.end_date) : null;
+
+        if (isNaN(start.getTime())) return [];
+
+        const weeks = [];
+        let index = 1;
+        let cursor = new Date(start.getTime());
+
+        while (!end || cursor <= end) {
+          const periodEnd = new Date(cursor.getTime());
+          periodEnd.setDate(periodEnd.getDate() + 13);
+          if (end && periodEnd > end) {
+            periodEnd.setTime(end.getTime());
+          }
+
+          weeks.push({
+            id: index,
+            week_index: index,
+            title: '',
+            due_date: formatDate(periodEnd),
+            filled_at: '',
+            reviewed: false
+          });
+
+          index += 1;
+          cursor.setDate(cursor.getDate() + 14);
+          if (end && cursor > end) break;
+        }
+
+        return weeks;
+      } catch (e) {
+        console.warn('產生實習週記清單時發生錯誤', e);
+        return [];
+      }
+    }
+
+    function formatDate(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function formatMonthDay(d) {
+      const m = d.getMonth() + 1;
+      const day = d.getDate();
+      return `${m}/${day}`;
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
       loadInternSummary();
-      // 初始不帶任何週記資料，讓表格保持空白（之後串接後端再載入）
-      renderWeeklyTable([]);
+      const saveBtn = document.getElementById('saveWeeklyBtn');
+      if (saveBtn) {
+        saveBtn.addEventListener('click', saveWeekly);
+      }
     });
   </script>
 </body>

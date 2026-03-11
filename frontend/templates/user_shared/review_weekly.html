@@ -67,10 +67,39 @@
       padding: 16px 18px 20px;
       box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
     }
+    .company-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    .company-tab {
+      padding: 10px 20px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: #6b7280;
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: -2px;
+    }
+    .company-tab:hover {
+      color: #1d4ed8;
+      background: #eff6ff;
+    }
+    .company-tab.active {
+      color: #1d4ed8;
+      font-weight: 600;
+      border-bottom-color: #3b82f6;
+    }
     .weekly-table {
       width: 100%;
       border-collapse: collapse;
       font-size: 0.95rem;
+      table-layout: fixed;
     }
     .weekly-table thead th {
       background: #3b82f6;
@@ -85,6 +114,9 @@
       border-bottom: 1px solid #e5e7eb;
       color: #0f172a;
       background-color: #ffffff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .weekly-table tbody tr:nth-child(odd) td {
       background-color: #f9fafb;
@@ -212,10 +244,18 @@
   <main>
 
     <section class="card-shell" aria-label="實習週記審核列表">
+      <div class="company-tabs" id="companyTabs">
+        <button class="company-tab active" data-company="">全部</button>
+      </div>
+
       <div class="filter-bar">
         <select id="filterClass" aria-label="篩選班級"
                 style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
           <option value="">所有班級</option>
+        </select>
+        <select id="filterAccount" aria-label="篩選帳號"
+                style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
+          <option value="">所有學號</option>
         </select>
         <select id="filterStudent" aria-label="篩選學生"
                 style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 150px;">
@@ -231,22 +271,19 @@
         <input id="searchKeyword" type="text"
                style="padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; min-width: 220px; flex: 1;"
                placeholder="學號 / 姓名 / 標題關鍵字搜尋">
-        <button id="btnResetFilter" type="button" class="btn btn-outline-secondary btn-sm" style="white-space: nowrap;">
-          清除篩選
-        </button>
       </div>
 
       <div class="table-responsive">
         <table class="weekly-table">
           <thead>
             <tr>
-              <th style="width: 10%;">學號</th>
-              <th style="width: 12%;">姓名</th>
-              <th style="width: 26%;">週次 / 標題</th>
-              <th style="width: 16%;">應繳日期</th>
-              <th style="width: 16%;">學生填寫時間</th>
+              <th style="width: 11%;">學號</th>
+              <th style="width: 8%;">姓名</th>
+              <th style="width: 25%;">標題</th>
+              <th style="width: 14%;">應繳日期</th>
+              <th style="width: 20%;">學生填寫時間</th>
               <th style="width: 10%;">狀態</th>
-              <th style="width: 10%;">操作</th>
+              <th style="width: 8%;">操作</th>
             </tr>
           </thead>
           <tbody id="weeklyReviewTableBody">
@@ -346,18 +383,18 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // TODO: 未來改成呼叫後端 API 載入真實資料
-    const mockReviewItems = [];
+    let allReviewItems = [];
+    let currentReviewId = null;
     let isDirectorMode = false;
+    let selectedCompanyTab = '';
 
     const weeklyReviewTableBody = document.getElementById('weeklyReviewTableBody');
 
     function populateClassFilter(items) {
       const classSelect = document.getElementById('filterClass');
       if (!classSelect) return;
-      classSelect.innerHTML = '<option value=\"\">所有班級</option>';
+      classSelect.innerHTML = '<option value="">所有班級</option>';
       const classSet = new Set();
-      // 主任模式：預設加入「忠」「孝」，再加上實際出現的班級（參考 review_resume 作法）
       if (isDirectorMode) {
         classSet.add('忠');
         classSet.add('孝');
@@ -375,6 +412,70 @@
       });
     }
 
+    function populateAccountFilter(items) {
+      const accountSelect = document.getElementById('filterAccount');
+      if (!accountSelect) return;
+      accountSelect.innerHTML = '<option value="">所有學號</option>';
+      const seen = new Set();
+      items.forEach(i => {
+        const num = (i.student_number || '').trim();
+        if (num && !seen.has(num)) {
+          seen.add(num);
+          const opt = document.createElement('option');
+          opt.value = num;
+          opt.textContent = num;
+          accountSelect.appendChild(opt);
+        }
+      });
+    }
+
+    function populateStudentFilter(items) {
+      const studentSelect = document.getElementById('filterStudent');
+      if (!studentSelect) return;
+      studentSelect.innerHTML = '<option value="">所有學生</option>';
+      const seen = new Set();
+      items.forEach(i => {
+        const key = i.student_id;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          const opt = document.createElement('option');
+          opt.value = key;
+          opt.textContent = i.student_name || '';
+          studentSelect.appendChild(opt);
+        }
+      });
+    }
+
+    function buildCompanyTabs(items) {
+      const tabsContainer = document.getElementById('companyTabs');
+      if (!tabsContainer) return;
+      const companies = new Set();
+      items.forEach(i => {
+        const name = (i.company_name || '').trim();
+        if (name) companies.add(name);
+      });
+      tabsContainer.innerHTML = '<button class="company-tab active" data-company="">全部</button>';
+      Array.from(companies).sort().forEach(c => {
+        const btn = document.createElement('button');
+        btn.className = 'company-tab';
+        btn.setAttribute('data-company', c);
+        btn.textContent = c;
+        tabsContainer.appendChild(btn);
+      });
+      selectedCompanyTab = '';
+    }
+
+    function getStatusLabel(status) {
+      if (status === 'reviewed') return '已批閱';
+      if (status === 'returned') return '退回修改';
+      return '待批閱';
+    }
+    function getStatusBadgeClass(status) {
+      if (status === 'reviewed') return 'reviewed';
+      if (status === 'returned') return 'returned';
+      return 'pending';
+    }
+
     function renderReviewTable(items) {
       if (!weeklyReviewTableBody) return;
       weeklyReviewTableBody.innerHTML = '';
@@ -384,79 +485,76 @@
             <td colspan="7" style="text-align:center; padding: 18px 10px; color:#6b7280;">
               目前尚未有任何需要審核的實習週記。
             </td>
-          </tr>
-        `;
+          </tr>`;
         return;
       }
       const selectedClass = document.getElementById('filterClass').value.trim();
+      const selectedAccount = document.getElementById('filterAccount').value.trim();
+      const selectedStudent = document.getElementById('filterStudent').value.trim();
       const selectedStatus = document.getElementById('filterStatus').value.trim();
-      const keyword = document.getElementById('searchKeyword').value.trim();
+      const keyword = document.getElementById('searchKeyword').value.trim().toLowerCase();
 
       const filtered = items.filter(item => {
+        if (selectedCompanyTab && (item.company_name || '').trim() !== selectedCompanyTab) return false;
         if (selectedClass && (item.class_name || '').trim() !== selectedClass) return false;
-        if (selectedStatus && (item.status || '') !== selectedStatus) return false;
+        if (selectedAccount && (item.student_number || '').trim() !== selectedAccount) return false;
+        if (selectedStudent && String(item.student_id) !== selectedStudent) return false;
+        if (selectedStatus) {
+          const mappedStatus = (item.status === 'submitted') ? 'pending' : item.status;
+          if (mappedStatus !== selectedStatus) return false;
+        }
         if (keyword) {
-          const kw = keyword.toLowerCase();
-          const text = [
-            item.student_number,
-            item.student_name,
-            item.title
-          ].join(' ').toLowerCase();
-          if (!text.includes(kw)) return false;
+          const text = [item.student_number, item.student_name, item.title].join(' ').toLowerCase();
+          if (!text.includes(keyword)) return false;
         }
         return true;
       });
 
+      if (filtered.length === 0) {
+        weeklyReviewTableBody.innerHTML = `
+          <tr>
+            <td colspan="7" style="text-align:center; padding: 18px 10px; color:#6b7280;">
+              沒有符合篩選條件的週記。
+            </td>
+          </tr>`;
+        return;
+      }
+
       filtered.forEach(item => {
         const tr = document.createElement('tr');
-        const statusText = item.status === 'reviewed'
-          ? '已批閱'
-          : item.status === 'returned'
-            ? '退回修改'
-            : '待批閱';
-        const statusClass = item.status === 'reviewed'
-          ? 'reviewed'
-          : item.status === 'returned'
-            ? 'returned'
-            : 'pending';
+        const statusLabel = getStatusLabel(item.status);
+        const badgeCls = getStatusBadgeClass(item.status);
         tr.innerHTML = `
           <td>${item.student_number || ''}</td>
           <td>${item.student_name || ''}</td>
-          <td style="text-align:left;">${item.title || ''}</td>
-          <td>${item.due_date || ''}</td>
-          <td>${item.filled_at || ''}</td>
-          <td>
-            <span class="badge-status ${statusClass}">${statusText}</span>
-          </td>
-          <td>
-            <button type="button" class="btn btn-sm btn-outline-primary" data-id="${item.id}">查看</button>
-          </td>
+          <td>${item.title || '(未填標題)'}</td>
+          <td>${item.due_date || '—'}</td>
+          <td>${item.filled_at || '—'}</td>
+          <td><span class="badge-status ${badgeCls}">${statusLabel}</span></td>
+          <td><button type="button" class="btn btn-sm btn-outline-primary" data-id="${item.id}">查看</button></td>
         `;
         weeklyReviewTableBody.appendChild(tr);
       });
     }
 
     function openReviewModalById(id) {
-      const item = mockReviewItems.find(i => i.id === id);
+      const item = allReviewItems.find(i => i.id === id);
       if (!item) return;
+      currentReviewId = id;
+
       document.getElementById('rvStudentNumber').value = item.student_number || '';
       document.getElementById('rvStudentName').value = item.student_name || '';
-      document.getElementById('rvCompany').value = item.company || '';
+      document.getElementById('rvCompany').value = item.company_name || '';
       document.getElementById('rvTitle').value = item.title || '';
       document.getElementById('rvWorkNotes').value = item.work_notes || '';
       document.getElementById('rvReflection').value = item.reflection || '';
       document.getElementById('rvFilledAt').value = item.filled_at || '';
-
-      const statusText = item.status === 'reviewed'
-        ? '已批閱'
-        : item.status === 'returned'
-          ? '退回修改'
-          : '待批閱';
-      document.getElementById('rvStatusText').value = statusText;
+      document.getElementById('rvStatusText').value = getStatusLabel(item.status);
 
       const fileArea = document.getElementById('rvFileArea');
-      if (item.file_name) {
-        fileArea.innerHTML = `<a href="#" class="link-primary">${item.file_name}</a>`;
+      if (item.file_path) {
+        const fileName = item.file_path.split('/').pop();
+        fileArea.innerHTML = `<a href="/uploads/${item.file_path}" target="_blank" class="link-primary">${fileName}</a>`;
       } else {
         fileArea.innerHTML = '<span class="text-muted">尚未上傳檔案</span>';
       }
@@ -468,6 +566,57 @@
       modal.show();
     }
 
+    async function doReviewAction(action) {
+      if (!currentReviewId) return;
+      const comment = document.getElementById('rvTeacherComment').value.trim();
+      const url = action === 'approve'
+        ? `/intern_weekly/api/approve/${currentReviewId}`
+        : `/intern_weekly/api/return/${currentReviewId}`;
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ teacher_comment: comment })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.message || '操作失敗');
+          return;
+        }
+
+        const modalEl = document.getElementById('weeklyReviewModal');
+        const modalInst = bootstrap.Modal.getInstance(modalEl);
+        if (modalInst) modalInst.hide();
+
+        alert(data.message || '操作成功');
+        await loadReviewList();
+      } catch (e) {
+        console.warn('操作失敗', e);
+        alert('操作失敗，請稍後再試。');
+      }
+    }
+
+    async function loadReviewList() {
+      try {
+        const res = await fetch('/intern_weekly/api/review_list', { credentials: 'include' });
+        const data = await res.json();
+        if (!data.success) {
+          console.warn(data.message);
+          return;
+        }
+        allReviewItems = data.items || [];
+        buildCompanyTabs(allReviewItems);
+        populateClassFilter(allReviewItems);
+        populateAccountFilter(allReviewItems);
+        populateStudentFilter(allReviewItems);
+        renderReviewTable(allReviewItems);
+      } catch (e) {
+        console.warn('載入週記審核列表失敗', e);
+      }
+    }
+
     weeklyReviewTableBody.addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-id]');
       if (!btn) return;
@@ -475,25 +624,30 @@
       openReviewModalById(id);
     });
 
-    document.getElementById('btnResetFilter').addEventListener('click', () => {
-      document.getElementById('filterClass').value = '';
-      document.getElementById('filterStudent').value = '';
-      document.getElementById('filterStatus').value = '';
-      document.getElementById('searchKeyword').value = '';
-      populateClassFilter(mockReviewItems);
-      renderReviewTable(mockReviewItems);
+    document.getElementById('companyTabs').addEventListener('click', (e) => {
+      const tab = e.target.closest('.company-tab');
+      if (!tab) return;
+      document.querySelectorAll('.company-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      selectedCompanyTab = tab.getAttribute('data-company') || '';
+      renderReviewTable(allReviewItems);
     });
 
+    document.getElementById('filterClass').addEventListener('change', () => renderReviewTable(allReviewItems));
+    document.getElementById('filterAccount').addEventListener('change', () => renderReviewTable(allReviewItems));
+    document.getElementById('filterStudent').addEventListener('change', () => renderReviewTable(allReviewItems));
+    document.getElementById('filterStatus').addEventListener('change', () => renderReviewTable(allReviewItems));
+    document.getElementById('searchKeyword').addEventListener('input', () => renderReviewTable(allReviewItems));
+
+    document.getElementById('btnApproveWeekly').addEventListener('click', () => doReviewAction('approve'));
+    document.getElementById('btnReturnWeekly').addEventListener('click', () => doReviewAction('return'));
+
     document.addEventListener('DOMContentLoaded', () => {
-      // 依 URL 判斷是否為主任模式（/review_weekly?mode=director）
       const urlParams = new URLSearchParams(window.location.search);
       isDirectorMode = urlParams.get('mode') === 'director';
 
-      // 初始渲染（目前使用空資料，等之後串接後端）
-      populateClassFilter(mockReviewItems);
-      renderReviewTable(mockReviewItems);
+      loadReviewList();
 
-      // 側邊選單開關
       const menuBtn = document.getElementById('menu-btn');
       const sideMenu = document.getElementById('side-menu');
       const closeBtn = document.getElementById('close-btn');
