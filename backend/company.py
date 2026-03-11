@@ -539,7 +539,7 @@ def upload_company():
         if role == 'ta':
             message = f"公司 '{company_name}' ({job_count} 個職缺) 上傳成功，已自動核准。"
         elif role == 'vendor':
-            message = f"公司 '{company_name}' ({job_count} 個職缺) 上傳成功，資料已標記為「待科助開放」。"
+            message = f"公司 '{company_name}' ({job_count} 個職缺) 上傳成功，資料已標記為「待審核」。"
         else:
             # 老師或主任上傳
             if create_vendor_account:
@@ -597,43 +597,23 @@ def get_my_companies():
         cursor = conn.cursor(dictionary=True)
 
         if role == 'vendor':
-            # 廠商：顯示自己上傳的 + 指導老師為其建立的公司（advisor_user_id = 廠商的 teacher_id）
-            cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (user_id,))
-            row = cursor.fetchone()
-            teacher_id = (row.get('teacher_id') or 0) if row else 0
-            if teacher_id:
-                cursor.execute("""
-                    SELECT 
-                        ic.id,
-                        ic.company_name,
-                        ic.status,
-                        ic.company_doc_path AS filepath,
-                        ic.submitted_at AS upload_time,
-                        u.role AS uploader_role,
-                        CASE WHEN ic.uploaded_by_user_id = %s THEN 0 ELSE 1 END AS sort_own_first,
-                        (ic.uploaded_by_user_id != %s) AS is_from_advisor
-                    FROM internship_companies ic
-                    JOIN users u ON ic.uploaded_by_user_id = u.id
-                    WHERE ic.uploaded_by_user_id = %s
-                       OR (ic.advisor_user_id = %s AND ic.uploaded_by_user_id != %s)
-                    ORDER BY sort_own_first ASC, ic.submitted_at DESC
-                """, (user_id, user_id, user_id, teacher_id, user_id))
-            else:
-                cursor.execute("""
-                    SELECT 
-                        ic.id,
-                        ic.company_name,
-                        ic.status,
-                        ic.company_doc_path AS filepath,
-                        ic.submitted_at AS upload_time,
-                        u.role AS uploader_role,
-                        0 AS sort_own_first,
-                        FALSE AS is_from_advisor
-                    FROM internship_companies ic
-                    JOIN users u ON ic.uploaded_by_user_id = u.id
-                    WHERE ic.uploaded_by_user_id = %s
-                    ORDER BY ic.submitted_at DESC
-                """, (user_id,))
+            # 廠商：僅顯示「自己上傳」的紀錄（uploaded_by_user_id = 廠商本人）
+            # 指導老師上傳的（uploaded_by_user_id = 老師）不顯示在廠商的上傳紀錄中
+            cursor.execute("""
+                SELECT 
+                    ic.id,
+                    ic.company_name,
+                    ic.status,
+                    ic.company_doc_path AS filepath,
+                    ic.submitted_at AS upload_time,
+                    u.role AS uploader_role,
+                    0 AS sort_own_first,
+                    FALSE AS is_from_advisor
+                FROM internship_companies ic
+                JOIN users u ON ic.uploaded_by_user_id = u.id
+                WHERE ic.uploaded_by_user_id = %s
+                ORDER BY ic.submitted_at DESC
+            """, (user_id,))
             records = cursor.fetchall()
         else:
             cursor.execute("""
@@ -944,7 +924,7 @@ def api_get_reviewed_companies():
             cursor.execute("""
                 SELECT 
                     ic.id,
-                    u.name AS upload_teacher_name,
+                    CASE WHEN u.role = 'vendor' THEN ic.company_name ELSE COALESCE(u.name, '-') END AS upload_teacher_name,
                     COALESCE(advisor.name, 
                         CASE 
                             WHEN ic.advisor_user_id IS NULL AND u.role IN ('teacher', 'director') THEN u.name 
@@ -977,7 +957,7 @@ def api_get_reviewed_companies():
             cursor.execute("""
                 SELECT 
                     ic.id,
-                    u.name AS upload_teacher_name,
+                    CASE WHEN u.role = 'vendor' THEN ic.company_name ELSE COALESCE(u.name, '-') END AS upload_teacher_name,
                     COALESCE(advisor.name, 
                         CASE 
                             WHEN ic.advisor_user_id IS NULL AND u.role IN ('teacher', 'director') THEN u.name 
@@ -1088,7 +1068,7 @@ def get_company_detail():
                 ic.location AS company_address, ic.contact_person AS contact_name, 
                 ic.contact_title, ic.contact_email, ic.contact_phone, 
                 ic.reject_reason, ic.submitted_at, ic.reviewed_at, 
-                u.name AS upload_teacher_name
+                CASE WHEN u.role = 'vendor' THEN ic.company_name ELSE COALESCE(u.name, '-') END AS upload_teacher_name
             FROM internship_companies ic
             JOIN users u ON ic.uploaded_by_user_id = u.id
             WHERE ic.id = %s
@@ -1704,7 +1684,7 @@ def api_get_pending_companies():
             SELECT 
                 ic.id,
                 ic.company_name,
-                u.name AS upload_teacher_name,
+                CASE WHEN u.role = 'vendor' THEN ic.company_name ELSE COALESCE(u.name, '-') END AS upload_teacher_name,
                 ic.submitted_at
             FROM internship_companies ic
             LEFT JOIN users u ON ic.uploaded_by_user_id = u.id
