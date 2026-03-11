@@ -4,6 +4,9 @@ from config import get_db
 from flask import current_app
 import json
 import re
+import random
+import string
+from datetime import datetime, timedelta
 
 auth_bp = Blueprint("auth_bp", __name__)
 
@@ -179,6 +182,143 @@ def login():
         cursor.close()
         conn.close()
 
+
+# =========================================================
+# 🧩 API - 忘記密碼：傳送驗證碼
+# =========================================================
+@auth_bp.route("/api/forgot_password/send_code", methods=["POST"])
+def forgot_password_send_code():
+    conn = None
+    cursor = None
+    try:
+        data = request.get_json() or {}
+        email = (data.get("email") or "").strip().lower()
+        if not email or "@" not in email:
+            return jsonify({"success": False, "message": "請輸入有效的註冊 Email"}), 400
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id FROM users WHERE email = %s LIMIT 1", (email,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"success": False, "message": "此 Email 尚未註冊"}), 404
+
+        code = "".join(random.choices(string.digits, k=6))
+        expires_at = datetime.now() + timedelta(minutes=10)
+
+        try:
+            cursor.execute(
+                "DELETE FROM password_reset_codes WHERE email = %s", (email,)
+            )
+            cursor.execute(
+                """INSERT INTO password_reset_codes (email, code, expires_at)
+                   VALUES (%s, %s, %s)""",
+                (email, code, expires_at),
+            )
+            conn.commit()
+        except Exception as db_err:
+            conn.rollback()
+            current_app.logger.error(f"password_reset_codes 表可能尚未建立: {db_err}")
+            return jsonify({
+                "success": False,
+                "message": "系統尚未啟用忘記密碼功能，請聯絡管理員並執行 password_reset_codes.sql"
+            }), 503
+
+        try:
+            from email_service import send_password_reset_code_email
+            send_password_reset_code_email(email, code)
+        except Exception as send_err:
+            print(f"⚠️ 驗證碼已產生但寄送失敗: {send_err}")
+            return jsonify({"success": False, "message": "驗證碼寄送失敗，請稍後再試或聯絡管理員"}), 500
+
+        return jsonify({"success": True, "message": "驗證碼已寄至您的 Email，請於 10 分鐘內完成驗證"})
+    except Exception as e:
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+# =========================================================
+# 🧩 API - 忘記密碼：驗證碼驗證
+# =========================================================
+@auth_bp.route("/api/forgot_password/verify", methods=["POST"])
+def forgot_password_verify():
+    conn = None
+    cursor = None
+    try:
+        data = request.get_json() or {}
+        email = (data.get("email") or "").strip().lower()
+        code = (data.get("code") or "").strip()
+        if not email or not code:
+            return jsonify({"success": False, "message": "請輸入 Email 與驗證碼"}), 400
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT id FROM password_reset_codes
+               WHERE email = %s AND code = %s AND expires_at > NOW() LIMIT 1""",
+            (email, code),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "驗證碼錯誤或已過期，請重新取得驗證碼"}), 400
+        return jsonify({"success": True, "message": "驗證成功，請設定新密碼"})
+    except Exception as e:
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
+# =========================================================
+# 🧩 API - 忘記密碼：重設密碼
+# =========================================================
+@auth_bp.route("/api/forgot_password/reset", methods=["POST"])
+def forgot_password_reset():
+    conn = None
+    cursor = None
+    try:
+        data = request.get_json() or {}
+        email = (data.get("email") or "").strip().lower()
+        code = (data.get("code") or "").strip()
+        new_password = data.get("new_password") or ""
+        if not email or not code:
+            return jsonify({"success": False, "message": "請輸入 Email 與驗證碼"}), 400
+        if len(new_password) < 6:
+            return jsonify({"success": False, "message": "新密碼需至少 6 個字元"}), 400
+
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT id FROM password_reset_codes
+               WHERE email = %s AND code = %s AND expires_at > NOW() LIMIT 1""",
+            (email, code),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({"success": False, "message": "驗證碼錯誤或已過期，請重新取得驗證碼"}), 400
+
+        hashed = generate_password_hash(new_password)
+        cursor.execute("UPDATE users SET password = %s WHERE email = %s", (hashed, email))
+        cursor.execute("DELETE FROM password_reset_codes WHERE email = %s", (email,))
+        conn.commit()
+        return jsonify({"success": True, "message": "密碼已重設，請使用新密碼登入"})
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"success": False, "message": "伺服器錯誤"}), 500
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+
 # =========================================================
 # 🧩 API - 確認角色 (處理 login-confirm 頁面的選擇)
 # =========================================================
@@ -214,9 +354,9 @@ def confirm_role():
 def register_student():
     try:
         data = request.json
-        username = data.get("username")
-        password = data.get("password")
-        email = data.get("email")
+        username = (data.get("username") or "").strip()
+        password = (data.get("password") or "").strip()
+        email = (data.get("email") or "").strip()
         role = "student"
 
         if not re.match(r"^[A-Za-z0-9]{6,20}$", username):
@@ -231,11 +371,17 @@ def register_student():
         conn = get_db()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id, role FROM users WHERE username = %s", (username,))
-        existing = cursor.fetchone()
-        if existing:
+        # 僅在學生、廠商之間檢查重複，避免與老師/主任等帳號混淆
+        cursor.execute(
+            "SELECT id FROM users WHERE username = %s AND role IN ('student', 'vendor')",
+            (username,)
+        )
+        if cursor.fetchone():
             return jsonify({"success": False, "message": "該帳號已被使用，學生與廠商不可使用相同帳號"}), 400
-        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        cursor.execute(
+            "SELECT id FROM users WHERE email = %s AND role IN ('student', 'vendor')",
+            (email,)
+        )
         if cursor.fetchone():
             return jsonify({"success": False, "message": "該 Email 已被使用，學生與廠商不可使用相同 Email"}), 400
 
@@ -243,6 +389,7 @@ def register_student():
             INSERT INTO users (username, password, email, role)
             VALUES (%s, %s, %s, %s)
         """, (username, hashed_pw, email, role))
+        user_id = cursor.lastrowid
         conn.commit()
 
         # 建立帳號後自動發送 Email 通知給用戶
@@ -252,7 +399,19 @@ def register_student():
         except Exception as send_err:
             print(f"⚠️ 學生註冊成功，但發送通知信失敗: {send_err}")
 
-        return jsonify({"success": True, "message": "註冊成功"})
+        # 註冊成功後直接建立 Session，導向學生主頁
+        session.clear()
+        session['user_id'] = user_id
+        session['username'] = username
+        session['original_role'] = role
+        session['role'] = 'student'
+        session['is_homeroom'] = check_is_homeroom(user_id)
+
+        return jsonify({
+            "success": True,
+            "message": "註冊成功，正在為您導向學生主頁。",
+            "redirect": url_for("users_bp.student_home")
+        })
     except Exception as e:
         print("❌ 註冊錯誤:", e)
         return jsonify({"success": False, "message": "伺服器錯誤"}), 500
@@ -268,27 +427,23 @@ def register_company():
     try:
         data = request.json
         # 前端 (register_vendor.html) 提交 username, password, email
-        username = data.get("username")
-        password = data.get("password")
-        email = data.get("email")
-        role = "vendor" # 設定廠商的角色為 'vendor'
+        username = (data.get("username") or "").strip()
+        password = (data.get("password") or "").strip()
+        email = (data.get("email") or "").strip()
+        role = "vendor"
 
         # 1. 基本資料驗證
         if not username or not password or not email:
             return jsonify({"success": False, "message": "所有欄位皆為必填"}), 400
         
-        # 帳號格式驗證 (與前端邏輯一致，確保不為空)
-        # 由於帳號是從 Email 前綴自動生成，這裡只做基礎檢查
         if not re.match(r"^[A-Za-z0-9._%+-]{1,50}$", username): 
             return jsonify({"success": False, "message": "帳號格式錯誤"}), 400
         
-        # 密碼長度驗證 (register_vendor.html 要求至少 6 個字元)
         if len(password) < 6:
             return jsonify({"success": False, "message": "密碼需至少 6 個字元"}), 400
         
-        # Email 格式驗證 (廠商信箱無須限制 .edu.tw)
         if not re.match(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", email):
-             return jsonify({"success": False, "message": "Email 格式錯誤"}), 400
+            return jsonify({"success": False, "message": "Email 格式錯誤"}), 400
 
         # 2. 密碼加密
         hashed_pw = generate_password_hash(password)
@@ -296,11 +451,17 @@ def register_company():
         conn = get_db()
         cursor = conn.cursor()
 
-        # 3. 檢查帳號 (username) / Email 是否已被任何身分使用（學生與廠商不可重複）
-        cursor.execute("SELECT id, role FROM users WHERE username = %s", (username,))
+        # 3. 僅在學生、廠商之間檢查重複，避免與老師/主任等帳號混淆
+        cursor.execute(
+            "SELECT id FROM users WHERE username = %s AND role IN ('student', 'vendor')",
+            (username,)
+        )
         if cursor.fetchone():
             return jsonify({"success": False, "message": "該帳號已被使用，學生與廠商不可使用相同帳號"}), 400
-        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        cursor.execute(
+            "SELECT id FROM users WHERE email = %s AND role IN ('student', 'vendor')",
+            (email,)
+        )
         if cursor.fetchone():
             return jsonify({"success": False, "message": "該 Email 已被使用，學生與廠商不可使用相同 Email"}), 400
         
@@ -318,7 +479,7 @@ def register_company():
         """, (username, hashed_pw, email, role, default_teacher_id))
         
         user_id = cursor.lastrowid
-        name_for_email = data.get("name") or username  # 廠商註冊表若有姓名則用，否則用 username
+        name_for_email = data.get("name") or username
 
         # 4.1 建立帳號後自動發送 Email 通知給該廠商
         try:
@@ -330,8 +491,7 @@ def register_company():
         # 5. 發送通知給所有科助和主任
         title = "新廠商註冊通知"
         message = f"有新的廠商已完成註冊：\n帳號：{username}\nEmail：{email}\n請前往管理頁面留意後續合作。"
-        link_url = "/admin/user_management"  # 連結到用戶管理頁面，科助可以在此審核廠商
-        
+        link_url = "/admin/user_management"
         notify_all_ta(conn, title, message, link_url, category="company")
         notify_all_directors(conn, title, message, link_url, category="company")
         
@@ -345,7 +505,6 @@ def register_company():
         session['role'] = 'vendor'
         session['is_homeroom'] = False
 
-        # 修正回覆訊息
         return jsonify({
             "success": True,
             "message": "廠商帳號註冊成功，正在為您導向主頁。",

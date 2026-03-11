@@ -55,8 +55,7 @@
       width: 100%;
       box-sizing: border-box;
     }
-    
-    /* 讓唯讀欄位有區別 */
+
     input[readonly] {
       background-color: #f0f0f0;
       cursor: not-allowed;
@@ -124,7 +123,6 @@
     <div id="responseMessage"></div>
 
     <form id="registerForm">
-      
       <div class="field">
         <label for="email">Email <span style="font-size: 0.9em; color: #666;">（請輸入公司聯絡 Email）</span></label>
         <input type="email" name="email" id="email" required autocomplete="off" />
@@ -132,8 +130,9 @@
       </div>
 
       <div class="field">
-        <label for="username">登入帳號 <span style="font-size: 0.9em; color: #666;">（可自行修改）</span></label>
+        <label for="username_display">登入帳號 <span style="font-size: 0.9em; color: #666;">（可自行修改）</span></label>
         <input type="text" name="username_display" id="username_display" readonly />
+        <div id="usernameError" style="color: red; font-size: 14px; display: none;"></div>
       </div>
 
       <div class="field">
@@ -159,7 +158,6 @@
   function togglePassword() {
     const passwordInput = document.getElementById("password");
     const eyeIcon = document.getElementById("eyeIcon");
-
     if (passwordInput.type === "password") {
       passwordInput.type = "text";
       eyeIcon.classList.remove("fa-eye-slash");
@@ -171,49 +169,44 @@
     }
   }
 
-  // 獲取 Email 和唯讀帳號欄位
   const emailInput = document.getElementById("email");
   const usernameDisplay = document.getElementById("username_display");
-  
-  // 監聽 Email 欄位輸入，並即時更新唯讀帳號欄位
+
   emailInput.addEventListener("input", () => {
     const email = emailInput.value.trim();
     const atIndex = email.indexOf('@');
-    
     if (atIndex > 0) {
-      // 提取 @ 符號前的部分
       usernameDisplay.value = email.substring(0, atIndex);
     } else {
       usernameDisplay.value = "";
     }
   });
 
+  let isSubmitting = false;
+  let hasRegistrationSucceeded = false;
 
-  // 表單提交 + 前端驗證 + 回傳訊息處理
   document.getElementById("registerForm").addEventListener("submit", async function (e) {
     e.preventDefault();
+    if (isSubmitting) return;
 
     const email = emailInput.value.trim();
     const password = document.getElementById("password").value.trim();
-    const passwordError = document.getElementById("passwordError");
+    const username = usernameDisplay.value.trim();
     const emailError = document.getElementById("emailError");
+    const passwordError = document.getElementById("passwordError");
     const responseMessage = document.getElementById("responseMessage");
+    const submitBtn = document.querySelector("#registerForm input[type=submit]");
 
-    // 簡單的 Email 格式驗證
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    
     let valid = true;
 
-    // 1. 驗證 Email
     if (!emailPattern.test(email)) {
-        emailError.style.display = "block";
-        emailError.textContent = "請輸入有效的 Email 地址";
-        valid = false;
+      emailError.style.display = "block";
+      emailError.textContent = "請輸入有效的 Email 地址";
+      valid = false;
     } else {
-        emailError.style.display = "none";
+      emailError.style.display = "none";
     }
-
-    // 2. 驗證密碼（至少 6 個字元）
     if (password.length < 6) {
       passwordError.style.display = "block";
       passwordError.textContent = "密碼長度需至少 6 個字元";
@@ -221,53 +214,61 @@
     } else {
       passwordError.style.display = "none";
     }
-
     if (!valid) return;
-
-    // 3. 從 Email 提取 @ 前的字串作為 username (帳號)
-    const username = email.substring(0, email.indexOf('@'));
-    
-    // 額外檢查：如果帳號為空，則拒絕提交 (例如只輸入 @domain.com)
     if (!username) {
-        emailError.style.display = "block";
-        emailError.textContent = "Email 格式不正確，@ 前的部分不能為空。";
-        return;
+      emailError.style.display = "block";
+      emailError.textContent = "Email 格式不正確，@ 前的部分不能為空。";
+      return;
     }
 
+    isSubmitting = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.value = "註冊中...";
+    }
 
     try {
-      // 廠商註冊 API 端點
       const res = await fetch("/api/register_company", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        // 將提取出的 username、password 和 email 提交
-        body: JSON.stringify({ username, password, email }) 
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password, email })
       });
-
       const data = await res.json();
 
       if (data.success) {
+        hasRegistrationSucceeded = true;
         responseMessage.style.color = "green";
         responseMessage.textContent = data.message || "註冊成功，正在為您導向...";
-
         if (data.redirect) {
           setTimeout(() => {
             window.location.href = data.redirect;
           }, 800);
         }
       } else {
-        responseMessage.style.color = "red";
-        responseMessage.textContent = data.message || "註冊失敗，請重試";
+        if (!hasRegistrationSucceeded) {
+          responseMessage.style.color = "red";
+          responseMessage.textContent = data.message || "註冊失敗，請重試";
+        }
+        isSubmitting = false;
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.value = "註冊";
+        }
       }
     } catch (err) {
-      responseMessage.style.color = "red";
-      responseMessage.textContent = "伺服器錯誤，請稍後再試";
+      if (!hasRegistrationSucceeded) {
+        responseMessage.style.color = "red";
+        responseMessage.textContent = "伺服器錯誤，請稍後再試";
+      }
       console.error(err);
+      isSubmitting = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.value = "註冊";
+      }
     }
   });
-</script>
+  </script>
 </body>
 
 </html>
