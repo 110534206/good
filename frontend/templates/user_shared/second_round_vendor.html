@@ -17,6 +17,95 @@
     .badge-pending { background: #fef3c7; color: #92400e; }
     .badge-accepted { background: #d1fae5; color: #065f46; }
     .badge-rejected { background: #fee2e2; color: #991b1b; }
+    /* 主任排序後剩餘職缺名額區塊 */
+    .quota-summary-wrap {
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      border: 1px solid #bae6fd;
+      border-left: 4px solid #0369a1;
+      border-radius: 12px;
+      padding: 1.35rem 1.5rem;
+      margin-bottom: 1.75rem;
+      box-shadow: 0 1px 3px rgba(3, 105, 161, 0.08);
+    }
+    .quota-summary-wrap .quota-title {
+      color: #0c4a6e;
+      font-weight: 700;
+      font-size: 1.05rem;
+      margin-bottom: 0.35rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .quota-summary-wrap .quota-desc {
+      color: #64748b;
+      font-size: 0.875rem;
+      margin-bottom: 1rem;
+      line-height: 1.45;
+    }
+    .quota-summary-wrap .company-quota {
+      background: #fff;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.85rem;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .quota-summary-wrap .company-quota:last-child { margin-bottom: 0; }
+    .quota-summary-wrap .company-name {
+      font-weight: 700;
+      color: #1e293b;
+      font-size: 1rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .quota-summary-wrap .company-name .fa-building { color: #0369a1; font-size: 0.9rem; }
+    .quota-summary-wrap .job-quota-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid #f8fafc;
+      font-size: 0.9rem;
+    }
+    .quota-summary-wrap .job-quota-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .quota-summary-wrap .job-quota-row .job-title { font-weight: 500; color: #334155; min-width: 0; }
+    .quota-summary-wrap .job-stats { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .quota-summary-wrap .stat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.3rem 0.65rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .quota-summary-wrap .stat-pill.slots { background: #e0f2fe; color: #0369a1; }
+    .quota-summary-wrap .stat-pill.filled { background: #fef3c7; color: #92400e; }
+    .quota-summary-wrap .stat-pill.remaining { background: #d1fae5; color: #065f46; }
+    /* 與 upload_company 一致的輸入框樣式（職缺名稱等） */
+    .company-block .input-job-title {
+      border-radius: 6px;
+      border: 1px solid #ddd;
+      padding: 10px 12px;
+      width: 100%;
+      font-size: 1rem;
+      color: #212529;
+    }
+    .company-block .input-job-title:focus {
+      border-color: #0066cc;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+    }
+    .company-block .input-job-title::placeholder {
+      color: #6c757d;
+    }
   </style>
 </head>
 <body>
@@ -32,7 +121,13 @@
       目前二輪媒合尚未開啟，請待科助公告第一輪錄取結果並開啟二輪後再填寫。
     </div>
     <div id="contentCard" class="card p-4 d-none">
-      <p class="text-muted mb-4">請勾選是否參與二輪媒合，並填寫名額、薪資說明與職缺名稱（可與第一輪不同）。</p>
+      <p class="text-muted mb-3">請勾選是否參與二輪媒合，並填寫名額、薪資說明與職缺名稱（可與第一輪不同）。</p>
+      <!-- 主任排序後本公司剩餘職缺名額（填寫二輪名額前可參考） -->
+      <div id="jobSlotsSummaryWrap" class="quota-summary-wrap d-none">
+        <div class="quota-title"><i class="fas fa-briefcase"></i>本公司剩餘職缺名額</div>
+        <p class="quota-desc mb-0">以下為一面媒合後各職缺之名額、已錄取與剩餘人數，填寫二輪名額時可參考。</p>
+        <div id="jobSlotsSummaryContent"></div>
+      </div>
       <div id="companyList"></div>
       <div class="mt-3">
         <button type="button" class="btn btn-primary" id="btnSaveAll"><i class="fas fa-save me-1"></i>全部儲存</button>
@@ -91,6 +186,43 @@
         return { text: '待確認', cls: 'badge-pending' };
       }
 
+      async function loadJobSlotsSummary() {
+        var wrap = document.getElementById('jobSlotsSummaryWrap');
+        var content = document.getElementById('jobSlotsSummaryContent');
+        if (!wrap || !content) return;
+        try {
+          var res = await fetch('/vendor/api/job_slots_summary', { credentials: 'same-origin' });
+          var data = await res.json();
+          if (!data.success || !data.companies || data.companies.length === 0) {
+            wrap.classList.add('d-none');
+            return;
+          }
+          var html = '';
+          data.companies.forEach(function(c) {
+            html += '<div class="company-quota">';
+            html += '<div class="company-name"><i class="fas fa-building"></i>' + escapeHtml(c.company_name || '未命名公司') + '</div>';
+            if (!c.jobs || c.jobs.length === 0) {
+              html += '<div class="text-muted small">尚無職缺</div>';
+            } else {
+              c.jobs.forEach(function(j) {
+                html += '<div class="job-quota-row">';
+                html += '<span class="job-title">' + escapeHtml(j.job_title || '未指定職缺') + '</span>';
+                html += '<div class="job-stats">';
+                html += '<span class="stat-pill slots"><i class="fas fa-user-tag"></i>名額 ' + j.slots + '</span>';
+                html += '<span class="stat-pill filled"><i class="fas fa-user-check"></i>已錄取 ' + j.filled + '</span>';
+                html += '<span class="stat-pill remaining"><i class="fas fa-user-plus"></i>剩餘 ' + j.remaining + '</span>';
+                html += '</div></div>';
+              });
+            }
+            html += '</div>';
+          });
+          content.innerHTML = html;
+          wrap.classList.remove('d-none');
+        } catch (e) {
+          wrap.classList.add('d-none');
+        }
+      }
+
       async function loadAssigned() {
         var section = document.getElementById('assignedSection');
         var emptyEl = document.getElementById('assignedEmpty');
@@ -144,6 +276,7 @@
           }
           notOpenMsg.classList.add('d-none');
           contentCard.classList.remove('d-none');
+          loadJobSlotsSummary();
           if (!partData.success || !partData.companies || !partData.companies.length) {
             companyList.innerHTML = '<p class="text-muted">尚無可填寫的公司，或您尚未關聯任何已審核通過的公司。</p>';
           } else {
@@ -155,7 +288,7 @@
               + '<label class="form-check-label" for="agree_' + c.company_id + '">參與二輪媒合</label></div>'
               + '<div class="mb-2"><label class="form-label small">名額</label><input type="number" class="form-control form-control-sm sr-quota" min="0" value="' + (c.quota || 0) + '" style="max-width:100px"></div>'
               + '<div class="mb-2"><label class="form-label small">薪資說明（可標示無薪、時薪等）</label><input type="text" class="form-control form-control-sm sr-salary" value="' + (c.salary_note || '').replace(/"/g, '&quot;') + '" placeholder="例：無薪、時薪 200"></div>'
-              + '<div class="mb-2"><label class="form-label small">二輪職缺名稱（可與第一輪不同）</label><input type="text" class="form-control form-control-sm sr-jobtitle" value="' + (c.job_title || '').replace(/"/g, '&quot;') + '" placeholder="例：實習生"></div>'
+              + '<div class="mb-3"><label class="form-label" style="font-weight:600; margin-bottom:8px;">二輪職缺名稱（可與第一輪不同）</label><input type="text" class="input-job-title sr-jobtitle form-control" value="' + (c.job_title || '').replace(/"/g, '&quot;') + '" placeholder="請輸入工作項目（例：實習生）"></div>'
               + '</div>';
           }).join('');
           }

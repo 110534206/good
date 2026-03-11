@@ -12,7 +12,7 @@ except ImportError:
     MySQL_ProgrammingError = None
 
 from config import get_db
-from semester import get_current_semester_id, get_current_semester_code
+from semester import get_current_semester_id, get_current_semester_code, get_flow_semester_id
 
 vendor_bp = Blueprint('vendor', __name__)
 
@@ -4948,6 +4948,72 @@ def _get_vendor_own_company_ids(cursor, vendor_id):
     if companies:
         company_ids.extend([c["id"] for c in companies])
     return list(set(company_ids))
+
+
+# =========================================================
+# 廠商退實習生頁：取得本公司剩餘職缺名額（主任排序後，各職缺名額／已錄取／剩餘）
+# =========================================================
+@vendor_bp.route("/vendor/api/job_slots_summary", methods=["GET"])
+def get_vendor_job_slots_summary():
+    """取得廠商所屬公司各職缺之名額、已錄取數、剩餘名額（主任排序 manage_director Approved 為準），供退實習頁顯示。"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    try:
+        vendor_id = session.get("user_id")
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        company_ids = _get_vendor_own_company_ids(cursor, vendor_id)
+        if not company_ids:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": True, "companies": []})
+        sid = get_flow_semester_id(cursor)
+        if not sid:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": True, "companies": []})
+        placeholders = ",".join(["%s"] * len(company_ids))
+        cursor.execute("""
+            SELECT sja.company_id, sja.job_id, COUNT(*) AS filled
+            FROM manage_director md
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            WHERE md.semester_id = %s AND md.director_decision = 'Approved'
+            AND sja.company_id IN (""" + placeholders + """)
+            GROUP BY sja.company_id, sja.job_id
+        """, [sid] + list(company_ids))
+        filled_map = {}
+        for row in cursor.fetchall() or []:
+            key = (row["company_id"], row["job_id"])
+            filled_map[key] = row["filled"]
+        cursor.execute("""
+            SELECT ic.id AS company_id, ic.company_name, ij.id AS job_id, ij.title AS job_title, COALESCE(ij.slots, 1) AS slots
+            FROM internship_companies ic
+            INNER JOIN internship_jobs ij ON ij.company_id = ic.id AND ij.is_active = 1
+            WHERE ic.id IN (""" + placeholders + """)
+            ORDER BY ic.company_name, ij.id
+        """, list(company_ids))
+        rows = cursor.fetchall() or []
+        companies_by_id = {}
+        for r in rows:
+            cid = r["company_id"]
+            if cid not in companies_by_id:
+                companies_by_id[cid] = {"company_id": cid, "company_name": r.get("company_name") or "", "jobs": []}
+            filled = filled_map.get((cid, r["job_id"]), 0)
+            slots = int(r.get("slots") or 1)
+            remaining = max(0, slots - filled)
+            companies_by_id[cid]["jobs"].append({
+                "job_id": r["job_id"],
+                "job_title": r.get("job_title") or "未指定職缺",
+                "slots": slots,
+                "filled": filled,
+                "remaining": remaining,
+            })
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "companies": list(companies_by_id.values())})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 # =========================================================

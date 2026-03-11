@@ -381,18 +381,28 @@ def get_statistics():
         # 使用流程學期（與媒合/志願操作一致，1132 時統計仍為 1131，結果同步）
         semester_id = get_flow_semester_id(cursor)
         current_semester_code = get_flow_semester_code(cursor) if semester_id else get_current_semester_code(cursor)
-        
-        # 1. 全系學生總數
+        # 主任統計僅納入四年級：流程學期 1131 → 學年 113 → 四年級為 admission_year = 110
+        admission_year_grade4 = None
+        if current_semester_code and len(str(current_semester_code).strip()) >= 3:
+            try:
+                flow_year = int(str(current_semester_code).strip()[:3])
+                admission_year_grade4 = flow_year - 3  # 四年級
+            except (ValueError, TypeError):
+                pass
+        grade_filter_sql = " AND c.admission_year = %s" if admission_year_grade4 is not None else ""
+        grade_params = (admission_year_grade4,) if admission_year_grade4 is not None else ()
+
+        # 1. 全系學生總數（僅四年級）
         cursor.execute("""
             SELECT COUNT(DISTINCT u.id) AS total_students
             FROM classes c
             LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
             WHERE c.department = %s
-        """, (department,))
+        """ + grade_filter_sql, (department,) + grade_params)
         total_students_result = cursor.fetchone()
         total_students = total_students_result['total_students'] or 0
         
-        # 2. 履歷統計（當前學期）
+        # 2. 履歷統計（當前流程學期，僅四年級）
         if semester_id:
             cursor.execute("""
                 SELECT 
@@ -405,7 +415,7 @@ def get_statistics():
                 LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
                 LEFT JOIN resumes r ON r.user_id = u.id AND r.semester_id = %s
                 WHERE c.department = %s
-            """, (semester_id, department))
+            """ + grade_filter_sql, (semester_id, department) + grade_params)
         else:
             cursor.execute("""
                 SELECT 
@@ -418,10 +428,10 @@ def get_statistics():
                 LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
                 LEFT JOIN resumes r ON r.user_id = u.id
                 WHERE c.department = %s
-            """, (department,))
+            """ + grade_filter_sql, (department,) + grade_params)
         resume_stats = cursor.fetchone()
         
-        # 3. 志願序統計（當前學期）
+        # 3. 志願序統計（當前流程學期，僅四年級）
         if semester_id:
             cursor.execute("""
                 SELECT 
@@ -434,7 +444,7 @@ def get_statistics():
                 LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
                 LEFT JOIN student_preferences sp ON sp.student_id = u.id AND sp.semester_id = %s
                 WHERE c.department = %s
-            """, (semester_id, department))
+            """ + grade_filter_sql, (semester_id, department) + grade_params)
         else:
             cursor.execute("""
                 SELECT 
@@ -447,10 +457,10 @@ def get_statistics():
                 LEFT JOIN users u ON u.class_id = c.id AND u.role = 'student'
                 LEFT JOIN student_preferences sp ON sp.student_id = u.id
                 WHERE c.department = %s
-            """, (department,))
+            """ + grade_filter_sql, (department,) + grade_params)
         preference_stats = cursor.fetchone()
         
-        # 4. 各公司被選擇次數（前10名）
+        # 4. 各公司被選擇次數（前10名，僅四年級）
         if semester_id:
             cursor.execute("""
                 SELECT 
@@ -460,11 +470,12 @@ def get_statistics():
                 LEFT JOIN student_preferences sp ON ic.id = sp.company_id AND sp.semester_id = %s
                 LEFT JOIN users u ON sp.student_id = u.id
                 LEFT JOIN classes c ON u.class_id = c.id
-                WHERE c.department = %s OR c.department IS NULL
+                WHERE (c.department = %s OR c.department IS NULL)
+                """ + grade_filter_sql + """
                 GROUP BY ic.id, ic.company_name
                 ORDER BY preference_count DESC
                 LIMIT 10
-            """, (semester_id, department))
+            """, (semester_id, department) + grade_params)
         else:
             cursor.execute("""
                 SELECT 
@@ -474,19 +485,58 @@ def get_statistics():
                 LEFT JOIN student_preferences sp ON ic.id = sp.company_id
                 LEFT JOIN users u ON sp.student_id = u.id
                 LEFT JOIN classes c ON u.class_id = c.id
-                WHERE c.department = %s OR c.department IS NULL
+                WHERE (c.department = %s OR c.department IS NULL)
+                """ + grade_filter_sql + """
                 GROUP BY ic.id, ic.company_name
                 ORDER BY preference_count DESC
                 LIMIT 10
-            """, (department,))
+            """, (department,) + grade_params)
         top_companies = cursor.fetchall()
+
+        # 4b. 熱門填寫職缺（公司+職缺，依志願被選次數排序，僅四年級）
+        if semester_id:
+            cursor.execute("""
+                SELECT 
+                    ic.company_name,
+                    COALESCE(sp.job_title, ij.title, '未指定職缺') AS job_title,
+                    COUNT(sp.id) AS preference_count
+                FROM student_preferences sp
+                JOIN internship_companies ic ON ic.id = sp.company_id
+                LEFT JOIN internship_jobs ij ON ij.id = sp.job_id
+                JOIN users u ON sp.student_id = u.id
+                JOIN classes c ON u.class_id = c.id
+                WHERE sp.semester_id = %s AND c.department = %s
+                """ + grade_filter_sql + """
+                GROUP BY sp.company_id, sp.job_id, ic.company_name, sp.job_title, ij.title
+                ORDER BY preference_count DESC
+                LIMIT 12
+            """, (semester_id, department) + grade_params)
+        else:
+            cursor.execute("""
+                SELECT 
+                    ic.company_name,
+                    COALESCE(sp.job_title, ij.title, '未指定職缺') AS job_title,
+                    COUNT(sp.id) AS preference_count
+                FROM student_preferences sp
+                JOIN internship_companies ic ON ic.id = sp.company_id
+                LEFT JOIN internship_jobs ij ON ij.id = sp.job_id
+                JOIN users u ON sp.student_id = u.id
+                JOIN classes c ON u.class_id = c.id
+                WHERE c.department = %s
+                """ + grade_filter_sql + """
+                GROUP BY sp.company_id, sp.job_id, ic.company_name, sp.job_title, ij.title
+                ORDER BY preference_count DESC
+                LIMIT 12
+            """, (department,) + grade_params)
+        top_jobs = cursor.fetchall()
         
-        # 5. 各班級統計
+        # 5. 各班級統計（僅四年級，班級名稱含年級 ex: 資管四甲）
         if semester_id:
             cursor.execute("""
                 SELECT 
                     c.id AS class_id,
                     c.name AS class_name,
+                    CONCAT(COALESCE(c.department, ''), '四', COALESCE(c.name, '')) AS class_display,
                     COUNT(DISTINCT u.id) AS total_students,
                     COUNT(DISTINCT r.user_id) AS students_with_resume,
                     COUNT(DISTINCT sp.student_id) AS students_with_preferences
@@ -495,14 +545,16 @@ def get_statistics():
                 LEFT JOIN resumes r ON r.user_id = u.id AND r.semester_id = %s
                 LEFT JOIN student_preferences sp ON sp.student_id = u.id AND sp.semester_id = %s
                 WHERE c.department = %s
-                GROUP BY c.id, c.name
+                """ + grade_filter_sql + """
+                GROUP BY c.id, c.name, c.department
                 ORDER BY c.name
-            """, (semester_id, semester_id, department))
+            """, (semester_id, semester_id, department) + grade_params)
         else:
             cursor.execute("""
                 SELECT 
                     c.id AS class_id,
                     c.name AS class_name,
+                    CONCAT(COALESCE(c.department, ''), '四', COALESCE(c.name, '')) AS class_display,
                     COUNT(DISTINCT u.id) AS total_students,
                     COUNT(DISTINCT r.user_id) AS students_with_resume,
                     COUNT(DISTINCT sp.student_id) AS students_with_preferences
@@ -511,9 +563,10 @@ def get_statistics():
                 LEFT JOIN resumes r ON r.user_id = u.id
                 LEFT JOIN student_preferences sp ON sp.student_id = u.id
                 WHERE c.department = %s
-                GROUP BY c.id, c.name
+                """ + grade_filter_sql + """
+                GROUP BY c.id, c.name, c.department
                 ORDER BY c.name
-            """, (department,))
+            """, (department,) + grade_params)
         classes_stats = cursor.fetchall()
         
         # 計算完成率
@@ -540,6 +593,7 @@ def get_statistics():
                 "completion_rate": preference_completion_rate
             },
             "top_companies": top_companies,
+            "top_jobs": top_jobs,
             "classes_stats": classes_stats
         })
     

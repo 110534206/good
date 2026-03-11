@@ -227,6 +227,18 @@
       max-height: 250px;
     }
 
+    /* 熱門填寫職缺圖表：較寬、較大文字 */
+    .chart-container.chart-wide {
+      grid-column: 1 / -1;
+      max-width: 100%;
+    }
+    .chart-container.chart-wide h3 {
+      font-size: 1.15rem;
+    }
+    .chart-container.chart-wide canvas {
+      max-height: 380px;
+    }
+
     .loading {
       text-align: center;
       padding: 2rem;
@@ -272,7 +284,10 @@
     <div class="container my-5 pt-1">
       <div class="card shadow-sm p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
-          <h4 class="mb-0" style="color: #0066cc; font-weight: bold;">統計資料</h4>
+          <div>
+            <h4 class="mb-0" style="color: #0066cc; font-weight: bold;">統計資料</h4>
+            <p id="statisticsSubtitle" class="text-muted small mb-0 mt-1" style="display: none;">流程學期：<span id="statSemesterDisplay"></span> </p>
+          </div>
           <button id="exportPdfBtn" class="btn btn-danger btn-sm" style="display: none;">
             <i class="fas fa-file-pdf"></i> 匯出 PDF
           </button>
@@ -329,6 +344,11 @@
               <h3>各班級完成率</h3>
               <canvas id="classChart"></canvas>
             </div>
+
+            <div class="chart-container chart-wide">
+              <h3>熱門填寫職缺（被選次數）</h3>
+              <canvas id="topJobsChart"></canvas>
+            </div>
           </div>
         </div>
       </div>
@@ -382,6 +402,7 @@
     let preferenceChart = null;
     let companyChart = null;
     let classChart = null;
+    let topJobsChart = null;
 
     // 載入統計資料
     async function loadStatistics() {
@@ -401,6 +422,14 @@
           throw new Error(data.message || '載入統計資料失敗');
         }
 
+        // 顯示流程學期與四年級說明
+        var sub = document.getElementById('statisticsSubtitle');
+        var semSpan = document.getElementById('statSemesterDisplay');
+        if (data.current_semester) {
+          if (semSpan) semSpan.textContent = data.current_semester;
+          if (sub) sub.style.display = 'block';
+        } else if (sub) sub.style.display = 'none';
+
         // 更新統計卡片
         document.getElementById('total-students').textContent = data.total_students || 0;
         document.getElementById('resume-uploaded').textContent = data.resume_stats.students_with_resume || 0;
@@ -415,6 +444,7 @@
         drawPreferenceChart(data.preference_stats, data.total_students);
         drawCompanyChart(data.top_companies);
         drawClassChart(data.classes_stats);
+        drawTopJobsChart(data.top_jobs || []);
 
         loading.style.display = 'none';
         content.style.display = 'block';
@@ -574,7 +604,7 @@
         classChart.destroy();
       }
 
-      const classNames = classesStats.map(c => c.class_name || '未知班級');
+      const classNames = classesStats.map(c => c.class_display || c.class_name || '未知班級');
       const resumeRates = classesStats.map(c => {
         const total = c.total_students || 0;
         const withResume = c.students_with_resume || 0;
@@ -631,6 +661,56 @@
                 padding: 8,
                 font: { size: 11 }
               }
+            }
+          }
+        }
+      });
+    }
+
+    // 繪製熱門填寫職缺圖表（公司＋職缺名稱，被選次數）
+    function drawTopJobsChart(topJobs) {
+      const ctx = document.getElementById('topJobsChart');
+      if (!ctx) return;
+      const canvas = ctx.getContext('2d');
+      if (topJobsChart) topJobsChart.destroy();
+      const labels = (topJobs || []).map(j => (j.company_name || '') + ' - ' + (j.job_title || '職缺'));
+      const counts = (topJobs || []).map(j => j.preference_count || 0);
+      if (labels.length === 0) {
+        labels.push('尚無資料');
+        counts.push(0);
+      }
+      topJobsChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '被選次數',
+            data: counts,
+            backgroundColor: '#f59e0b'
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: true,
+          scales: {
+            x: {
+              beginAtZero: true,
+              ticks: { precision: 0, font: { size: 14 } }
+            },
+            y: {
+              ticks: {
+                maxRotation: 0,
+                autoSkip: false,
+                font: { size: 14 }
+              }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              bodyFont: { size: 14 },
+              titleFont: { size: 14 }
             }
           }
         }
@@ -697,7 +777,8 @@
         { id: 'resumeChart', title: '履歷繳交狀況', chart: resumeChart },
         { id: 'preferenceChart', title: '志願序填寫狀況', chart: preferenceChart },
         { id: 'companyChart', title: '熱門公司（被選擇次數）', chart: companyChart },
-        { id: 'classChart', title: '各班級完成率', chart: classChart }
+        { id: 'classChart', title: '各班級完成率', chart: classChart },
+        { id: 'topJobsChart', title: '熱門填寫職缺（被選次數）', chart: topJobsChart }
       ];
 
       Promise.all(charts.map(({ id, title, chart }) => {

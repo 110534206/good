@@ -422,11 +422,12 @@
     loadUnreadNotificationCount();
     setInterval(loadUnreadNotificationCount, 30000);
 
-    // 二輪媒合開啟時才顯示「二輪媒合意願」
+    // 二輪媒合：僅在「已開啟」且「主任排序後尚有職缺」時顯示（職缺已滿的廠商首頁不顯示二輪媒合）
     fetch('/admission/api/second_round/status', { credentials: 'include' })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        if (data.success && data.is_enabled) {
+        var show = data.success && data.is_enabled && (data.has_any_vacancy !== false);
+        if (show) {
           var card = document.getElementById('secondRoundCardWrap');
           var link = document.getElementById('secondRoundMenuLink');
           if (card) card.style.display = '';

@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>智慧實習平台 | 媒合結果確認</title>
+  <title>智慧實習平台 | 媒合結果公告</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
   <style>
@@ -618,7 +618,7 @@
         <span></span><span></span><span></span>
       </div>
     </div>
-    媒合結果確認
+    媒合結果公告
   </header>
 
   <!-- 側邊選單 -->
@@ -639,6 +639,7 @@
   </nav>
 
   <div class="container mt-4">
+    </p>
     <!-- 媒合結果過濾器 -->
     <div class="filters-container" id="filtersContainer" style="display: none;">
       <div class="filter-group">
@@ -658,9 +659,9 @@
         <input type="text" id="studentNameFilter" placeholder="輸入學生姓名或學號">
       </div>
       <div class="filter-group" style="flex: 0 0 auto; min-width: auto;">
-        <label style="opacity: 0;">確認</label>
+        <label style="opacity: 0;">公告</label>
         <button id="confirmFilterBtn" class="btn-confirm-filter" onclick="handleFilterConfirm()">
-          <i class="fa-solid fa-check"></i> 確認
+          <i class="fa-solid fa-bullhorn"></i> 送出媒合結果公告
         </button>
       </div>
     </div>
@@ -1349,20 +1350,15 @@
       }
     }
 
-    // 處理確認按鈕點擊（科助確認媒合結果）
+    // 處理送出媒合結果公告（科助送出後同步通知所有使用者）
     async function handleFilterConfirm() {
       const confirmBtn = document.getElementById('confirmFilterBtn');
       if (!confirmBtn) return;
-      
-   
-      
-      // 禁用按鈕並顯示載入狀態
+      if (!confirm('確定要送出媒合結果公告嗎？送出後將同步通知所有使用者。')) return;
       const originalText = confirmBtn.innerHTML;
       confirmBtn.disabled = true;
-      confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 確認中...';
-      
+      confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 送出中...';
       try {
-        // 調用科助確認 API
         const res = await fetch('/admission/api/ta/confirm_matching', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1372,19 +1368,16 @@
         const data = await res.json();
         
         if (data.success) {
-          // 顯示成功訊息
           alert(`✅ ${data.message}`);
-          
-          // 跳轉到媒合結果管理中心，準備進行二面流程
           window.location.href = '/ta_assistant_dashboard';
         } else {
-          alert('❌ 確認失敗：' + (data.message || '未知錯誤'));
+          alert('❌ 送出公告失敗：' + (data.message || '未知錯誤'));
           confirmBtn.disabled = false;
           confirmBtn.innerHTML = originalText;
         }
       } catch (error) {
-        console.error('確認失敗:', error);
-        alert('❌ 確認失敗：' + (error.message || '未知錯誤'));
+        console.error('送出公告失敗:', error);
+        alert('❌ 送出公告失敗：' + (error.message || '未知錯誤'));
         confirmBtn.disabled = false;
         confirmBtn.innerHTML = originalText;
       }

@@ -4143,7 +4143,8 @@ def resolve_duplicate_students():
 @admission_bp.route("/api/director_confirm_matching", methods=["POST"])
 def director_confirm_matching():
     """
-    主任確認媒合結果後：只通知科助，由科助進行最後發布並通知所有使用者。
+    主任確認媒合結果後：只通知科助；科助至 final_results 頁面「送出媒合結果公告」後，
+    同步通知所有使用者；廠商需點選 confirm_matching 頁面方可查看最終媒合結果。
     """
     if 'user_id' not in session or session.get('role') != 'director':
         return jsonify({"success": False, "message": "未授權"}), 403
@@ -4504,7 +4505,8 @@ def director_confirm_matching():
 @admission_bp.route("/api/ta/confirm_matching", methods=["POST"])
 def ta_confirm_matching():
     """
-    科助確認媒合結果後：通知所有使用者（指導老師、班導、學生、廠商、管理員、主任）。
+    科助在 final_results 頁面送出媒合結果公告後：同步通知所有使用者（指導老師、班導、
+    學生、廠商、管理員、主任）；廠商通知連結為 /confirm_matching，點選後可查看最終媒合結果。
     """
     if 'user_id' not in session or session.get('role') not in ['ta', 'admin']:
         return jsonify({"success": False, "message": "未授權"}), 403
@@ -4613,8 +4615,8 @@ def ta_confirm_matching():
         
         for vendor in vendors:
             title = f"{semester_prefix} 媒合結果已發布"
-            message = f"{semester_prefix}媒合結果已由科助確認並發布，請前往查看您的實習生名單。"
-            link_url = "/vendor/matching_results"
+            message = f"{semester_prefix}媒合結果已由科助公告，請點選「媒合結果」頁面查看最終媒合結果。"
+            link_url = "/confirm_matching"
             create_notification(
                 user_id=vendor['id'],
                 title=title,
@@ -4946,26 +4948,65 @@ def second_round_status():
         code_row = cursor.fetchone()
         current_semester_code = (code_row.get('code') or '') if code_row else ''
         director_read_only = bool(current_semester_code and len(current_semester_code) >= 4 and current_semester_code[-1] == '2')
-        return jsonify({
+        payload = {
             "success": True,
             "is_enabled": is_enabled,
             "show_on_director_home": show_on_director_home,
             "allow_toggle": allow_toggle,
             "semester_id": current_semester_id,
             "director_read_only": director_read_only
-        })
+        }
+        # 廠商：職缺已滿則首頁不顯示二輪媒合（主任排序後尚有職缺才顯示）
+        if session.get("role") == "vendor":
+            vendor_id = session.get("user_id")
+            sid = flow_semester_id or current_semester_id
+            company_ids = _vendor_company_ids_for_second_round(cursor, vendor_id, sid)
+            payload["has_any_vacancy"] = len(company_ids) > 0
+        return jsonify(payload)
     finally:
         cursor.close()
         conn.close()
 
 
-def _vendor_company_ids_for_second_round(cursor, vendor_id):
+def _company_ids_with_first_round_vacancy(cursor, semester_id):
+    """
+    主任排序後廠商剩餘的職缺：以 manage_director（主任核定）為準，每個職缺已錄取數 < 名額即尚有職缺。
+    用於二輪媒合僅同步給「尚有職缺」的廠商，不同步給已滿額的廠商。
+    """
+    if not semester_id:
+        return set()
+    try:
+        # 已錄取數：主任排序後 manage_director.director_decision = 'Approved'，依 sja.company_id, sja.job_id 計數
+        cursor.execute("""
+            SELECT ij.company_id
+            FROM internship_jobs ij
+            JOIN internship_companies ic ON ic.id = ij.company_id AND ic.status = 'approved'
+            LEFT JOIN (
+                SELECT sja.company_id, sja.job_id, COUNT(*) AS filled
+                FROM manage_director md
+                INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+                WHERE md.semester_id = %s AND md.director_decision = 'Approved'
+                GROUP BY sja.company_id, sja.job_id
+            ) t ON t.company_id = ij.company_id AND t.job_id = ij.id
+            WHERE ij.is_active = 1
+            AND COALESCE(t.filled, 0) < COALESCE(ij.slots, 1)
+            GROUP BY ij.company_id
+        """, (semester_id,))
+        rows = cursor.fetchall() or []
+        return {r["company_id"] for r in rows}
+    except Exception as e:
+        print(f"⚠️ _company_ids_with_first_round_vacancy: {e}")
+        return set()
+
+
+def _vendor_company_ids_for_second_round(cursor, vendor_id, semester_id=None):
     """
     Get company IDs this vendor can manage for second-round page.
+    僅回傳「主任排序後尚有職缺」的公司，不同步給已滿額的廠商。
     Order: 1) internship_companies.vendor_id, 2) company_vendor_relations,
     3) internship_jobs.created_by_vendor_id, 4) fallback one company under teacher.
-    So A company account only sees A company, not B (same teacher).
     """
+    candidate = []
     # 1) internship_companies.vendor_id
     try:
         cursor.execute(
@@ -4974,44 +5015,55 @@ def _vendor_company_ids_for_second_round(cursor, vendor_id):
         )
         rows = cursor.fetchall() or []
         if rows:
-            return [r["id"] for r in rows]
+            candidate = [r["id"] for r in rows]
     except Exception:
         pass
-    # 2) company_vendor_relations
-    try:
-        cursor.execute(
-            "SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s ORDER BY company_id",
-            (vendor_id,),
-        )
-        rows = cursor.fetchall() or []
-        if rows:
-            return [r["company_id"] for r in rows]
-    except Exception:
-        pass
-    # 3) internship_jobs.created_by_vendor_id（該廠商建立過職缺的公司）
-    try:
-        cursor.execute(
-            "SELECT DISTINCT ij.company_id FROM internship_jobs ij "
-            "JOIN internship_companies ic ON ic.id = ij.company_id AND ic.status = 'approved' "
-            "WHERE ij.created_by_vendor_id = %s ORDER BY ij.company_id",
-            (vendor_id,),
-        )
-        rows = cursor.fetchall() or []
-        if rows:
-            return [r["company_id"] for r in rows]
-    except Exception:
-        pass
-    # 4) Fallback: 指導老師底下「一間」公司（避免所有人看到「尚無可填寫的公司」）
-    cursor.execute("SELECT teacher_id FROM users WHERE id = %s AND role = 'vendor'", (vendor_id,))
-    row = cursor.fetchone()
-    if not row or not row.get("teacher_id"):
+    if not candidate:
+        # 2) company_vendor_relations
+        try:
+            cursor.execute(
+                "SELECT company_id FROM company_vendor_relations WHERE vendor_id = %s ORDER BY company_id",
+                (vendor_id,),
+            )
+            rows = cursor.fetchall() or []
+            if rows:
+                candidate = [r["company_id"] for r in rows]
+        except Exception:
+            pass
+    if not candidate:
+        # 3) internship_jobs.created_by_vendor_id
+        try:
+            cursor.execute(
+                "SELECT DISTINCT ij.company_id FROM internship_jobs ij "
+                "JOIN internship_companies ic ON ic.id = ij.company_id AND ic.status = 'approved' "
+                "WHERE ij.created_by_vendor_id = %s ORDER BY ij.company_id",
+                (vendor_id,),
+            )
+            rows = cursor.fetchall() or []
+            if rows:
+                candidate = [r["company_id"] for r in rows]
+        except Exception:
+            pass
+    if not candidate:
+        # 4) Fallback: 指導老師底下「一間」公司
+        cursor.execute("SELECT teacher_id FROM users WHERE id = %s AND role = 'vendor'", (vendor_id,))
+        row = cursor.fetchone()
+        if row and row.get("teacher_id"):
+            cursor.execute(
+                "SELECT id FROM internship_companies WHERE advisor_user_id = %s AND status = 'approved' ORDER BY company_name LIMIT 1",
+                (row["teacher_id"],),
+            )
+            one = cursor.fetchone()
+            if one:
+                candidate = [one["id"]]
+    if not candidate:
         return []
-    cursor.execute(
-        "SELECT id FROM internship_companies WHERE advisor_user_id = %s AND status = 'approved' ORDER BY company_name LIMIT 1",
-        (row["teacher_id"],),
-    )
-    one = cursor.fetchone()
-    return [one["id"]] if one else []
+    # 僅回傳一面尚有職缺的公司
+    sid = semester_id
+    if sid is None:
+        sid = get_flow_semester_id(cursor)
+    vacancy_ids = _company_ids_with_first_round_vacancy(cursor, sid)
+    return [c for c in candidate if c in vacancy_ids]
 
 
 # =========================================================

@@ -855,11 +855,11 @@
       }
     });
 
-    // 二輪媒合開啟時才顯示「二輪媒合意願」
+    // 二輪媒合：僅在已開啟且主任排序後尚有職缺時顯示
     fetch('/admission/api/second_round/status', { credentials: 'include' })
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        if (data.success && data.is_enabled) {
+        if (data.success && data.is_enabled && (data.has_any_vacancy !== false)) {
           var link = document.getElementById('secondRoundMenuLink');
           if (link) link.style.display = 'block';
         }

@@ -144,6 +144,18 @@
     }
 
     /* 統計卡片 */
+    .analysis-total-link,
+    .analysis-order-link {
+      color: #0454a3;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .analysis-total-link:hover,
+    .analysis-order-link:hover {
+      color: #0369a1;
+      text-decoration: underline;
+    }
+
     .stat-card {
       background: #fff;
       border: 1px solid #e5e7eb;
@@ -685,6 +697,22 @@
       <div id="analysisTableContainer"></div>
     </div>
 
+    <!-- 填寫人列表 Modal（點擊分析表「總計」連結時顯示） -->
+    <div class="modal fade" id="analysisStudentsModal" tabindex="-1" aria-labelledby="analysisStudentsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="analysisStudentsModalLabel">填寫人</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="關閉"></button>
+          </div>
+          <div class="modal-body">
+            <p id="analysisStudentsModalSubtitle" class="text-muted small mb-2"></p>
+            <div id="analysisStudentsModalBody"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 篩選列：選擇學生查詢 + 填寫狀態 + 按鈕 -->
     <div class="filter-row">
       <div>
@@ -986,6 +1014,8 @@
       function collectDetailedCounts() {
         const obj = {};
         const meta = {};
+        const studentsByKey = {};
+        const studentsByKeyByOrder = {};
         try {
           const allJobs = JSON.parse(document.getElementById('allInternshipJobsData')?.textContent || '[]');
           allJobs.forEach(j => {
@@ -995,6 +1025,8 @@
             const key = job ? `${company} - ${job}` : company;
             obj[key] = [0, 0, 0, 0, 0];
             meta[key] = { company, job: job || '—' };
+            studentsByKey[key] = [];
+            studentsByKeyByOrder[key] = { 1: [], 2: [], 3: [], 4: [], 5: [] };
           });
           const filled = JSON.parse(document.getElementById('filledStudentsData')?.textContent || '[]');
           filled.forEach(s => {
@@ -1007,16 +1039,24 @@
               if (!obj[key]) {
                 obj[key] = [0, 0, 0, 0, 0];
                 meta[key] = { company, job: job || '—' };
+                studentsByKey[key] = [];
+                studentsByKeyByOrder[key] = { 1: [], 2: [], 3: [], 4: [], 5: [] };
               }
               obj[key][order - 1] += 1;
+              const st = { student_id: s.student_id, student_name: s.student_name || '', student_number: s.student_number || '' };
+              studentsByKeyByOrder[key][order].push(st);
+              const already = studentsByKey[key].some(x => x.student_id === s.student_id);
+              if (!already) studentsByKey[key].push(st);
             });
           });
         } catch (e) { console.error(e); }
-        return { data: obj, meta };
+        return { data: obj, meta, studentsByKey, studentsByKeyByOrder };
       }
 
       function buildCharts() {
-        const { data, meta } = collectDetailedCounts();
+        const { data, meta, studentsByKey, studentsByKeyByOrder } = collectDetailedCounts();
+        window._analysisStudentsByKey = studentsByKey || {};
+        window._analysisStudentsByKeyByOrder = studentsByKeyByOrder || {};
         const keys = Object.keys(data);
         if (keys.length === 0) {
           if (summaryEl) summaryEl.textContent = '尚無實習職缺資料，請確認已建立公司與職缺。';
@@ -1045,13 +1085,23 @@
         const labelsFull = sortedByTotal;
 
         const escape = (s) => String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const escapeAttr = (s) => String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        const orderLabels = ['第一志願', '第二志願', '第三志願', '第四志願', '第五志願'];
         const tbody = labelsFull.map(k => {
           const arr = data[k];
           const m = meta[k] || { company: k, job: '—' };
           const total = arr.reduce((a, b) => a + b, 0);
           const top1Pct = total > 0 ? ((arr[0] / total) * 100).toFixed(1) : '—';
-          const cells = [m.company, m.job, ...arr, total, `${top1Pct}%`].map(v => `<td>${v}</td>`).join('');
+          const orderCells = arr.map((v, idx) => {
+            const order = idx + 1;
+            if (v > 0) return `<td><a href="#" class="analysis-order-link" data-key="${escapeAttr(k)}" data-order="${order}" title="點擊查看${orderLabels[idx]}填寫人">${v}</a></td>`;
+            return `<td>${v}</td>`;
+          }).join('');
+          const totalCell = total > 0
+            ? `<td><a href="#" class="analysis-total-link" data-key="${escapeAttr(k)}" title="點擊查看全部填寫人（依志願順位）">${total}</a></td>`
+            : `<td>${total}</td>`;
           const c = escape(m.company); const j = escape(m.job);
+          const cells = `<td>${m.company}</td><td>${m.job}</td>${orderCells}${totalCell}<td>${top1Pct}%</td>`;
           return `<tr class="analysis-row" data-total="${total}" data-company="${c}" data-job="${j}">${cells}</tr>`;
         }).join('');
         tableContainer.innerHTML = `
@@ -1149,6 +1199,49 @@
         document.getElementById('analysisFilterApply')?.addEventListener('click', () => { analysisCurrentPage = 1; applyAnalysisFilter(); });
         document.getElementById('analysisFilterSearch')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') { analysisCurrentPage = 1; applyAnalysisFilter(); } });
       }
+
+      const orderLabels = ['第一志願', '第二志願', '第三志願', '第四志願', '第五志願'];
+      function renderStudentsTable(list) {
+        if (!list || list.length === 0) return '<p class="text-muted mb-0">尚無填寫人</p>';
+        const rows = list.map(st => '<tr><td>' + (st.student_number || '—') + '</td><td>' + (st.student_name || '—') + '</td></tr>').join('');
+        return '<table class="table table-sm table-hover"><thead><tr><th>學號</th><th>姓名</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      }
+      // 點擊「總計」或「志願1～5」連結：顯示填寫人（總計＝依志願順位分組；志願N＝僅該順位）
+      document.addEventListener('click', function(e) {
+        const totalLink = e.target.closest('.analysis-total-link');
+        const orderLink = e.target.closest('.analysis-order-link');
+        const link = totalLink || orderLink;
+        if (!link) return;
+        e.preventDefault();
+        const key = link.getAttribute('data-key');
+        if (!key) return;
+        const order = orderLink ? parseInt(link.getAttribute('data-order'), 10) : null;
+        const byOrder = window._analysisStudentsByKeyByOrder ? window._analysisStudentsByKeyByOrder[key] : null;
+        const subtitle = document.getElementById('analysisStudentsModalSubtitle');
+        const bodyEl = document.getElementById('analysisStudentsModalBody');
+        const titleEl = document.getElementById('analysisStudentsModalLabel');
+        if (subtitle) subtitle.textContent = '公司・職缺：' + key;
+        if (order !== null && order >= 1 && order <= 5) {
+          const list = byOrder && byOrder[order] ? byOrder[order] : [];
+          if (titleEl) titleEl.textContent = '填寫人 - ' + orderLabels[order - 1] + '（' + list.length + ' 人）';
+          if (bodyEl) bodyEl.innerHTML = '<div class="table-responsive">' + renderStudentsTable(list) + '</div>';
+        } else {
+          let html = '';
+          for (let o = 1; o <= 5; o++) {
+            const list = byOrder && byOrder[o] ? byOrder[o] : [];
+            if (list.length === 0) continue;
+            html += '<div class="mb-3"><h6 class="text-primary mb-2">' + orderLabels[o - 1] + '（' + list.length + ' 人）</h6><div class="table-responsive">' + renderStudentsTable(list) + '</div></div>';
+          }
+          const total = window._analysisStudentsByKey && window._analysisStudentsByKey[key] ? window._analysisStudentsByKey[key].length : 0;
+          if (titleEl) titleEl.textContent = '填寫人（共 ' + total + ' 人，依志願順位）';
+          if (bodyEl) bodyEl.innerHTML = html || '<p class="text-muted mb-0">尚無填寫人</p>';
+        }
+        const modalEl = document.getElementById('analysisStudentsModal');
+        if (modalEl) {
+          const modal = new bootstrap.Modal(modalEl);
+          modal.show();
+        }
+      });
 
       btn?.addEventListener('click', () => {
         const isHidden = section.style.display === 'none';
