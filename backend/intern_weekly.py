@@ -263,12 +263,55 @@ def review_list():
       """, (teacher_id,))
 
     rows = cursor.fetchall() or []
-    cursor.close()
 
     for row in rows:
       _format_row_dates(row)
 
-    return jsonify({"success": True, "items": rows})
+    if role == "director":
+      cursor.execute("""
+        SELECT DISTINCT ic.company_name
+        FROM internship_companies ic
+        WHERE ic.status = 'approved'
+        ORDER BY ic.company_name
+      """)
+    else:
+      cursor.execute("""
+        SELECT DISTINCT ic.company_name
+        FROM internship_companies ic
+        WHERE ic.advisor_user_id = %s
+        ORDER BY ic.company_name
+      """, (teacher_id,))
+
+    companies = [r["company_name"] for r in cursor.fetchall() if r.get("company_name")]
+
+    if role == "director":
+      cursor.execute("""
+        SELECT DISTINCT
+          u.id AS student_id, u.username AS student_number, u.name AS student_name,
+          c.name AS class_name, ic.company_name
+        FROM matching_results mr
+        JOIN users u ON mr.student_id = u.id
+        LEFT JOIN classes c ON u.class_id = c.id
+        LEFT JOIN internship_companies ic ON mr.company_id = ic.id
+        ORDER BY ic.company_name, u.username
+      """)
+    else:
+      cursor.execute("""
+        SELECT DISTINCT
+          u.id AS student_id, u.username AS student_number, u.name AS student_name,
+          c.name AS class_name, ic.company_name
+        FROM matching_results mr
+        JOIN users u ON mr.student_id = u.id
+        LEFT JOIN classes c ON u.class_id = c.id
+        JOIN internship_companies ic ON mr.company_id = ic.id
+        WHERE ic.advisor_user_id = %s
+        ORDER BY ic.company_name, u.username
+      """, (teacher_id,))
+
+    students = cursor.fetchall() or []
+    cursor.close()
+
+    return jsonify({"success": True, "items": rows, "companies": companies, "students": students})
   except Exception as e:
     traceback.print_exc()
     return jsonify({"success": False, "message": str(e)}), 500
