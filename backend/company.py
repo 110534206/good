@@ -2072,6 +2072,9 @@ def get_my_applications():
                 LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
                 LEFT JOIN resumes r ON sja.resume_id = r.id AND r.user_id = sja.student_id
                 WHERE sja.student_id = %s
+                  AND sja.company_id IN (
+                    SELECT sp.company_id FROM student_preferences sp WHERE sp.student_id = sja.student_id
+                  )
                 ORDER BY sja.applied_at DESC
             """, (user_id,))
             applications = cursor.fetchall() or []
@@ -2096,6 +2099,9 @@ def get_my_applications():
                     LEFT JOIN resumes r ON sja.resume_id = r.id AND r.user_id = sja.student_id
                     LEFT JOIN resume_teacher rt ON rt.application_id = sja.id
                     WHERE sja.student_id = %s
+                      AND sja.company_id IN (
+                        SELECT sp.company_id FROM student_preferences sp WHERE sp.student_id = sja.student_id
+                      )
                     ORDER BY sja.applied_at DESC
                 """, (user_id,))
                 applications = cursor.fetchall() or []
@@ -2117,6 +2123,9 @@ def get_my_applications():
                     LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
                     LEFT JOIN resumes r ON sja.resume_id = r.id AND r.user_id = sja.student_id
                     WHERE sja.student_id = %s
+                      AND sja.company_id IN (
+                        SELECT sp.company_id FROM student_preferences sp WHERE sp.student_id = sja.student_id
+                      )
                     ORDER BY sja.applied_at DESC
                 """, (user_id,))
                 applications = cursor.fetchall() or []
