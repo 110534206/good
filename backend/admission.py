@@ -3776,16 +3776,17 @@ def director_add_student():
             cursor.execute("""
                 UPDATE manage_director
                 SET vendor_id = %s,
-                    job_id = %s,
                     preference_id = %s,
+                    original_type = NULL,
+                    original_rank = NULL,
                     is_conflict = 0,
                     director_decision = 'Approved',
                     final_rank = %s,
-                    is_adjusted = 0,
+                    is_adjusted = 1,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE match_id = %s
             """, (
-                company_id, job_id, preference_id,
+                company_id, preference_id,
                 final_rank,
                 match_id
             ))
@@ -4156,9 +4157,8 @@ def director_confirm_matching():
                 cursor.execute("SELECT COUNT(*) AS cnt FROM matching_results")
             row_cnt = cursor.fetchone() or {}
             if (row_cnt.get("cnt") or 0) > 0:
-                msg = f"{semester_prefix}媒合結果已送出，無法重複送出。"
-                print(f"⚠️ 主任重複送出媒合結果被阻擋：{msg}")
-                return jsonify({"success": False, "message": msg}), 400
+                print(f"ℹ️ {semester_prefix}已有媒合結果，允許重新送出覆蓋。")
+                cursor.execute("DELETE FROM matching_results WHERE semester_id = %s", (current_semester_id,)) if has_mr_semester_id else cursor.execute("DELETE FROM matching_results")
         except Exception as check_err:
             # 若檢查發生錯誤，不影響後續流程，但記錄日誌以便追蹤
             print(f"⚠️ 檢查 matching_results 是否已存在時發生錯誤：{check_err}")
