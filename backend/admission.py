@@ -3322,16 +3322,21 @@ def director_remove_student():
             existing_md = cursor.fetchone()
             
             if existing_md:
-                # 主任按移除：直接刪除該筆記錄，資料表不再保留
-                cursor.execute("DELETE FROM manage_director WHERE match_id = %s", (existing_md['match_id'],))
-            # 若無 manage_director 記錄則不新增列，直接視為移除成功（主任排序結果只顯示有 md 的學生，故不會再出現）
+                cursor.execute("""
+                    UPDATE manage_director
+                    SET director_decision = 'Rejected', final_rank = NULL, is_adjusted = 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE match_id = %s
+                """, (existing_md['match_id'],))
         else:
-            # 主任按移除：直接從 manage_director 刪除該筆記錄（match_id 可能為整數欄位，嘗試整數比對）
             try:
                 match_id_param = int(match_id) if str(match_id).isdigit() else match_id
             except (ValueError, TypeError):
                 match_id_param = match_id
-            cursor.execute("DELETE FROM manage_director WHERE match_id = %s", (match_id_param,))
+            cursor.execute("""
+                UPDATE manage_director
+                SET director_decision = 'Rejected', final_rank = NULL, is_adjusted = 1, updated_at = CURRENT_TIMESTAMP
+                WHERE match_id = %s
+            """, (match_id_param,))
             
             if cursor.rowcount == 0:
                 return jsonify({"success": False, "message": "找不到該記錄"}), 404
