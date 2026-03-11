@@ -4,13 +4,14 @@ from jinja2 import ChoiceLoader, FileSystemLoader
 from dotenv import load_dotenv
 import os
 
-
+# 後端目錄（固定從此目錄載入 .env，避免因工作目錄不同而讀不到）
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
 
 # -------------------------
 # 建立 Flask app
 # -------------------------
-load_dotenv(dotenv_path='GEMINI_API_KEY.env')
-load_dotenv(dotenv_path='EMAIL.env')
+load_dotenv(dotenv_path=os.path.join(_backend_dir, 'GEMINI_API_KEY.env'))
+load_dotenv(dotenv_path=os.path.join(_backend_dir, 'EMAIL.env'))
 app = Flask(
     __name__,
     static_folder='../frontend/static',
@@ -60,6 +61,8 @@ from director_overview import director_overview_bp
 from ta_statistics import ta_statistics_bp
 from student_results import student_results_bp
 from vendor import vendor_bp
+from intern_weekly import intern_weekly_bp
+
 
 # 註冊 Blueprint
 app.register_blueprint(auth_bp)
@@ -78,6 +81,8 @@ app.register_blueprint(director_overview_bp)
 app.register_blueprint(ta_statistics_bp, url_prefix='/ta/statistics')
 app.register_blueprint(student_results_bp)
 app.register_blueprint(vendor_bp)
+app.register_blueprint(intern_weekly_bp)
+
 
 # -------------------------
 # 首頁路由（使用者前台）

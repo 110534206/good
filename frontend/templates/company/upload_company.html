@@ -342,7 +342,7 @@
             <textarea id="transportation" name="transportation" class="form-control" rows="3" placeholder="請說明交通方式"></textarea>
           </div>
           <div class="col-md-6">
-            <label for="email" class="form-label">E-mail</label>
+            <label for="廠商email" class="form-label">廠商E-mail</label>
             <input type="email" id="email" name="email" class="form-control" placeholder="請輸入電子郵件">
           </div>
           <div class="col-12">
@@ -457,6 +457,18 @@
           </div>
         </div>
       </div>
+
+      <!-- 情境二：指導老師/主任可選擇同時建立廠商帳號（使用上方 E-mail 欄位，帳密寄至廠商） -->
+      {% if user_role in ['teacher', 'director'] %}
+      <div class="card" id="createVendorAccountCard">
+        <h4 class="section-title">建立廠商帳號（選填）</h4>
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" id="createVendorAccountCheckbox" name="create_vendor_account">
+          <label class="form-check-label" for="createVendorAccountCheckbox">同時建立廠商帳號（以本表「E-mail」欄位建立帳號，預設帳密將寄至該 Email，廠商可直接登入廠商主頁）</label>
+        </div>
+        <p class="text-muted small mb-0">請確認上方「I. 基本單位資訊」的 E-mail 欄位已填寫正確，該欄位即為廠商登入帳號用信箱，並會寫入公司聯絡信箱（contact_email）。</p>
+      </div>
+      {% endif %}
 
       <!-- 送出按鈕 -->
       <div class="card">
@@ -622,6 +634,7 @@
           sideMenu.setAttribute('aria-hidden', 'true');
         }
       });
+
     });
 
     // === 表單提交 ===
@@ -664,7 +677,9 @@
         const source = Array.from(document.querySelectorAll('input[name="source"]:checked')).map(cb => cb.value);
         const sourceOtherText = document.getElementById('source_other_text')?.value || '';
 
-        // 構建 JSON 資料
+        // 情境二：指導老師/主任可勾選「建立廠商帳號」，使用表單 E-mail（contact_email）寄送帳密至廠商
+        const createVendorCheckbox = document.getElementById('createVendorAccountCheckbox');
+        const createVendorAccount = !!(createVendorCheckbox && createVendorCheckbox.checked);
         const data = {
           serial_number: formData.get('serial_number') || '',
           company_name: formData.get('company_name'),
@@ -685,6 +700,17 @@
           source: source,
           source_other_text: sourceOtherText
         };
+        if (createVendorAccount) {
+          data.create_vendor_account = true;
+          const formEmail = (formData.get('email') || '').trim();
+          if (!formEmail) {
+            msg.innerHTML = `<div class="alert alert-danger">勾選建立廠商帳號時，請填寫上方「E-mail」欄位（帳密將寄至該信箱）。</div>`;
+            btn.disabled = false;
+            text.textContent = "送出並生成 Word 檔";
+            spinner.classList.add("d-none");
+            return;
+          }
+        }
 
         const res = await fetch("/api/upload_company", {
           method: "POST",
@@ -698,9 +724,8 @@
 
         if (result.success) {
           msg.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
-          // 如果有檔案下載連結，提供下載
-          if (result.download_url) {
-            msg.innerHTML += `<div class="alert alert-info"><a href="${result.download_url}" class="btn btn-success" download>下載 Word 檔</a></div>`;
+          if (result.vendor_email_sent === false && result.message && result.message.includes('廠商帳號已建立')) {
+            msg.innerHTML += `<div class="alert alert-info mt-2">若廠商未收到信，請廠商檢查垃圾信匣，或由您從「通知中心」查看密碼（可查看明文）後轉交廠商登入。</div>`;
           }
           e.target.reset();
           await initSerialNumber(); // 重新生成編號
@@ -743,11 +768,15 @@
         tbody.innerHTML = data.companies.map((r, idx) => {
           const displayTime = r.upload_time || formatDateTime(r.submitted_at);
           const filename = r.filename || 'N/A';
+          const isFromAdvisor = !!r.is_from_advisor;
+          const companyNameCell = isFromAdvisor
+            ? `${r.company_name || '-'} <span class="badge bg-info text-white ms-1">指導老師建立</span>`
+            : (r.company_name || '-');
 
           return `
           <tr>
             <td>${displayTime}</td>
-            <td>${r.company_name || '-'}</td>
+            <td>${companyNameCell}</td>
             <td>${filename}</td>
             <td>
               <span class="status-badge ${r.status === 'approved' ? 'bg-success text-white'
@@ -759,7 +788,7 @@
             </td>
             <td>
               <button class="btn btn-sm btn-outline-primary" onclick="downloadCompanyFile(${r.id}, '${escapeHtml(r.company_name || '')}')">下載</button>
-              <button class="btn btn-sm btn-outline-danger" onclick="deleteCompany(${r.id})">刪除</button>
+              ${isFromAdvisor ? '' : `<button class="btn btn-sm btn-outline-danger" onclick="deleteCompany(${r.id})">刪除</button>`}
             </td>
           </tr>
         `;
