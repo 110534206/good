@@ -462,6 +462,31 @@ def send_account_created_email(recipient_email, username, name, role_display, in
     return send_email(recipient_email, subject, content)
 
 
+def send_password_reset_code_email(recipient_email, code):
+    """
+    忘記密碼：寄送驗證碼至註冊 Email。
+    回傳: (success, message, log_id 或 None)
+    """
+    subject = "【智慧實習平台】重設密碼驗證碼"
+    content = f"""
+您好：
+
+您正在重設智慧實習平台的密碼。
+
+驗證碼：{code}
+
+請於 10 分鐘內在登入頁的「忘記密碼」流程中輸入此驗證碼以完成重設。
+
+若您未申請重設密碼，請忽略此信。
+
+此為系統自動發送，請勿直接回覆此郵件。
+
+--
+智慧實習平台
+"""
+    return send_email(recipient_email, subject, content)
+
+
 def send_vendor_credentials_to_vendor_email(vendor_email, company_name, vendor_username, initial_password, login_url):
     """
     指導老師建立廠商資料後，將預設帳密寄至表單的廠商 E-mail（contact_email），
