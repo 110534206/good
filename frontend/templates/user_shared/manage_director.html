@@ -4962,12 +4962,10 @@
             confirmBtn.disabled = false;
             confirmBtn.innerHTML = '<i class="fas fa-check"></i> 已送出最終媒合結果';
           }
-          // 將狀態記錄在 localStorage，供之後判斷只顯示提示彈窗
           try {
-            localStorage.setItem('director_matching_confirmed', 'true');
-          } catch (e) {
-            console.warn('無法寫入 localStorage：', e);
-          }
+            localStorage.removeItem('director_matching_confirmed');
+          } catch (e) {}
+
           // 顯示成功訊息，留在當前頁（主任無科助工作台權限，不跳轉以免被導向登入頁）
           showToast(data.message || '確認成功', 'success');
           // 重新載入本頁資料以更新畫面（不顯示載入中）
@@ -5107,24 +5105,8 @@
       }
       
       if (confirmBtn) {
-        // 按鈕點擊時：若本學期已送出，只顯示提示彈窗；否則顯示確認彈窗並真正送出
         confirmBtn.addEventListener('click', () => {
-          let alreadyConfirmed = directorAlreadyConfirmed;
-          if (!alreadyConfirmed) {
-            try {
-              // 兼容舊的 localStorage 判斷（若有）
-              alreadyConfirmed = localStorage.getItem('director_matching_confirmed') === 'true';
-            } catch (e) {
-              alreadyConfirmed = false;
-            }
-          }
-          
-          if (alreadyConfirmed) {
-            // 本學期已送出，僅提示，不再送出
-            showAlreadyConfirmedModal();
-          } else {
-            showConfirmMatchingModal();
-          }
+          showConfirmMatchingModal();
         });
       }
       
