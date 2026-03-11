@@ -2116,41 +2116,38 @@
       }
     }
 
-    let unsortedCompaniesData = [];  // 尚未排序的廠商名單，供統計與列表顯示
+    let unsortedCompaniesData = [];  // 尚未排序的廠商名單（由 API 載入，相容用）
+    let unfilledCompaniesList = [];  // 未填寫公司名單（由 allCompaniesData 推得，供統計與「瀏覽未填寫公司」）
 
     // 更新「尚未排序的廠商」區塊：三張卡片（共有／已填寫／未填寫）+ 瀏覽按鈕
+    // 與媒合排序頁一致：共有 = 全部已審核公司數（6 間），已填寫 = 至少有一筆正取/備取的公司，未填寫 = 其餘（可點「瀏覽未填寫公司」檢視）
     function updateUnsortedBlockSummary() {
       const cardsEl = document.getElementById('unsortedCompaniesCards');
       const browseBtn = document.getElementById('unsortedBrowseBtn');
       if (!cardsEl) return;
-      
-      // 已填寫：有廠商「實際排過學生」的公司
-      const vendorList = vendorOriginalCompaniesData || [];
-      const vendorIdSet = new Set();
-      vendorList.forEach(c => {
-        const jobs = c.jobs || [];
-        const hasAnyStudent = jobs.some(job => {
-          const regulars = job.regulars || [];
-          const reserves = job.reserves || [];
-          return regulars.length > 0 || reserves.length > 0;
+
+      const allCompanies = allCompaniesData || [];
+      const totalCount = allCompanies.length;
+
+      // 已填寫：在「廠商排序」或「主任排序」中，至少有一個職缺有正取或備取學生的公司
+      const filledIdSet = new Set();
+      [vendorOriginalCompaniesData || [], allCompanies].forEach(list => {
+        list.forEach(c => {
+          const hasAny = (c.jobs || []).some(job =>
+            ((job.regulars || []).length > 0 || (job.reserves || []).length > 0)
+          );
+          if (hasAny) filledIdSet.add(String(c.company_id));
         });
-        if (hasAnyStudent) {
-          vendorIdSet.add(String(c.company_id));
-        }
       });
-      const sortedCount = vendorIdSet.size;
+      const sortedCount = filledIdSet.size;
 
-      // 未填寫：後端回傳的尚未排序廠商（unsortedCompaniesData 中的唯一公司數）
-      const unsortedList = unsortedCompaniesData || [];
-      const unsortedIdSet = new Set(unsortedList.map(c => String(c.company_id)));
-
-      // 共有：兩者聯集（避免同一公司被算兩次）
-      const allIds = new Set([...vendorIdSet, ...unsortedIdSet]);
-      const totalCount = allIds.size;
-
-      // 未填寫 = 共有 − 已填寫（若有重疊，也不會被重複計算）
+      // 未填寫 = 共有 − 已填寫
       const unsetCount = Math.max(0, totalCount - sortedCount);
-      if (totalCount === 0 && unsetCount === 0) {
+
+      // 未填寫名單：供「瀏覽未填寫公司」彈窗顯示、可檢視是哪幾間
+      unfilledCompaniesList = allCompanies.filter(c => !filledIdSet.has(String(c.company_id)));
+
+      if (totalCount === 0) {
         cardsEl.innerHTML = '';
         if (browseBtn) { browseBtn.classList.add('hidden'); browseBtn.style.display = 'none'; }
         return;
@@ -2205,14 +2202,15 @@
       }
     }
 
-    // 開啟／關閉「瀏覽未填寫公司」彈窗
+    // 開啟／關閉「瀏覽未填寫公司」彈窗（顯示未填寫名單，可檢視是哪幾間公司）
     function openUnsortedBrowseModal() {
       const modal = document.getElementById('unsortedBrowseModal');
       const body = document.getElementById('unsortedBrowseModalBody');
       if (!modal || !body) return;
-      body.innerHTML = unsortedCompaniesData.length === 0
+      const list = unfilledCompaniesList || [];
+      body.innerHTML = list.length === 0
         ? '<p style="color:var(--color-muted);">目前沒有未填寫公司</p>'
-        : unsortedCompaniesData.map((c, i) =>
+        : list.map((c, i) =>
             `<div class="company-browse-item">${i + 1}. ${escapeHtml(c.company_name || '未命名公司')}</div>`
           ).join('');
       modal.classList.add('show');
@@ -2314,6 +2312,8 @@
           
           renderCompanies();
           renderDuplicateAlert();
+          // 依 allCompaniesData 更新上方統計（共有 6 間、已填寫、未填寫）與未填寫名單
+          updateUnsortedBlockSummary();
           
           await loadUnmatchedStudents();
           await loadUnsortedCompanies();
@@ -3079,35 +3079,16 @@
       if (nextBtn) nextBtn.disabled = currentCompanyIndex >= list.length - 1;
     }
 
-    // 過濾公司數據：只顯示「廠商有送出媒合排序」的公司
+    // 過濾公司數據：依搜尋/篩選條件過濾，底層為「所有已審核公司」
     function filterCompanies() {
       return getFilteredCompanies(getCompaniesWithCompletedSorting(allCompaniesData || []));
     }
 
-    // 只保留「有廠商排序資料」或「主任排序結果中有學生」的公司
-    // 廠商：vendorOriginalCompaniesData 至少一職缺有 regulars/reserves
-    // 主任手動加入：allCompaniesData 中該公司至少一職缺有學生，也要顯示
+    // 媒合頁顯示「所有已審核公司」（含尚無媒合紀錄的廠商），讓主任能看到全部廠商並可操作
+    // 不再只顯示「有廠商排序或主任已排學生」的公司，避免漏掉如卓航科技等尚未有媒合資料的公司
     function getCompaniesWithCompletedSorting(source) {
       const data = source || [];
-      const vendorList = vendorOriginalCompaniesData || [];
-      const vendorIdSet = new Set();
-      vendorList.forEach(c => {
-        const jobs = c.jobs || [];
-        const hasAnyStudent = jobs.some(job => {
-          const regulars = job.regulars || [];
-          const reserves = job.reserves || [];
-          return regulars.length > 0 || reserves.length > 0;
-        });
-        if (hasAnyStudent) {
-          vendorIdSet.add(String(c.company_id));
-        }
-      });
-      const directorIdSet = new Set();
-      data.forEach(c => {
-        const hasAny = (c.jobs || []).some(job => ((job.regulars || []).length > 0 || (job.reserves || []).length > 0));
-        if (hasAny) directorIdSet.add(String(c.company_id));
-      });
-      return data.filter(company => vendorIdSet.has(String(company.company_id)) || directorIdSet.has(String(company.company_id)));
+      return data;
     }
 
     function getFilteredCompanies(source) {

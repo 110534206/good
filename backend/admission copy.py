@@ -552,12 +552,12 @@ def get_my_admission():
     cursor = conn.cursor(dictionary=True, buffered=True)
     
     try:
-        # 檢查是否已被退實習（internship_records 有 withdrawing 或 confirmed）
+        # 檢查是否已被退實習（僅指導老師確認後 confirmed 才鎖住）
         is_withdrawn = False
         try:
             cursor.execute("""
                 SELECT 1 FROM internship_records
-                WHERE student_id = %s AND status IN ('withdrawing', 'confirmed')
+                WHERE student_id = %s AND status = 'confirmed'
                 LIMIT 1
             """, (student_id,))
             if cursor.fetchone():
@@ -2588,9 +2588,9 @@ def director_matching_results():
                 }
         
         # 將媒合結果分配到對應的公司和職缺
-        # 對於重複中選的學生，優先選擇「有媒合排序結果」且「志願序最高」的記錄
-        # 如果第一志願的公司還沒做媒合排序，選擇其他有媒合排序的公司中志願序最高的
-        student_best_match_id = {}  # key: student_id, value: (match_id, preference_order, has_sorting)
+        # 對於重複中選的學生，主任排序頁籤應「先抓正取名單」：優先選擇正取（Regular），再依志願序、媒合排序
+        # 這樣同一學生若同時有某廠正取、某廠備取，會顯示在正取那一家（例如：艾訊正取2），而非只顯示備取（碩方備取）
+        student_best_match_id = {}  # key: student_id, value: (match_id, preference_order, has_sorting, is_reserve)
         
         for result in formatted_results:
             student_id = result.get("student_id")
@@ -2604,31 +2604,33 @@ def director_matching_results():
                 # 如果有 vendor_slot_index 或 original_rank，表示有媒合排序
                 # vendor_slot_index 來自 resume_applications.slot_index，是最直接的判斷方式
                 has_sorting = (result.get("vendor_slot_index") is not None) or (result.get("original_rank") is not None)
-                # 是否為「正取且有排名」：主任排序與 Excel 皆優先顯示此筆，避免只顯示一筆（例：艾訊應顯示周佳儀+馬嫚蔆）
-                orig_type = (result.get("original_type") or "").strip()
-                is_regular_ranked = (orig_type == "Regular" and (result.get("original_rank") is not None or result.get("final_rank") is not None))
+                is_reserve = bool(result.get("is_reserve"))
                 
                 match_id = result.get("match_id") or result.get("id")
                 # 確保 match_id 是字符串，以便正確比較
                 match_id_str = str(match_id) if match_id is not None else None
                 
                 if student_id not in student_best_match_id:
-                    student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_regular_ranked)
+                    student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_reserve)
                 else:
-                    # 優先「正取且有排名」：避免重複中選時只保留備取導致主任排序只顯示一筆
-                    current_regular_ranked = student_best_match_id[student_id][3]
-                    if is_regular_ranked and not current_regular_ranked:
-                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_regular_ranked)
+                    # 1) 主任排序頁籤應先抓正取名單：正取優於備取
+                    # 2) 同為正取或同為備取時，志願序越小優先級越高
+                    # 3) 志願序相同時，優先選擇有媒合排序的記錄
+                    current = student_best_match_id[student_id]
+                    current_order, current_has_sorting, current_is_reserve = current[1], current[2], current[3]
+                    
+                    # 正取優於備取：若目前保留的是備取、這筆是正取，則替換
+                    if current_is_reserve and not is_reserve:
+                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_reserve)
                         continue
-                    if current_regular_ranked and not is_regular_ranked:
+                    # 若目前保留的是正取、這筆是備取，則不替換
+                    if not current_is_reserve and is_reserve:
                         continue
-                    # 再依志願序（志願序越小優先）、有媒合排序
-                    current_has_sorting = student_best_match_id[student_id][2]
-                    current_order = student_best_match_id[student_id][1]
+                    # 同為正取或同為備取：依志願序
                     if preference_order < current_order:
-                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_regular_ranked)
+                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_reserve)
                     elif preference_order == current_order and has_sorting and not current_has_sorting:
-                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_regular_ranked)
+                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_reserve)
         
         # 即時排序：對於重複中選的學生，優先選擇志願序最高的記錄（preference_order 最小的）
         # 不需要等待第一志願完成媒合排序，只要廠商有做媒合排序並選擇了該學生，就應該顯示
@@ -2666,34 +2668,27 @@ def director_matching_results():
                 }
         
         # 將所有「有廠商實際排序資料」的媒合結果分配到廠商原始排序
-        # 僅保留 resume_applications 中廠商實際排過的正取（slot_index 有值）或備取（is_reserve=1），避免出現「只排兩個正取卻顯示三個」
+        # 僅保留廠商在系統中實際排過的正取／備取名單，排除純粹由主任手動加入、且沒有廠商排序紀錄的學生
         for result in formatted_results:
+            # has_vendor_sorting 為 True 代表此筆來自 resume_applications 的實際排序結果
             if not result.get("has_vendor_sorting"):
                 continue
             company_id = result["company_id"]
             job_id = result.get("job_id") or 0
             job_title = result.get("job_title") or "未指定職缺"
             student_id = result.get("student_id")
-            vendor_slot_index = result.get("vendor_slot_index")
-            vendor_is_reserve = result.get("vendor_is_reserve")
-
-            # 正取：resume_applications 必須有 slot_index（廠商有給正取順序）；備取：is_reserve=1
-            # 若 is_reserve=0 但 slot_index 為 NULL，表示廠商未排入正取順序，不列入廠商排序的正取名單
-            is_reserve_vendor = bool(vendor_is_reserve) if vendor_is_reserve is not None else True
-            if not is_reserve_vendor and (vendor_slot_index is None or vendor_slot_index == ""):
-                continue  # 未排入正取順序，不顯示在廠商排序
-
+            
             key = (company_id, job_id, student_id)
             if key in added_students_vendor:
                 continue
-
+            
             if company_id not in companies_data_vendor:
                 companies_data_vendor[company_id] = {
                     "company_id": company_id,
                     "company_name": result["company_name"],
                     "jobs": {}
                 }
-
+            
             if job_id not in companies_data_vendor[company_id]["jobs"]:
                 job_slots = result.get("job_slots") or 1
                 companies_data_vendor[company_id]["jobs"][job_id] = {
@@ -2703,12 +2698,21 @@ def director_matching_results():
                     "regulars": [],
                     "reserves": []
                 }
+            
+            # 廠商原始排序應依照廠商自己的正／備取設定（vendor_is_reserve），而非主任後續調整結果
+            is_reserve_vendor = None
+            if result.get("vendor_is_reserve") is not None:
+                is_reserve_vendor = bool(result.get("vendor_is_reserve"))
+            else:
+                # 理論上 has_vendor_sorting 為 True 時應該有 vendor_is_reserve
+                # 保險起見，若缺少則退回使用 is_reserve
+                is_reserve_vendor = bool(result.get("is_reserve"))
 
             if is_reserve_vendor:
                 companies_data_vendor[company_id]["jobs"][job_id]["reserves"].append(result)
             else:
                 companies_data_vendor[company_id]["jobs"][job_id]["regulars"].append(result)
-
+            
             added_students_vendor[key] = True
         
         # 過濾 formatted_results：重複中選的學生只保留志願序最高的記錄（主任排序結果）
@@ -3021,39 +3025,44 @@ def final_matching_results():
             if len(companies) > 1:
                 duplicate_students[sid] = companies
         
-        # 對於重複中選的學生，選擇志願序最高的記錄（與 director_matching_results 一致：優先正取且有排名）
-        student_best_match_id = {}  # key: student_id, value: (match_id, preference_order, has_sorting, is_regular_ranked)
+        # 對於重複中選的學生，與主任排序頁一致：先抓正取名單（正取優於備取），再依志願序、媒合排序
+        student_best_match_id = {}  # key: student_id, value: (match_id, preference_order, has_sorting, is_reserve)
         
         for key, result in seen_students.items():
             student_id, company_id, job_id = key
             
             if student_id in duplicate_students:
-                preference_order = result.get("preference_order") or 999
+                # 這是重複中選的學生，需要選擇最合適的記錄
+                preference_order = result.get("preference_order")
+                if preference_order is None:
+                    preference_order = 999  # 沒有志願序的排在最後
+                
+                # 判斷是否有媒合排序結果（廠商已排序）
                 vendor_slot_index = result.get("vendor_slot_index")
                 original_rank = result.get("original_rank")
                 has_sorting = (vendor_slot_index is not None) or (original_rank is not None)
-                orig_type = (result.get("original_type") or "").strip()
-                is_regular_ranked = (orig_type == "Regular" and (original_rank is not None or result.get("final_rank") is not None))
+                is_reserve = result.get("original_type") == "Backup" or bool(result.get("vendor_is_reserve"))
+                
                 match_id = result.get("match_id") or result.get("id")
                 match_id_str = str(match_id) if match_id is not None else None
                 
                 if student_id not in student_best_match_id:
-                    student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_regular_ranked)
+                    student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_reserve)
                 else:
-                    current_regular_ranked = student_best_match_id[student_id][3]
-                    if is_regular_ranked and not current_regular_ranked:
-                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_regular_ranked)
+                    current = student_best_match_id[student_id]
+                    current_order, current_has_sorting, current_is_reserve = current[1], current[2], current[3]
+                    # 正取優於備取
+                    if current_is_reserve and not is_reserve:
+                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_reserve)
                         continue
-                    if current_regular_ranked and not is_regular_ranked:
+                    if not current_is_reserve and is_reserve:
                         continue
-                    current_has_sorting = student_best_match_id[student_id][2]
-                    current_order = student_best_match_id[student_id][1]
                     if preference_order < current_order:
-                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_regular_ranked)
+                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_reserve)
                     elif preference_order == current_order and has_sorting and not current_has_sorting:
-                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_regular_ranked)
+                        student_best_match_id[student_id] = (match_id_str, preference_order, has_sorting, is_reserve)
         
-        # 過濾 formatted_results：重複中選的學生只保留志願序最高的記錄
+        # 過濾 formatted_results：重複中選的學生只保留志願序最高的記錄（且優先正取）
         filtered_seen_students = {}
         for key, result in seen_students.items():
             student_id, company_id, job_id = key
@@ -5924,12 +5933,12 @@ def export_matching_results_excel():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 獲取當前學期ID
-        current_semester_id = get_current_semester_id(cursor)
+        # 與主任媒合頁一致：使用流程學期（get_flow_semester_id），匯出「主任排序」最終結果
+        current_semester_id = get_flow_semester_id(cursor)
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         
-        # 獲取媒合結果數據（與 director_matching_results 相同的邏輯）
+        # 獲取媒合結果數據（與 director_matching_results 相同：manage_director + 學期）
         query = """
             SELECT 
                 md.match_id,
@@ -5942,11 +5951,15 @@ def export_matching_results_excel():
                 md.director_decision,
                 md.final_rank,
                 md.is_adjusted,
-                COALESCE(sp.company_id, md.vendor_id) AS company_id,
-                sp.preference_order,
-                COALESCE(sp.job_id, (
+                COALESCE(sp.company_id, sja.company_id, md.vendor_id) AS company_id,
+                (SELECT sp2.preference_order FROM student_preferences sp2
+                 WHERE sp2.student_id = md.student_id AND sp2.company_id = COALESCE(sp.company_id, sja.company_id, md.vendor_id)
+                   AND sp2.job_id = COALESCE(sp.job_id, sja.job_id)
+                   AND sp2.status = 'approved'
+                 ORDER BY sp2.submitted_at DESC LIMIT 1) AS preference_order,
+                COALESCE(sp.job_id, sja.job_id, (
                     SELECT id FROM internship_jobs 
-                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    WHERE company_id = COALESCE(sp.company_id, sja.company_id, md.vendor_id) 
                     ORDER BY id ASC LIMIT 1
                 )) AS job_id,
                 COALESCE(ic.company_name, v.name) AS company_name,
@@ -5955,7 +5968,7 @@ def export_matching_results_excel():
                 c.name AS class_name,
                 COALESCE(ij.title, (
                     SELECT title FROM internship_jobs 
-                    WHERE company_id = COALESCE(sp.company_id, md.vendor_id) 
+                    WHERE company_id = COALESCE(sp.company_id, sja.company_id, md.vendor_id) 
                     ORDER BY id ASC LIMIT 1
                 )) AS job_title
             FROM manage_director md
@@ -5964,71 +5977,48 @@ def export_matching_results_excel():
                 AND sja.company_id = sp.company_id
                 AND sja.job_id = sp.job_id
                 AND sp.semester_id = %s
-            LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, md.vendor_id) = ic.id
-            LEFT JOIN internship_jobs ij ON sp.job_id = ij.id
+            LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, sja.company_id, md.vendor_id) = ic.id
+            LEFT JOIN internship_jobs ij ON COALESCE(sp.job_id, sja.job_id) = ij.id
             LEFT JOIN users u ON md.student_id = u.id
             LEFT JOIN classes c ON u.class_id = c.id
             LEFT JOIN users v ON md.vendor_id = v.id
-            WHERE (sp.semester_id = %s OR sp.semester_id IS NULL)
+            WHERE (md.semester_id = %s OR md.semester_id IS NULL)
+            AND (sp.semester_id = %s OR sp.semester_id IS NULL)
             AND md.director_decision IN ('Approved', 'Pending')
-            ORDER BY COALESCE(sp.company_id, md.vendor_id), 
-                     COALESCE(sp.job_id, 0),
+            ORDER BY COALESCE(sp.company_id, sja.company_id, md.vendor_id), 
+                     COALESCE(sp.job_id, sja.job_id, 0),
                      CASE WHEN md.director_decision = 'Approved' AND md.final_rank IS NOT NULL THEN 0 ELSE 1 END,
-                     COALESCE(md.final_rank, 999) ASC
+                     COALESCE(md.final_rank, md.original_rank, 999) ASC
         """
-        cursor.execute(query, (current_semester_id, current_semester_id))
+        cursor.execute(query, (current_semester_id, current_semester_id, current_semester_id))
         all_results = cursor.fetchall() or []
         
-        # 每人只保留一筆（一間實習單位）：同一 student_id 只保留一筆，與主任頁面「錄取結果每人一家」一致
-        seen_student = {}
-        for result in all_results:
-            sid = result.get("student_id")
-            if sid is None:
+        # 與主任排序頁一致：重複中選學生只保留一筆（正取優於備取，再依志願序、有無排序）
+        from collections import defaultdict
+        student_to_rows = defaultdict(list)
+        for r in all_results:
+            student_to_rows[r["student_id"]].append(r)
+        best_match_id = {}
+        for student_id, rows in student_to_rows.items():
+            if len(rows) == 1:
+                best_match_id[student_id] = rows[0].get("match_id")
                 continue
-            decision = (result.get("director_decision") or "").strip()
-            pref_order = result.get("preference_order")
-            final_rank = result.get("final_rank")
-            if sid not in seen_student:
-                seen_student[sid] = result
-                continue
-            old = seen_student[sid]
-            old_decision = (old.get("director_decision") or "").strip()
-            old_pref = old.get("preference_order")
-            old_rank = old.get("final_rank")
-            # 優先 Approved > Pending，再依志願序小、final_rank 小
-            if decision == "Approved" and old_decision != "Approved":
-                seen_student[sid] = result
-                continue
-            if old_decision == "Approved" and decision != "Approved":
-                continue
-            # 優先「正取且有排名」：避免選到備取導致同一公司超過名額（例：朔方 2 名額卻列出 3 人）
-            old_type = (old.get("original_type") or "").strip()
-            curr_type = (result.get("original_type") or "").strip()
-            old_has_rank = (old.get("original_rank") is not None or old.get("final_rank") is not None)
-            curr_has_rank = (result.get("original_rank") is not None or result.get("final_rank") is not None)
-            old_regular_ranked = (old_type == "Regular" and old_has_rank)
-            curr_regular_ranked = (curr_type == "Regular" and curr_has_rank)
-            if curr_regular_ranked and not old_regular_ranked:
-                seen_student[sid] = result
-                continue
-            if old_regular_ranked and not curr_regular_ranked:
-                continue
-            pref_val = 999 if pref_order is None else (pref_order if isinstance(pref_order, (int, float)) else 999)
-            old_pref_val = 999 if old_pref is None else (old_pref if isinstance(old_pref, (int, float)) else 999)
-            if pref_val < old_pref_val:
-                seen_student[sid] = result
-                continue
-            if pref_val > old_pref_val:
-                continue
-            rank_val = 999 if final_rank is None else (final_rank if isinstance(final_rank, (int, float)) else 999)
-            old_rank_val = 999 if old_rank is None else (old_rank if isinstance(old_rank, (int, float)) else 999)
-            if rank_val < old_rank_val:
-                seen_student[sid] = result
-        all_results = list(seen_student.values())
+            def key(row):
+                is_reserve = (row.get("original_type") or "").strip() == "Backup"
+                pref = row.get("preference_order")
+                pref = 999 if pref is None else pref
+                has_rank = row.get("original_rank") is not None or row.get("final_rank") is not None
+                return (is_reserve, pref, not has_rank)
+            best = min(rows, key=key)
+            best_match_id[student_id] = best.get("match_id")
+        filtered_results = [r for r in all_results if r.get("match_id") == best_match_id.get(r["student_id"])]
         
-        # 按公司分組數據
+        # 排除 Rejected
+        filtered_results = [r for r in filtered_results if (r.get("director_decision") or "") != "Rejected"]
+        
+        # 按公司分組數據（主任排序最終結果）
         companies_data = {}
-        for result in all_results:
+        for result in filtered_results:
             company_id = result.get("company_id")
             company_name = result.get("company_name") or "未知公司"
             job_title = result.get("job_title") or "未指定職缺"

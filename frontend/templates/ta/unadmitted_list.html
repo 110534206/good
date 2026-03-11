@@ -443,11 +443,11 @@
 
     <main>
     <div class="page-intro">
-      <!-- 顯示固定學期：1132（移除下拉選單） -->
+      <!-- 學期由 API 回傳，與主任媒合頁一致（流程學期：1131 顯示 1131，1132 時沿用 1131） -->
       <div class="semester-filter-row">
-        <div class="semester-banner" role="status" aria-live="polite" style="display: inline-flex;">
+        <div id="semesterBanner" class="semester-banner" role="status" aria-live="polite" style="display: inline-flex;">
           <i class="fa-solid fa-calendar-alt"></i>
-          <span id="semesterText">以下名單為 1132 學期（113學年第2學期）</span>
+          <span id="semesterText">以下名單為 — 學期（載入中…）</span>
         </div>
       </div>
     </div>
@@ -640,8 +640,7 @@
       renderTable(filtered);
     }
 
-    // 僅顯示並鎖定學期為 1132（若 API 可取得對應 id，則帶入該 id）
-    // 已移除學期下拉，改為固定顯示 1132，故不需載入學期選項的函式。
+    // 未傳 semester_id 時，後端使用流程學期（與主任媒合一致），回傳後更新橫幅學期與名單
 
     async function loadStudents(semesterId) {
       if (!tableContainer) return;

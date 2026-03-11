@@ -1,0 +1,1658 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>智慧實習平台 | 投遞履歷</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            font-family: "Noto Sans TC", sans-serif;
+            background: #f7f9fc;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background: #0454a3;
+            color: white;
+            padding: 1rem 2rem;
+            font-size: 1.5rem;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 三條線選單按鈕樣式 */
+        .top-bar-left {
+            position: absolute;
+            top: 50%;
+            left: 1rem;
+            transform: translateY(-50%);
+            z-index: 1100;
+        }
+
+        .top-bar-left #menu-btn {
+            width: 30px;
+            height: 22px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            background: none;
+            border: none;
+            padding: 0;
+        }
+
+        .top-bar-left #menu-btn span {
+            display: block;
+            width: 100%;
+            height: 3px;
+            background-color: white;
+            border-radius: 2px;
+            transition: all 0.3s ease;
+        }
+
+        /* 側邊選單樣式 */
+        #side-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 320px;
+            max-width: 80vw;
+            background-color: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(6px);
+            box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+            padding: 2rem 1.5rem;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-in-out;
+            z-index: 1200;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            color: white;
+            user-select: none;
+        }
+
+        #side-menu.open {
+            transform: translateX(0);
+        }
+
+        #side-menu .menu-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 0;
+        }
+
+        #side-menu h2 {
+            margin: 0 0 1.5rem 0;
+            font-weight: 700;
+            font-size: 1.6rem;
+            color: #fff;
+            padding: 0;
+            line-height: 2.4rem;
+            height: 2.4rem;
+            display: flex;
+            align-items: center;
+        }
+
+        #close-btn {
+            position: absolute;
+            top: 2rem;
+            right: 1.6rem;
+            font-size: 1.8rem;
+            font-weight: bold;
+            background: none;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            line-height: 2.4rem;
+            height: 2.4rem;
+            width: 2.4rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            padding: 0;
+            margin: 0;
+        }
+
+        #side-menu a {
+            display: block;
+            width: 100%;
+            padding: 0.6rem 0;
+            font-size: 1.1rem;
+            color: #e2e8f0;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+        }
+
+        #side-menu a:hover {
+            background-color: rgba(255, 255, 255, 0.18);
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #004d99;
+            margin-bottom: 30px;
+            font-weight: 700;
+            font-size: 2rem;
+            border-bottom: 3px solid #1a73e8;
+            display: inline-block;
+            padding-bottom: 8px;
+        }
+
+        .table {
+            margin-top: 20px;
+            font-size: 1.1rem;
+        }
+
+        .table thead {
+            background-color: #0454a3;
+            color: white;
+        }
+
+        .table thead th {
+            border: none;
+            padding: 1.2rem 1rem;
+            font-weight: 600;
+            font-size: 1.15rem;
+        }
+
+        .table tbody tr {
+            transition: background-color 0.2s ease;
+        }
+
+        .table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .table tbody td {
+            padding: 1.2rem 1rem;
+            vertical-align: middle;
+            font-size: 1.1rem;
+        }
+
+        .table tbody td:first-child {
+            text-align: left;
+        }
+
+        .table tbody td:nth-child(2) {
+            text-align: left;
+        }
+
+        .table tbody td:last-child {
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .table tbody td:last-child .d-flex {
+            flex-wrap: nowrap;
+        }
+
+        .table .btn-sm {
+            font-size: 1rem;
+            padding: 0.5rem 1rem;
+            white-space: nowrap;
+        }
+
+        .btn {
+            border-radius: 0.6rem;
+            font-weight: 600;
+            padding: 10px 18px;
+            font-size: 1rem;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .btn-outline-primary {
+            color: #1a73e8;
+            border-color: #1a73e8;
+            background-color: transparent;
+        }
+
+        .btn-outline-primary:hover:not([disabled]) {
+            color: white;
+            background-color: #1a73e8;
+            transform: translateY(-1px);
+        }
+
+        .btn-outline-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background-color: #1a73e8;
+            border-color: #1a73e8;
+        }
+
+        .btn-primary:hover {
+            background-color: #1557b0;
+            border-color: #1557b0;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5a6268;
+            border-color: #5a6268;
+        }
+
+        .alert-deadline {
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        /* 篩選按鈕組樣式 */
+        .filter-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 0.75rem 1.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 0.6rem;
+            border: 2px solid #1a73e8;
+            background-color: white;
+            color: #1a73e8;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .filter-btn:hover {
+            background-color: #f0f7ff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(26, 115, 232, 0.2);
+        }
+
+        .filter-btn.active {
+            background-color: #1a73e8;
+            color: white;
+            box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
+        }
+
+        .filter-btn:active {
+            transform: translateY(0);
+        }
+
+        /* 表格容器樣式 */
+        .table-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        /* 職缺欄不換行、保留足夠寬度 */
+        .table-container .table .th-job-titles,
+        .table-container .table .td-job-titles {
+            white-space: nowrap;
+            min-width: 220px;
+        }
+
+        /* 分頁樣式 */
+        .pagination-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1.5rem;
+            padding: 1rem 0;
+        }
+
+        .pagination-info {
+            color: #64748b;
+            font-size: 1rem;
+        }
+
+        .pagination-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #e2e8f0;
+            background: white;
+            color: #1a73e8;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+        }
+
+        .pagination-btn:hover:not(:disabled) {
+            background: #f0f7ff;
+            border-color: #1a73e8;
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            color: #94a3b8;
+        }
+
+        .pagination-btn.active {
+            background: #1a73e8;
+            color: white;
+            border-color: #1a73e8;
+        }
+
+        /* 表格列寬設定 */
+        .table th:first-child,
+        .table td:first-child {
+            width: 30%;
+        }
+
+        .table th:nth-child(2),
+        .table td:nth-child(2) {
+            width: 40%;
+        }
+
+        .table th:last-child,
+        .table td:last-child {
+            width: 30%;
+        }
+
+        .btn-add {
+            background-color: #28a745;
+            border-color: #28a745;
+            color: white;
+        }
+
+        .btn-add:hover {
+            background-color: #218838;
+            border-color: #1e7e34;
+            color: white;
+        }
+
+        /* 狀態頁籤（審核中 / 退件 / 通過） */
+        .resume-status-tabs .filter-btn {
+            min-width: 160px;
+            justify-content: center;
+            border-radius: 14px;
+            font-size: 1.05rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* 表格樣式 - 與 review_resume.html 一致 */
+        .table-wrapper {
+            overflow-x: visible;
+            width: 100%;
+        }
+
+        .table-wrapper table tbody tr:hover {
+            background: rgba(15, 23, 42, 0.02);
+        }
+
+        .table-wrapper table thead th {
+            text-align: left;
+            background-color: #fafafb;
+        }
+
+        .table-wrapper table tbody td {
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        /* 狀態 badge - 與 review_resume.html 一致 */
+        .status-badge {
+            font-size: 0.9em;
+            padding: 0.3em 0.6em;
+            border-radius: 0.5rem;
+            display: inline-block;
+            font-weight: 600;
+        }
+
+        .status-badge.bg-success {
+            color: #fff;
+            background-color: #198754;
+        }
+
+        .status-badge.bg-danger {
+            color: #fff;
+            background-color: #dc3545;
+        }
+
+        .status-badge.bg-warning {
+            color: #000;
+            background-color: #ffc107;
+        }
+
+        .status-badge.bg-info {
+            color: #fff;
+            background-color: #0dcaf0;
+        }
+
+        .status-badge.bg-secondary {
+            color: #fff;
+            background-color: #6c757d;
+        }
+
+        /* 留言按鈕樣式 */
+        .comment-btn {
+            font-weight: normal !important;
+            padding: 0.25rem 0.6rem !important;
+            font-size: 0.85rem !important;
+            border-radius: 0.25rem !important;
+        }
+
+        /* 下載／刪除按鈕樣式（操作欄按鈕大小一致） */
+        .download-resume-btn,
+        .delete-resume-btn {
+            padding: 0.25rem 0.6rem !important;
+            font-size: 0.85rem !important;
+            border-radius: 0.25rem !important;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="top-bar-left">
+            <div id="menu-btn" title="選單" role="button" tabindex="0">
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+        投遞履歷
+    </header>
+    <div class="container">
+
+        <!-- 截止時間提示 -->
+        <div id="deadlineAlert" class="alert alert-deadline d-none" role="alert"></div>
+
+        <!-- 篩選按鈕組：只顯示志願序公司、其他公司（取消全部公司） -->
+        <div class="filter-buttons">
+            <button class="filter-btn active" data-filter="selected" onclick="filterCompanies('selected')">
+                <i class="bi bi-check-circle me-2"></i>志願序公司
+            </button>
+            <button class="filter-btn" data-filter="unselected" onclick="filterCompanies('unselected')">
+                <i class="bi bi-building me-2"></i>其他公司
+            </button>
+        </div>
+
+        <!-- 公司表格 -->
+        <div class="table-container">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th id="thPreferenceOrder" style="display: none;">志願序</th>
+                        <th>公司名稱</th>
+                        <th class="th-job-titles">職缺</th>
+                        <th class="text-center">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="companyTable">
+                    <tr>
+                        <td colspan="4" class="text-center text-muted">
+                            <i class="bi bi-hourglass-split"></i> 載入中...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <!-- 分頁控件 -->
+            <div class="pagination-container" id="paginationContainer" style="display: none;">
+                <button class="pagination-btn" id="prevPageBtn" onclick="changePage(-1)">
+                    <i class="bi bi-chevron-left"></i> 上一頁
+                </button>
+                <div class="pagination-info" id="pageInfo">第 1 頁，共 1 頁</div>
+                <button class="pagination-btn" id="nextPageBtn" onclick="changePage(1)">
+                    下一頁 <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 履歷審核狀態區域 -->
+        <div class="mt-5">
+            <h4 class="mb-4"><i class="bi bi-file-earmark-check me-2"></i>履歷審核狀態</h4>
+
+            <!-- 審核狀態頁籤 -->
+            <div class="filter-buttons resume-status-tabs mb-3">
+                <button class="filter-btn active" data-status="reviewing" onclick="filterResumeStatus('reviewing')">
+                    <i class="bi bi-hourglass-split me-2"></i>審核中
+                    <span class="badge bg-warning ms-2" id="count-reviewing">0</span>
+                </button>
+                <button class="filter-btn" data-status="approved" onclick="filterResumeStatus('approved')">
+                    <i class="bi bi-check-circle me-2"></i>通過
+                    <span class="badge bg-success ms-2" id="count-approved">0</span>
+                </button>
+            </div>
+
+            <!-- 履歷審核狀態表格 -->
+            <div class="table-wrapper">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="background: #f1f5f9;">
+                        <tr>
+                            <th style="padding: 14px 16px; font-weight: 600;">履歷檔名</th>
+                            <th style="padding: 14px 16px; font-weight: 600;">投遞公司</th>
+                            <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
+                            <th style="padding: 14px 16px; font-weight: 600;">投遞時間</th>
+                            <th style="padding: 14px 16px; font-weight: 600;">審核狀態</th>
+                            <th style="padding: 14px 16px; font-weight: 600;">審核意見</th>
+                            <th style="padding: 14px 16px; font-weight: 600;" class="text-center">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resumeStatusTable">
+                        <tr>
+                            <td colspan="7" style="padding: 14px 16px; text-align: center; color: #64748b;">
+                                <i class="bi bi-hourglass-split"></i> 載入中...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 查看留言 Modal -->
+    <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="commentModalLabel">查看留言</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <textarea id="commentInput" style="width: 100%; height: 180px;  font-size: 1rem;" readonly></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 志願序提醒 Modal（情況一／情況二：請至志願序查看或修改） -->
+    <div class="modal fade" id="preferenceRemindModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="preferenceRemindModalTitle">提醒</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="preferenceRemindModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                    <a href="/fill_preferences" class="btn btn-primary">前往志願序頁面</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 投遞履歷 Modal -->
+    <div class="modal fade" id="applyModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5 class="modal-title">投遞履歷</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <p id="applyCompanyName" class="fw-bold mb-3"></p>
+
+                    <!-- 職缺選擇 -->
+                    <label class="form-label">選擇職缺</label>
+                    <select id="jobSelect" class="form-select mb-3">
+                        <option value="">請選擇職缺</option>
+                    </select>
+
+                    <!-- 履歷選擇 -->
+                    <label class="form-label">選擇履歷</label>
+                    <select id="resumeSelect" class="form-select">
+                        <option value="">載入中...</option>
+                    </select>
+                    <small class="form-text text-muted">請選擇已提交為正式版本的履歷進行投遞</small>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary" onclick="submitApply()">確認投遞</button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 强制清除缓存 - 添加版本号
+        const CACHE_VERSION = '20260107-v2';
+        let selectedCompanyId = null;
+        let resumeVersions = [];
+        let deadlineExpired = false; // 截止時間過期標記
+        let allCompanies = []; // 所有公司列表
+        let selectedCompanyIds = new Set(); // 已選擇的公司 ID 集合
+        let allResumeStatuses = []; // 所有履歷審核狀態
+        let currentResumeStatus = 'reviewing'; // 當前選中的審核狀態頁籤
+        let currentFilter = 'selected'; // 當前公司篩選條件（預設志願序公司）
+        let currentPage = 1; // 當前頁碼
+        let itemsPerPage = 5; // 每頁顯示的公司數量
+        let currentCompaniesList = []; // 當前要顯示的公司列表
+        let companyPreferenceJobs = new Map(); // 公司ID -> 用户在志願序中選擇的職缺名稱列表
+        let companyPreferenceJobId = new Map(); // 公司ID -> 志願序中選擇的職缺 ID（用於投遞時預設）
+        let companyPreferenceOrder = new Map(); // 公司ID -> 志願序順位陣列（如 [1, 3] 表示該公司為第1、3志願）
+        let applicationCount = 0; // 當前已投遞筆數（最多 5 筆）
+
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        /* ===============================
+           檢查投遞履歷截止時間
+        ================================ */
+        async function checkDeadlineAndDisableApply() {
+            try {
+                const res = await fetch("/announcement/api/check_deadline?type=resume");
+                
+                if (!res.ok) {
+                    console.error("API 請求失敗:", res.status, res.statusText);
+                    return;
+                }
+                
+                const result = await res.json();
+                console.log("截止時間檢查結果:", result);
+                
+                // 如果有調試信息，顯示詳細信息
+                if (result.debug) {
+                    console.log("調試信息:", result.debug);
+                    console.log("當前學期ID:", result.debug.current_semester_id);
+                    console.log("所有 internship_flows 記錄:", result.debug.all_internship_flows);
+                    console.log("internship_flows 表是否存在記錄:", result.debug.internship_flows_exists);
+                    if (result.debug.resume_deadline_in_db !== undefined) {
+                        console.log("資料庫中的 resume_deadline:", result.debug.resume_deadline_in_db);
+                    }
+                    if (result.debug.error) {
+                        console.error("錯誤:", result.debug.error);
+                    }
+                }
+
+                if (result.success && result.has_deadline) {
+                    const deadlineAlert = document.getElementById('deadlineAlert');
+
+                    if (result.is_expired) {
+                        // 截止時間已過，禁用投遞功能
+                        deadlineExpired = true;
+
+                        // 顯示警告訊息
+                        deadlineAlert.className = 'alert alert-danger alert-deadline';
+                        deadlineAlert.innerHTML = `
+                            <strong>⚠️ 已超過投遞履歷截止時間</strong><br>
+                            投遞履歷的截止時間為：${result.deadline}<br>
+                            目前無法再投遞履歷到公司。
+                        `;
+                        deadlineAlert.classList.remove('d-none');
+
+                        // 禁用所有投遞按鈕
+                        document.querySelectorAll('.btn-outline-primary').forEach(btn => {
+                            if (btn.textContent.includes('投遞')) {
+                                btn.disabled = true;
+                                btn.classList.add('disabled');
+                            }
+                        });
+                    } else {
+                        // 尚未過期，顯示提醒
+                        deadlineAlert.className = 'alert alert-info alert-deadline';
+                        deadlineAlert.innerHTML = `
+                            <strong>📅 投遞履歷截止時間提醒</strong><br>
+                            投遞履歷的截止時間為：${result.deadline}<br>
+                            請在截止時間前完成投遞。
+                        `;
+                        deadlineAlert.classList.remove('d-none');
+                    }
+                } else {
+                    // 沒有設定截止時間，隱藏提示
+                    const deadlineAlert = document.getElementById('deadlineAlert');
+                    deadlineAlert.classList.add('d-none');
+                    console.log("未設定截止時間或 API 返回:", result.message || "無截止時間");
+                }
+            } catch (error) {
+                console.error("檢查截止時間失敗:", error);
+                // 顯示錯誤提示給用戶
+                const deadlineAlert = document.getElementById('deadlineAlert');
+                if (deadlineAlert) {
+                    deadlineAlert.className = 'alert alert-warning alert-deadline';
+                    deadlineAlert.innerHTML = `
+                        <strong>⚠️ 無法載入截止時間資訊</strong><br>
+                        請重新整理頁面或聯繫管理員。
+                    `;
+                    deadlineAlert.classList.remove('d-none');
+                }
+            }
+        }
+
+        /* ===============================
+           獲取志願序中已選擇的公司 ID 和職缺信息
+        ================================ */
+        async function getSelectedCompanyIds() {
+            try {
+                const res = await fetch('/api/get_my_preferences');
+                const result = await res.json();
+
+                if (result.success && result.preferences) {
+                    const companyIds = new Set();
+                    companyPreferenceJobs.clear();
+                    companyPreferenceJobId.clear();
+                    companyPreferenceOrder.clear();
+                    result.preferences.forEach(pref => {
+                        if (pref.company_id) {
+                            companyIds.add(pref.company_id);
+                            if (!companyPreferenceJobs.has(pref.company_id)) {
+                                companyPreferenceJobs.set(pref.company_id, []);
+                            }
+                            if (pref.job_title) {
+                                const jobs = companyPreferenceJobs.get(pref.company_id);
+                                if (!jobs.includes(pref.job_title)) jobs.push(pref.job_title);
+                            }
+                            if (pref.job_id && !companyPreferenceJobId.has(pref.company_id)) {
+                                companyPreferenceJobId.set(pref.company_id, pref.job_id);
+                            }
+                            // 記錄該公司在志願序的順位（第幾志願）
+                            if (pref.preference_order != null && pref.preference_order !== '') {
+                                const order = Number(pref.preference_order);
+                                if (!companyPreferenceOrder.has(pref.company_id)) {
+                                    companyPreferenceOrder.set(pref.company_id, []);
+                                }
+                                const arr = companyPreferenceOrder.get(pref.company_id);
+                                if (!arr.includes(order)) arr.push(order);
+                                arr.sort((a, b) => a - b);
+                            }
+                        }
+                    });
+                    return companyIds;
+                }
+                return new Set();
+            } catch (error) {
+                console.error('獲取志願序失敗:', error);
+                return new Set();
+            }
+        }
+
+        /* ===============================
+           載入公司資料並分類
+        ================================ */
+        async function loadCompanies() {
+            // 先獲取已選擇的公司 ID
+            selectedCompanyIds = await getSelectedCompanyIds();
+
+            // 獲取所有公司
+            const res = await fetch('/api/student/companies');
+            const result = await res.json();
+
+            if (!result.success) {
+                alert(result.message || '載入公司資料失敗');
+                return;
+            }
+
+            allCompanies = result.companies || [];
+
+            // 為每個公司獲取職缺信息
+            await Promise.all(allCompanies.map(async (c) => {
+                try {
+                    const jobRes = await fetch(`/api/get_jobs_by_company?company_id=${c.id}&_v=${CACHE_VERSION}`);
+                    if (jobRes.ok) {
+                        const jobResult = await jobRes.json();
+                        if (jobResult.success && jobResult.jobs) {
+                            c.jobs = jobResult.jobs;
+                            c.jobTitles = jobResult.jobs.map(j => j.title).join('、');
+                        } else {
+                            c.jobs = [];
+                            c.jobTitles = '尚無職缺';
+                        }
+                    } else {
+                        c.jobs = [];
+                        c.jobTitles = '尚無職缺';
+                    }
+                } catch (error) {
+                    console.error(`獲取公司 ${c.id} 的職缺失敗:`, error);
+                    c.jobs = [];
+                    c.jobTitles = '尚無職缺';
+                }
+            }));
+
+            // 分類公司；志願序公司依志願順位排序（第一志願在前）
+            selectedCompanies = [];
+            unselectedCompanies = [];
+            allCompanies.forEach(c => {
+                if (selectedCompanyIds.has(c.id)) {
+                    selectedCompanies.push(c);
+                } else {
+                    unselectedCompanies.push(c);
+                }
+            });
+            const minOrder = (c) => {
+                const arr = companyPreferenceOrder.get(c.id);
+                if (!arr || arr.length === 0) return 999;
+                return arr[0];
+            };
+            selectedCompanies.sort((a, b) => minOrder(a) - minOrder(b));
+
+            // 根據當前篩選條件顯示對應的公司
+            filterCompanies(currentFilter);
+        }
+
+        /* ===============================
+           篩選公司
+        ================================ */
+        function filterCompanies(filter) {
+            currentFilter = filter;
+
+            // 更新按鈕狀態
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                if (btn.getAttribute('data-filter') === filter) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            // 根據篩選條件選擇要顯示的公司列表
+            let companiesToShow = [];
+            let emptyMessage = '';
+
+            switch (filter) {
+                case 'unselected':
+                    companiesToShow = unselectedCompanies;
+                    emptyMessage = '<i class="bi bi-inbox"></i> 尚無其他公司';
+                    break;
+                case 'selected':
+                default:
+                    companiesToShow = selectedCompanies;
+                    emptyMessage = '<i class="bi bi-inbox"></i> 尚無志願序公司';
+                    break;
+            }
+
+            // 渲染表格
+            renderCompanyTable(companiesToShow, emptyMessage);
+        }
+
+        /* ===============================
+           渲染公司表格（帶分頁）
+        ================================ */
+        function renderCompanyTable(companies, emptyMessage = '<i class="bi bi-inbox"></i> 尚無公司資料') {
+            currentCompaniesList = companies;
+            currentPage = 1; // 重置到第一頁
+            const thOrder = document.getElementById('thPreferenceOrder');
+            if (thOrder) thOrder.style.display = currentFilter === 'selected' ? '' : 'none';
+
+            if (companies.length === 0) {
+                const tbody = document.getElementById('companyTable');
+                const colSpan = currentFilter === 'selected' ? 4 : 3;
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="${colSpan}" class="text-center text-muted">
+                            ${emptyMessage}
+                        </td>
+                    </tr>
+                `;
+                document.getElementById('paginationContainer').style.display = 'none';
+                return;
+            }
+
+            updateCompanyTablePage();
+        }
+
+        /* ===============================
+           更新公司表格分頁顯示
+        ================================ */
+        function formatPreferenceOrder(orders) {
+            if (!orders || orders.length === 0) return '—';
+            const labels = orders.map(o => {
+                const n = Number(o);
+                if (n === 1) return '第一志願';
+                if (n === 2) return '第二志願';
+                if (n === 3) return '第三志願';
+                if (n === 4) return '第四志願';
+                if (n === 5) return '第五志願';
+                return `第${n}志願`;
+            });
+            return labels.join('、');
+        }
+
+        function updateCompanyTablePage() {
+            const tbody = document.getElementById('companyTable');
+            tbody.innerHTML = '';
+            const thOrder = document.getElementById('thPreferenceOrder');
+            if (thOrder) thOrder.style.display = currentFilter === 'selected' ? '' : 'none';
+
+            const totalPages = Math.ceil(currentCompaniesList.length / itemsPerPage);
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const pageCompanies = currentCompaniesList.slice(startIndex, endIndex);
+
+            pageCompanies.forEach(c => {
+                const escapedName = (c.company_name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                
+                let jobTitles = '尚無職缺';
+                if (currentFilter === 'selected' && companyPreferenceJobs.has(c.id)) {
+                    const preferenceJobs = companyPreferenceJobs.get(c.id);
+                    if (preferenceJobs && preferenceJobs.length > 0) {
+                        jobTitles = preferenceJobs.join('、');
+                    } else {
+                        jobTitles = '尚無職缺';
+                    }
+                } else {
+                    jobTitles = c.jobTitles || '尚無職缺';
+                }
+
+                const orderLabel = currentFilter === 'selected' && companyPreferenceOrder.has(c.id)
+                    ? formatPreferenceOrder(companyPreferenceOrder.get(c.id))
+                    : '';
+                const orderCell = currentFilter === 'selected'
+                    ? `<td class="text-nowrap">${escapeHtml(orderLabel)}</td>`
+                    : '';
+
+                const slotFull = applicationCount >= 5;
+                const applyBtn = slotFull
+                    ? `<button class="btn btn-outline-secondary btn-sm" disabled title="志願序投放名額已滿，請勿多筆上傳"><i class="bi bi-send me-1"></i>投遞（名額已滿）</button>`
+                    : `<button class="btn btn-outline-primary btn-sm" onclick="openApply(${c.id}, '${escapedName}')"><i class="bi bi-send me-1"></i>投遞</button>`;
+                const actionButtons = `
+                    <div class="d-flex gap-2 justify-content-center">
+                        ${applyBtn}
+                        <button
+                            type="button"
+                            class="btn btn-outline-primary btn-sm download-company-btn"
+                            onclick="downloadCompanyFile(${c.id}, '${escapedName}')"
+                            title="下載公司資料"
+                        >
+                            <i class="bi bi-file-earmark-arrow-down-fill me-1"></i>下載公司資料 (DOCX)
+                        </button>
+                    </div>
+                `;
+
+                tbody.innerHTML += `
+                    <tr id="company-row-${c.id}">
+                        ${orderCell}
+                        <td>${escapeHtml(c.company_name || '')}</td>
+                        <td class="td-job-titles">${escapeHtml(jobTitles)}</td>
+                        <td class="text-center">
+                            ${actionButtons}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            // 更新分頁控件
+            updatePaginationControls(totalPages);
+        }
+
+        /* ===============================
+           更新分頁控件
+        ================================ */
+        function updatePaginationControls(totalPages) {
+            const paginationContainer = document.getElementById('paginationContainer');
+            const pageInfo = document.getElementById('pageInfo');
+            const prevBtn = document.getElementById('prevPageBtn');
+            const nextBtn = document.getElementById('nextPageBtn');
+
+            if (totalPages <= 1) {
+                paginationContainer.style.display = 'none';
+                return;
+            }
+
+            paginationContainer.style.display = 'flex';
+            pageInfo.textContent = `第 ${currentPage} 頁，共 ${totalPages} 頁`;
+
+            // 更新按鈕狀態
+            prevBtn.disabled = currentPage === 1;
+            nextBtn.disabled = currentPage === totalPages;
+        }
+
+        /* ===============================
+           切換分頁
+        ================================ */
+        function changePage(direction) {
+            const totalPages = Math.ceil(currentCompaniesList.length / itemsPerPage);
+            const newPage = currentPage + direction;
+
+            if (newPage < 1 || newPage > totalPages) {
+                return;
+            }
+
+            currentPage = newPage;
+            updateCompanyTablePage();
+            
+            // 滾動到表格頂部
+            document.querySelector('.table-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // 已移除資料夾相關功能，改用分類系統
+
+        /* ===============================
+           載入履歷審核狀態
+        ================================ */
+        async function loadResumeStatuses() {
+            try {
+                // 獲取所有履歷
+                const res = await fetch('/api/my_resumes');
+                const result = await res.json();
+
+                if (!result.success || !result.resumes) {
+                    throw new Error(result.message || '無法獲取履歷列表');
+                }
+
+                // 獲取投遞信息（從 student_job_applications 表）
+                const appRes = await fetch('/api/student/my_applications');
+                let applications = [];
+                if (appRes.ok) {
+                    const appResult = await appRes.json();
+                    if (appResult.success && appResult.applications) {
+                        applications = appResult.applications;
+                    }
+                }
+                applicationCount = applications.length;
+
+                // 合併履歷和投遞信息
+                // 只顯示正式版本（category='ready'）且已投遞的履歷，根據 resumes.status 來分類
+                // 修改：允許同一份履歷投遞到多家公司，每個投遞記錄都單獨顯示
+                const resumeStatusList = [];
+                const readyResumes = result.resumes.filter(r => {
+                    const category = r.category || 'draft';
+                    return category === 'ready';
+                });
+
+                // 為每個投遞記錄創建一個獨立的條目
+                applications.forEach(application => {
+                    // 找到對應的履歷
+                    const resume = readyResumes.find(r => r.id === application.resume_id);
+                    if (resume) {
+                        // 為每個投遞記錄創建一個獨立的條目
+                        resumeStatusList.push({
+                            ...resume,
+                            company_name: application.company_name || '尚未選擇',
+                            job_title: application.job_title || '尚未選擇',
+                            application_id: application.id,
+                            applied_at: application.applied_at || resume.created_at,
+                            // 通過 = 指導老師點擊通過、送至廠商審核後，即顯示在通過頁籤
+                            status: application.resume_status || resume.status || 'uploaded',
+                            comment: application.comment || resume.comment || ''
+                        });
+                    }
+                });
+
+                allResumeStatuses = resumeStatusList;
+
+                updateResumeStatusCounts();
+                filterResumeStatus(currentResumeStatus);
+            } catch (err) {
+                console.error('載入履歷審核狀態失敗:', err);
+                document.getElementById('resumeStatusTable').innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center text-danger">
+                            <i class="bi bi-exclamation-triangle"></i> 載入失敗：${err.message}
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        /* ===============================
+           更新履歷審核狀態計數
+        ================================ */
+        function updateResumeStatusCounts() {
+            const counts = {
+                reviewing: 0,
+                rejected: 0,
+                approved: 0
+            };
+
+            allResumeStatuses.forEach(resume => {
+                const status = resume.status || 'uploaded';
+                // 根據 status 欄位來分類
+                if (status === 'uploaded') {
+                    counts.reviewing++; // 審核中
+                } else if (status === 'rejected') {
+                    counts.rejected++; // 退件
+                } else if (status === 'approved') {
+                    counts.approved++; // 通過
+                }
+            });
+
+            Object.keys(counts).forEach(status => {
+                const badge = document.getElementById(`count-${status}`);
+                if (badge) {
+                    badge.textContent = counts[status];
+                }
+            });
+        }
+
+        /* ===============================
+           篩選履歷審核狀態
+        ================================ */
+        function filterResumeStatus(status) {
+            currentResumeStatus = status;
+
+            // 更新按鈕狀態
+            document.querySelectorAll('[data-status]').forEach(btn => {
+                if (btn.getAttribute('data-status') === status) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            // 篩選履歷（根據 status 欄位）
+            const filteredResumes = allResumeStatuses.filter(r => {
+                const resumeStatus = r.status || 'uploaded';
+                // 將 status 映射到頁籤
+                if (status === 'reviewing') {
+                    return resumeStatus === 'uploaded'; // 審核中
+                } else if (status === 'rejected') {
+                    return resumeStatus === 'rejected'; // 退件
+                } else if (status === 'approved') {
+                    return resumeStatus === 'approved'; // 通過
+                }
+                return false;
+            });
+
+            renderResumeStatusTable(filteredResumes);
+        }
+
+        /* ===============================
+           渲染履歷審核狀態表格
+        ================================ */
+        function renderResumeStatusTable(resumes) {
+            const tbody = document.getElementById('resumeStatusTable');
+
+            if (resumes.length === 0) {
+                const statusLabels = {
+                    'reviewing': '審核中',
+                    'rejected': '退件',
+                    'approved': '通過'
+                };
+                const statusText = statusLabels[currentResumeStatus] || '審核中';
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center text-muted">
+                            <i class="bi bi-inbox"></i> 目前沒有${statusText}的履歷
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = resumes.map(resume => {
+                const resumeStatus = resume.status || 'uploaded';
+                
+                // 狀態映射 - 與 review_resume.html 一致
+                function statusColor(status) {
+                    return { 'uploaded': 'info', 'approved': 'success', 'rejected': 'danger' }[status] || 'secondary';
+                }
+                
+                function mapStatus(status) {
+                    return { 'uploaded': '審核中', 'approved': '通過', 'rejected': '退件' }[status] || '未知';
+                }
+                
+                function escapeHtml(text) {
+                    if (text === null || text === undefined) return '';
+                    return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+                }
+                
+                // 留言按鈕 
+                const hasComment = resume.comment && resume.comment.trim() !== '';
+                const btnClass = hasComment ? 'text-success' : '';
+                const btnText = hasComment ? '已填寫' : '未填寫';
+                const commentBtn = `<button class="btn btn-sm btn-outline-secondary comment-btn ${btnClass}" onclick="openCommentModal('${escapeHtml(resume.comment || '')}')">${btnText}</button>`;
+                
+                // 格式化日期
+                let appliedDate = '未知';
+                if (resume.applied_at) {
+                    try {
+                        const date = new Date(resume.applied_at);
+                        appliedDate = date.toLocaleDateString('zh-TW', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                    } catch (e) {
+                        appliedDate = resume.applied_at;
+                    }
+                }
+
+                return `
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 14px 16px;">${escapeHtml(resume.original_filename || '未命名履歷')}</td>
+                        <td style="padding: 14px 16px;">${escapeHtml(resume.company_name || '尚未選擇')}</td>
+                        <td style="padding: 14px 16px;">${escapeHtml(resume.job_title || '尚未選擇')}</td>
+                        <td style="padding: 14px 16px;">${appliedDate}</td>
+                        <td style="padding: 14px 16px;">
+                            <span class="status-badge bg-${statusColor(resumeStatus)}">${mapStatus(resumeStatus)}</span>
+                        </td>
+                        <td style="padding: 14px 16px;">
+                            ${commentBtn}
+                        </td>
+                        <td style="padding: 14px 16px;" class="text-center">
+                            <a href="/api/download_resume/${resume.id}" class="btn btn-sm btn-outline-primary download-resume-btn" target="_blank" style="margin-right:4px;">
+                                下載
+                            </a>
+                            ${!deadlineExpired && resume.application_id ? `
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-resume-btn" onclick="deleteApplication(this)" data-application-id="${resume.application_id}" data-company-name="${String(resume.company_name || '').replace(/"/g, '&quot;')}" title="刪除後主任／班導／指導老師端也會同步移除" style="margin-right:4px;">
+                                刪除
+                            </button>
+                            ` : ''}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        /* 刪除投遞紀錄（僅履歷截止前可刪除；會同步自主任/班導/指導老師列表移除） */
+        async function deleteApplication(btnOrId, companyName) {
+            const applicationId = typeof btnOrId === 'object' && btnOrId && btnOrId.dataset
+                ? parseInt(btnOrId.dataset.applicationId, 10)
+                : parseInt(btnOrId, 10);
+            const name = (typeof btnOrId === 'object' && btnOrId && btnOrId.dataset
+                ? (btnOrId.dataset.companyName || '')
+                : (companyName || '')).trim();
+            if (!applicationId || isNaN(applicationId)) return;
+            if (!confirm('確定要刪除此筆投遞紀錄' + (name ? '（' + name + '）' : '') + '嗎？\n\n刪除後，主任、班導、指導老師端也會同步移除該筆資料。')) return;
+            try {
+                const res = await fetch('/api/student/delete_application', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ application_id: applicationId })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    alert('已刪除該筆投遞紀錄。');
+                    await loadResumeStatuses();
+                } else {
+                    alert(result.message || '刪除失敗');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('刪除失敗，請稍後再試。');
+            }
+        }
+
+        /* ===============================
+           打開留言 Modal 
+        ================================ */
+        function openCommentModal(comment) {
+            const commentText = comment || '';
+            document.getElementById("commentInput").value = commentText;
+            document.getElementById("commentInput").readOnly = true;
+            document.getElementById("commentModalLabel").textContent = "查看留言";
+            new bootstrap.Modal(document.getElementById("commentModal")).show();
+        }
+
+        /* ===============================
+           載入公司職缺（可傳入志願序預設職缺 ID，志願序公司會預選）
+        ================================ */
+        async function loadJobsByCompany(companyId, defaultJobId) {
+            const jobSelect = document.getElementById('jobSelect');
+            jobSelect.innerHTML = '<option value="">載入中...</option>';
+
+            try {
+                const res = await fetch(`/api/get_jobs_by_company?company_id=${companyId}&_v=${CACHE_VERSION}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                const result = await res.json();
+
+                jobSelect.innerHTML = '<option value="">請選擇職缺</option>';
+
+                if (result.success && result.jobs && result.jobs.length > 0) {
+                    result.jobs.forEach(job => {
+                        jobSelect.innerHTML += `<option value="${job.id}">${job.title}</option>`;
+                    });
+                    if (defaultJobId && result.jobs.some(j => j.id == defaultJobId)) {
+                        jobSelect.value = String(defaultJobId);
+                    }
+                } else {
+                    jobSelect.innerHTML = '<option value="">此公司尚無職缺</option>';
+                }
+            } catch (error) {
+                console.error('載入職缺失敗:', error);
+                jobSelect.innerHTML = '<option value="">載入職缺失敗</option>';
+                alert('載入職缺失敗，請稍後再試');
+            }
+        }
+
+        /* ===============================
+           開啟投遞視窗
+        ================================ */
+        async function openApply(companyId, companyName) {
+            if (applicationCount >= 5) {
+                alert('志願序投放名額已滿，請勿多筆上傳。');
+                return;
+            }
+            if (deadlineExpired) {
+                alert('⚠️ 已超過投遞履歷截止時間，無法再投遞履歷。');
+                return;
+            }
+
+            // 再次檢查截止時間（防止狀態變化）
+            try {
+                const deadlineCheck = await fetch("/announcement/api/check_deadline?type=resume");
+                const deadlineResult = await deadlineCheck.json();
+                if (deadlineResult.success && deadlineResult.has_deadline && deadlineResult.is_expired) {
+                    alert(`⚠️ 已超過投遞履歷截止時間：${deadlineResult.deadline}，無法再投遞履歷。`);
+                    deadlineExpired = true;
+                    return;
+                }
+            } catch (error) {
+                console.error("檢查截止時間失敗:", error);
+            }
+
+            selectedCompanyId = companyId;
+
+            document.getElementById('applyCompanyName').innerText =
+                `公司：${companyName}`;
+
+            // 載入職缺；若為志願序公司則預設選中志願序中填寫的職缺
+            const defaultJobId = companyPreferenceJobId.get(Number(companyId)) || null;
+            loadJobsByCompany(companyId, defaultJobId);
+
+            // 載入正式版本的履歷（可以投遞的履歷）
+            loadAvailableResumes();
+
+            new bootstrap.Modal(
+                document.getElementById('applyModal')
+            ).show();
+        }
+
+        /* ===============================
+           載入可投遞的履歷（正式版本）
+        ================================ */
+        async function loadAvailableResumes() {
+            const resumeSelect = document.getElementById('resumeSelect');
+
+            // 顯示載入中狀態
+            resumeSelect.innerHTML = '<option value="">載入中...</option>';
+            resumeSelect.disabled = true;
+
+            try {
+                // 獲取所有履歷，篩選出正式版本（category='draft' 且 status='uploaded' 且 note='submitted'）
+                // 或者已經在審核中的履歷（category='reviewing'，可以重複投遞）
+                const res = await fetch('/api/my_resumes');
+                const result = await res.json();
+
+                if (!result.success || !result.resumes) {
+                    throw new Error(result.message || '無法獲取履歷列表');
+                }
+
+                // 篩選出可以投遞的履歷：只顯示正式版本（category='ready'）
+                const availableResumes = result.resumes.filter(r => {
+                    const category = r.category || 'draft';
+                    return category === 'ready';
+                });
+
+                if (availableResumes.length === 0) {
+                    resumeSelect.innerHTML = '<option value="">尚無可投遞的履歷，請先提交履歷為正式版本</option>';
+                    console.log('ℹ️ 沒有找到可投遞的履歷');
+                } else {
+                    // 生成選項列表
+                    const options = availableResumes.map(r => {
+                        const id = r.id;
+                        const filename = r.original_filename || '未命名履歷';
+                        const category = r.category || 'draft';
+                        const status = r.status || 'uploaded';
+
+                        // 格式化日期
+                        let timeStr = '';
+                        if (r.created_at) {
+                            try {
+                                const date = new Date(r.created_at);
+                                timeStr = date.toLocaleDateString('zh-TW', {
+                                    year: 'numeric',
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                });
+                            } catch (e) {
+                                timeStr = r.created_at;
+                            }
+                        }
+
+                        // 狀態標籤
+                        let statusLabel = '';
+                        if (category === 'reviewing') statusLabel = ' [審核中]';
+                        else if (status === 'uploaded' && r.note === 'submitted') statusLabel = ' [正式版本]';
+
+                        return `<option value="${id}">${filename}${statusLabel}${timeStr ? ' - ' + timeStr : ''}</option>`;
+                    });
+
+                    resumeSelect.innerHTML = '<option value="">請選擇履歷</option>' + options;
+                    console.log(`✅ 成功載入 ${availableResumes.length} 個可投遞的履歷`);
+                }
+            } catch (err) {
+                console.error('❌ 載入履歷失敗:', err);
+                resumeSelect.innerHTML = '<option value="">載入失敗</option>';
+                alert(`載入履歷失敗：${err.message}`);
+            } finally {
+                resumeSelect.disabled = false;
+            }
+        }
+
+        /* ===============================
+           下載公司資料（改進版，帶錯誤處理）
+        ================================ */
+        async function downloadCompanyFile(companyId, companyName) {
+            if (!companyId) {
+                alert('❌ 錯誤：缺少公司 ID');
+                return;
+            }
+
+            try {
+                console.log('📤 [DEBUG] 下载公司文件，ID:', companyId, '公司名稱:', companyName);
+                const response = await fetch(`/api/download_company_file/${companyId}`);
+                console.log('📥 收到响应:', response.status, response.statusText, response.headers.get('content-type'));
+
+                if (!response.ok) {
+                    // 如果是 HTML 錯誤頁面，顯示錯誤訊息
+                    const text = await response.text();
+                    if (text.includes('<html>')) {
+                        // 提取錯誤訊息
+                        const errorMatch = text.match(/<h2>錯誤：(.+?)<\/h2>/);
+                        const errorMsg = errorMatch ? errorMatch[1] : '下載失敗';
+                        alert(`❌ ${errorMsg}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+                        return;
+                    }
+                    // 如果是 JSON 錯誤
+                    try {
+                        const data = await response.json();
+                        alert(`❌ ${data.message || '下載失敗'}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+                    } catch (e) {
+                        alert(`❌ 下載失敗（HTTP ${response.status}）\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+                    }
+                    return;
+                }
+
+                // 檢查 Content-Type 是否為文件
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    // 如果是 JSON，表示是錯誤訊息
+                    const data = await response.json();
+                    alert(`❌ ${data.message || '下載失敗'}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+                    return;
+                }
+
+                // 從 Content-Disposition 標頭獲取文件名，如果沒有則使用公司名稱
+                let filename = `${companyName || 'company'}_${companyId}.docx`;
+                const contentDisposition = response.headers.get('content-disposition');
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                    if (filenameMatch && filenameMatch[1]) {
+                        filename = filenameMatch[1].replace(/['"]/g, '');
+                    }
+                }
+
+                // 下載文件
+                console.log('📦 开始下载文件，文件名:', filename);
+                const blob = await response.blob();
+                console.log('📦 Blob 大小:', blob.size, 'bytes');
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                console.log('✅ 下载链接已点击');
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } catch (error) {
+                console.error('❌ 下載錯誤:', error);
+                alert(`❌ 下載時發生錯誤：${error.message}\n\n公司：${companyName || '未知'}\nID：${companyId}`);
+            }
+        }
+
+        // 确保函数在全局作用域中
+        window.downloadCompanyFile = downloadCompanyFile;
+        window.filterCompanies = filterCompanies;
+
+        /* ===============================
+           送出投遞
+        ================================ */
+        async function submitApply() {
+            // 再次檢查截止時間（防止用戶繞過前端檢查）
+            if (deadlineExpired) {
+                alert('⚠️ 已超過投遞履歷截止時間，無法再投遞履歷。');
+                return;
+            }
+
+            try {
+                const deadlineCheck = await fetch("/announcement/api/check_deadline?type=resume");
+                const deadlineResult = await deadlineCheck.json();
+                if (deadlineResult.success && deadlineResult.has_deadline && deadlineResult.is_expired) {
+                    alert(`⚠️ 已超過投遞履歷截止時間：${deadlineResult.deadline}，無法再投遞履歷。`);
+                    return;
+                }
+            } catch (error) {
+                console.error("檢查截止時間失敗:", error);
+            }
+
+            const resumeId = document.getElementById('resumeSelect').value;
+            const jobId = document.getElementById('jobSelect').value;
+
+            if (!jobId) {
+                alert('請選擇職缺');
+                return;
+            }
+
+            if (!resumeId) {
+                alert('請選擇履歷');
+                return;
+            }
+
+            const res = await fetch('/api/student/apply_company', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    company_id: selectedCompanyId,
+                    job_id: jobId,
+                    resume_id: resumeId
+                })
+            });
+
+            const result = await res.json();
+
+            if (result.success) {
+                bootstrap.Modal.getInstance(document.getElementById('applyModal')).hide();
+                if (result.need_go_preference) {
+                    document.getElementById('preferenceRemindModalTitle').textContent = '請至志願序查看排序';
+                    document.getElementById('preferenceRemindModalBody').innerHTML =
+                        '已依您的投遞紀錄更新志願序，請前往志願序頁面查看並可調整排序。';
+                    new bootstrap.Modal(document.getElementById('preferenceRemindModal')).show();
+                } else {
+                    alert('投遞成功');
+                }
+                await loadResumeStatuses();
+                await loadCompanies();
+            } else {
+                if (result.code === 'NOT_IN_PREFERENCE') {
+                    document.getElementById('preferenceRemindModalTitle').textContent = '請至志願序修改排序';
+                    document.getElementById('preferenceRemindModalBody').innerHTML =
+                        '您投遞的公司或職缺不在志願序中，請先至志願序頁面修改排序後再投遞。';
+                    bootstrap.Modal.getInstance(document.getElementById('applyModal')).hide();
+                    new bootstrap.Modal(document.getElementById('preferenceRemindModal')).show();
+                } else if (result.code === 'SLOT_FULL') {
+                    alert('志願序投放名額已滿，請勿多筆上傳。');
+                } else {
+                    alert(result.message || '投遞失敗');
+                }
+            }
+        }
+
+        // 選單開關邏輯
+        document.addEventListener("DOMContentLoaded", async () => {
+            const menuBtn = document.getElementById("menu-btn");
+            const sideMenu = document.getElementById("side-menu");
+            const closeBtn = document.getElementById("close-btn");
+
+            if (menuBtn && sideMenu && closeBtn) {
+                menuBtn.addEventListener("click", () => {
+                    sideMenu.classList.add("open");
+                    sideMenu.setAttribute("aria-hidden", "false");
+                });
+
+                closeBtn.addEventListener("click", () => {
+                    sideMenu.classList.remove("open");
+                    sideMenu.setAttribute("aria-hidden", "true");
+                });
+
+                // 如果點擊 menu 以外的地方就關閉選單
+                document.addEventListener("click", (e) => {
+                    if (
+                        !sideMenu.contains(e.target) &&
+                        !menuBtn.contains(e.target)
+                    ) {
+                        sideMenu.classList.remove("open");
+                        sideMenu.setAttribute("aria-hidden", "true");
+                    }
+                });
+            }
+
+            // 首先檢查截止時間
+            await checkDeadlineAndDisableApply();
+
+            // 先載入履歷審核狀態（會設定 applicationCount，供公司表格判斷是否顯示「名額已滿」）
+            await loadResumeStatuses();
+            // 載入公司資料（志願序公司／其他公司）
+            loadCompanies();
+        });
+    </script>
+
+    <!-- 側邊選單 -->
+    <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+        <div class="menu-header">
+            <h2>功能選單</h2>
+            <button id="close-btn" aria-label="關閉功能選單">×</button>
+        </div>
+        <a href="/student_home">首頁</a>
+        <a href="/profile">個人資料</a>
+        <a href="/resume_folders">履歷管理</a>
+        <a href="/fill_preferences">填寫志願序</a>
+        <a href="/look_company">投遞履歷</a>
+        <a href="/interview_schedule">行事曆</a>
+        <a href="/intern_achievement">學生媒合結果</a>
+        <a href="/intern_weekly">實習週記</a>
+        <a href="/intern_experience">實習心得</a>
+        <a href="/notifications">通知</a>
+        <a href="/logout">登出</a>
+    </nav>
+</body>
+
+</html>
