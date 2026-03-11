@@ -120,7 +120,7 @@
     }
 
     main {
-      max-width: 1320px;
+      max-width: 1600px;
       margin: 0 auto;
       padding: 24px 24px 40px;
     }
@@ -336,7 +336,9 @@
           </div>
           <div class="mb-3">
             <label class="form-label">上傳檔案</label>
-            <input type="text" class="form-control mb-2" id="detailFileName" placeholder="目前上傳檔案名稱" readonly>
+            <div id="detailFileLink" style="display:none; margin-bottom:8px;">
+              <a href="#" id="detailFileAnchor" target="_blank" style="word-break:break-all;"></a>
+            </div>
             <input type="file" class="form-control" id="detailFileInput">
           </div>
           <div class="mb-3">
@@ -414,7 +416,7 @@
           </td>
           <td>
             <button type="button"
-                    class="btn btn-sm ${w.filled_at ? 'btn-outline-secondary' : 'btn-outline-primary'}"
+                    class="btn ${w.filled_at ? 'btn-outline-secondary' : 'btn-outline-primary'}" style="padding:6px 18px; font-size:1rem;"
                     onclick="handleWeeklyAction(${w.id || 'null'})">
               ${w.filled_at ? '檢視' : '填寫'}
             </button>
@@ -436,8 +438,9 @@
       const companyEl = document.getElementById('detailCompany');
       const workEl = document.getElementById('detailWorkNotes');
       const reflectionEl = document.getElementById('detailReflection');
-      const fileEl = document.getElementById('detailFileName');
       const fileInput = document.getElementById('detailFileInput');
+      const fileLinkDiv = document.getElementById('detailFileLink');
+      const fileAnchor = document.getElementById('detailFileAnchor');
       const filledDateEl = document.getElementById('detailFilledAt');
       const teacherCommentEl = document.getElementById('detailTeacherComment');
       const reviewedAtEl = document.getElementById('detailReviewedAt');
@@ -447,7 +450,13 @@
         companyEl.value = week.company || (document.getElementById('weeklyCompanyName')?.textContent || '');
         workEl.value = week.work_notes || '';
         reflectionEl.value = week.reflection || '';
-        fileEl.value = week.file_name || '';
+        if (week.file_name && week.file_path) {
+          fileAnchor.href = '/' + week.file_path;
+          fileAnchor.textContent = week.file_name;
+          fileLinkDiv.style.display = '';
+        } else {
+          fileLinkDiv.style.display = 'none';
+        }
         filledDateEl.value = week.filled_at || '';
         teacherCommentEl.value = week.teacher_comment || '';
         reviewedAtEl.value = week.reviewed_at || '';
@@ -456,7 +465,7 @@
         companyEl.value = document.getElementById('weeklyCompanyName')?.textContent || '';
         workEl.value = '';
         reflectionEl.value = '';
-        fileEl.value = '';
+        fileLinkDiv.style.display = 'none';
         if (fileInput) fileInput.value = '';
         filledDateEl.value = '';
         teacherCommentEl.value = '';
@@ -512,18 +521,23 @@
       }
 
       try {
+        const formData = new FormData();
+        formData.append('semester', semester);
+        formData.append('week_index', week.week_index);
+        formData.append('title', title);
+        formData.append('work_notes', workNotes);
+        formData.append('reflection', reflection);
+        if (currentCompanyId) formData.append('company_id', currentCompanyId);
+        if (week.due_date) formData.append('due_date', week.due_date);
+
+        const fileInput = document.getElementById('detailFileInput');
+        if (fileInput && fileInput.files.length > 0) {
+          formData.append('file', fileInput.files[0]);
+        }
+
         const resp = await fetch('/intern_weekly/api/save', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            semester,
-            week_index: week.week_index,
-            title,
-            work_notes: workNotes,
-            reflection,
-            company_id: currentCompanyId,
-            due_date: week.due_date || null
-          })
+          body: formData
         });
         const data = await resp.json();
         if (!data.success) {
@@ -531,11 +545,12 @@
           return;
         }
 
-        // 更新前端資料
         week.title = title;
         week.work_notes = workNotes;
         week.reflection = reflection;
         week.filled_at = data.filled_at || week.filled_at;
+        week.file_name = data.file_name || week.file_name;
+        week.file_path = data.file_path || week.file_path;
         week.reviewed = week.reviewed || false;
 
         renderWeeklyTable(allWeeks);

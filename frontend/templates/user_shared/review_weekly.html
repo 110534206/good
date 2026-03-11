@@ -24,7 +24,7 @@
       box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
     }
     .topbar {
-      max-width: 1320px;
+      max-width: 1600px;
       margin: 0 auto;
       display: flex;
       align-items: center;
@@ -38,7 +38,7 @@
       letter-spacing: 0.03em;
     }
     main {
-      max-width: 1400px;
+      max-width: 1600px;
       margin: 0 auto;
       padding: 24px 32px 40px;
     }
@@ -49,7 +49,7 @@
       margin-bottom: 4px;
     }
     .page-subtitle {
-      font-size: 0.95rem;
+      font-size: 1.05rem;
       color: #6b7280;
       margin-bottom: 16px;
     }
@@ -76,7 +76,7 @@
     }
     .company-tab {
       padding: 10px 20px;
-      font-size: 0.95rem;
+      font-size: 1.05rem;
       font-weight: 500;
       color: #6b7280;
       background: none;
@@ -98,7 +98,7 @@
     .weekly-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.95rem;
+      font-size: 1.05rem;
       table-layout: fixed;
     }
     .weekly-table thead th {
@@ -132,7 +132,7 @@
       min-width: 72px;
       padding: 4px 10px;
       border-radius: 999px;
-      font-size: 0.8rem;
+      font-size: 0.9rem;
       font-weight: 600;
     }
     .badge-status.pending {
@@ -593,7 +593,7 @@
           <td>${item.due_date || '—'}</td>
           <td>${item.filled_at || '—'}</td>
           <td><span class="badge-status ${badgeCls}">${statusLabel}</span></td>
-          <td><button type="button" class="btn btn-sm ${item.status === 'reviewed' ? 'btn-outline-secondary' : 'btn-outline-primary'}" data-id="${item.id}">${item.status === 'reviewed' ? '檢視' : '批閱'}</button></td>
+          <td><button type="button" class="btn ${item.status === 'reviewed' ? 'btn-outline-secondary' : 'btn-outline-primary'}" style="padding:6px 18px; font-size:1rem;" data-id="${item.id}">${item.status === 'reviewed' ? '檢視' : '批閱'}</button></td>
         `;
         weeklyReviewTableBody.appendChild(tr);
       });
@@ -617,7 +617,7 @@
       const fileArea = document.getElementById('rvFileArea');
       if (item.file_path) {
         const fileName = item.file_path.split('/').pop();
-        fileArea.innerHTML = `<a href="/uploads/${item.file_path}" target="_blank" class="link-primary">${fileName}</a>`;
+        fileArea.innerHTML = `<a href="/${item.file_path}" target="_blank" class="link-primary">${item.file_name || fileName}</a>`;
       } else {
         fileArea.innerHTML = '<span class="text-muted">尚未上傳檔案</span>';
       }

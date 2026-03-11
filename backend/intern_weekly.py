@@ -1,10 +1,33 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, send_from_directory
 from config import get_db
 from semester import get_current_semester_code
 from datetime import datetime
-import traceback
+from werkzeug.utils import secure_filename
+import traceback, os
 
 intern_weekly_bp = Blueprint("intern_weekly_bp", __name__, url_prefix="/intern_weekly")
+
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+WEEKLY_UPLOAD_DIR = os.path.join(_PROJECT_ROOT, "uploads", "intern_weeklies")
+os.makedirs(WEEKLY_UPLOAD_DIR, exist_ok=True)
+
+_column_checked = False
+
+def _ensure_file_name_column():
+  global _column_checked
+  if _column_checked:
+    return
+  try:
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SHOW COLUMNS FROM intern_weeklies LIKE 'file_name'")
+    if not cur.fetchone():
+      cur.execute("ALTER TABLE intern_weeklies ADD COLUMN file_name VARCHAR(255) DEFAULT NULL AFTER file_path")
+      db.commit()
+    cur.close()
+    _column_checked = True
+  except Exception:
+    traceback.print_exc()
 
 
 def require_login():
@@ -73,39 +96,66 @@ def save_weekly():
   """
   儲存或更新學生的實習週記。
   以 (student_id, semester, week_index) 作為一筆週記的唯一鍵。
+  支援 multipart/form-data（含檔案上傳）與 JSON 兩種格式。
   """
+  _ensure_file_name_column()
   try:
     if not require_login():
       return jsonify({"success": False, "message": "請先登入"}), 403
 
     user_id = session["user_id"]
-    data = request.get_json() or {}
 
-    semester = (data.get("semester") or "").strip()
-    week_index = data.get("week_index")
-    title = (data.get("title") or "").strip()
-    work_notes = (data.get("work_notes") or "").strip()
-    reflection = (data.get("reflection") or "").strip()
-    due_date = (data.get("due_date") or "").strip() or None
-    company_id = data.get("company_id") or None
+    if request.content_type and "multipart/form-data" in request.content_type:
+      semester = (request.form.get("semester") or "").strip()
+      week_index = request.form.get("week_index")
+      title = (request.form.get("title") or "").strip()
+      work_notes = (request.form.get("work_notes") or "").strip()
+      reflection = (request.form.get("reflection") or "").strip()
+      due_date = (request.form.get("due_date") or "").strip() or None
+      company_id = request.form.get("company_id") or None
+      uploaded_file = request.files.get("file")
+    else:
+      data = request.get_json() or {}
+      semester = (data.get("semester") or "").strip()
+      week_index = data.get("week_index")
+      title = (data.get("title") or "").strip()
+      work_notes = (data.get("work_notes") or "").strip()
+      reflection = (data.get("reflection") or "").strip()
+      due_date = (data.get("due_date") or "").strip() or None
+      company_id = data.get("company_id") or None
+      uploaded_file = None
 
     if not semester or not week_index:
       return jsonify({"success": False, "message": "缺少學期別或週次資訊"}), 400
 
+    week_index = int(week_index)
     filled_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    file_path_db = None
+    file_name_db = None
+    if uploaded_file and uploaded_file.filename:
+      safe_name = secure_filename(uploaded_file.filename)
+      ext = os.path.splitext(safe_name)[1]
+      unique_name = f"{user_id}_{semester}_w{week_index}_{int(datetime.now().timestamp())}{ext}"
+      save_abs = os.path.join(WEEKLY_UPLOAD_DIR, unique_name)
+      uploaded_file.save(save_abs)
+      file_path_db = f"uploads/intern_weeklies/{unique_name}"
+      file_name_db = uploaded_file.filename
 
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
-    # 檢查是否已經有該週的紀錄
     cursor.execute(
       """
-      SELECT id FROM intern_weeklies
+      SELECT id, file_path FROM intern_weeklies
       WHERE student_id = %s AND semester = %s AND week_index = %s
       """,
       (user_id, semester, week_index),
     )
     row = cursor.fetchone()
+
+    if file_path_db is None and row:
+      file_path_db = row.get("file_path")
 
     if row:
       cursor.execute(
@@ -117,6 +167,8 @@ def save_weekly():
             reflection=%s,
             due_date=%s,
             filled_at=%s,
+            file_path=%s,
+            file_name=%s,
             status=%s,
             updated_at=NOW()
         WHERE id=%s
@@ -128,6 +180,8 @@ def save_weekly():
           reflection,
           due_date,
           filled_at,
+          file_path_db,
+          file_name_db if file_name_db else row.get("file_name"),
           "submitted",
           row["id"],
         ),
@@ -137,8 +191,8 @@ def save_weekly():
         """
         INSERT INTO intern_weeklies
           (student_id, semester, week_index, title, company_id, work_notes, reflection,
-           due_date, filled_at, status, created_at, updated_at)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),NOW())
+           due_date, filled_at, file_path, file_name, status, created_at, updated_at)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW(),NOW())
         """,
         (
           user_id,
@@ -150,6 +204,8 @@ def save_weekly():
           reflection,
           due_date,
           filled_at,
+          file_path_db,
+          file_name_db,
           "submitted",
         ),
       )
@@ -157,7 +213,7 @@ def save_weekly():
     db.commit()
     cursor.close()
 
-    return jsonify({"success": True, "filled_at": filled_at})
+    return jsonify({"success": True, "filled_at": filled_at, "file_name": file_name_db or (row.get("file_name") if row else None), "file_path": file_path_db})
   except Exception as e:
     traceback.print_exc()
     return jsonify({"success": False, "message": str(e)}), 500
@@ -169,6 +225,7 @@ def my_weeklies():
   取得登入學生某一學期的所有週記紀錄。
   前端會用 week_index 來對應自動產生的區間。
   """
+  _ensure_file_name_column()
   try:
     if not require_login():
       return jsonify({"success": False, "message": "請先登入"}), 403
@@ -185,7 +242,8 @@ def my_weeklies():
       """
       SELECT
         id, semester, week_index, title, work_notes, reflection,
-        due_date, filled_at, status, teacher_comment, reviewed_at
+        due_date, filled_at, status, teacher_comment, reviewed_at,
+        file_path, file_name
       FROM intern_weeklies
       WHERE student_id = %s AND semester = %s
       ORDER BY week_index ASC
