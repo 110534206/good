@@ -152,6 +152,25 @@
       border-bottom: 2px solid #e2e8f0; font-weight: 700;
     }
     .card .card-desc { color: #64748b; font-size: 0.95rem; margin-bottom: 20px; line-height: 1.5; }
+    .search-wrap {
+      margin-bottom: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .search-wrap label { font-weight: 600; color: #334155; font-size: 0.95rem; }
+    .search-wrap input[type="text"] {
+      flex: 1; min-width: 180px; max-width: 280px; padding: 10px 14px 10px 36px;
+      border: 1px solid #e2e8f0; border-radius: 8px; font-size: 1rem;
+      background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z'/%3E%3C/svg%3E") no-repeat 12px center;
+    }
+    .search-wrap input:focus {
+      outline: none; border-color: #0454a3; box-shadow: 0 0 0 2px rgba(4, 84, 163, 0.2);
+    }
+    .search-wrap select {
+      padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px;
+      font-size: 1rem; background: #fff; color: #334155; min-width: 120px;
+    }
+    .search-wrap select:focus {
+      outline: none; border-color: #0454a3; box-shadow: 0 0 0 2px rgba(4, 84, 163, 0.2);
+    }
     .table-wrap { overflow-x: auto; }
     .data-table {
       width: 100%; border-collapse: collapse; font-size: 0.9rem; background: #fff;
@@ -494,15 +513,24 @@
     <div id="successMessage" class="alert alert-success" role="alert"></div>
     <div id="errorMessage" class="alert alert-danger" role="alert"></div>
 
-    <!-- 列表：待確認的退實習案件 -->
+    <!-- 列表：待確認的退實習案件（指導老師可依班級、姓名／學號篩選） -->
     <div id="listCard" class="card">
       <h2><i class="bi bi-list-ul" style="margin-right: 8px; color: #0454a3;"></i>待確認的退實習案件</h2>
+      <div class="search-wrap">
+        <label for="teacherClassFilter">班級</label>
+        <select id="teacherClassFilter" aria-label="篩選班級">
+          <option value="">全部班級</option>
+        </select>
+        <label for="teacherSearchInput">搜尋</label>
+        <input type="text" id="teacherSearchInput" placeholder="輸入姓名或學號" autocomplete="off" aria-label="搜尋學生姓名或學號">
+      </div>
       <div class="table-wrap">
         <table class="data-table">
           <thead>
             <tr>
               <th>學生姓名</th>
               <th>學號</th>
+              <th>班級</th>
               <th>公司</th>
               <th>職缺</th>
               <th>原因類別</th>
@@ -634,47 +662,98 @@
         return d.innerHTML;
       }
 
+      var allWithdrawRows = [];
+      var teacherClassFilter = document.getElementById('teacherClassFilter');
+      var teacherSearchInput = document.getElementById('teacherSearchInput');
+
+      function applyTeacherFilter() {
+        var q = (teacherSearchInput && teacherSearchInput.value) ? teacherSearchInput.value.trim().toLowerCase() : '';
+        var classVal = (teacherClassFilter && teacherClassFilter.value) ? teacherClassFilter.value.trim() : '';
+        var filtered = allWithdrawRows;
+        if (classVal) {
+          filtered = filtered.filter(function (row) {
+            var cd = (row.class_display || row.class_name || '').toString();
+            return cd === classVal;
+          });
+        }
+        if (q) {
+          filtered = filtered.filter(function (row) {
+            var name = (row.student_name || '').toString().toLowerCase();
+            var num = (row.student_number || '').toString().toLowerCase();
+            return name.indexOf(q) !== -1 || num.indexOf(q) !== -1;
+          });
+        }
+        renderWithdrawTable(filtered);
+      }
+
+      function renderWithdrawTable(rows) {
+        if (!rows || rows.length === 0) {
+          caseListBody.innerHTML = '<tr><td colspan="8" class="empty-msg">查無符合條件的案件</td></tr>';
+          listEmpty.style.display = 'none';
+          return;
+        }
+        listEmpty.style.display = 'none';
+        caseListBody.innerHTML = rows.map(function (row) {
+          var statusClass = (row.status || '') === 'confirmed' ? 'badge-confirmed' : 'badge-withdrawing';
+          var statusText = (row.status || '') === 'confirmed' ? '已確認' : '待確認';
+          var viewUrl = '/teacher_remove_intern?id=' + row.id;
+          var isConfirmed = (row.status || '') === 'confirmed';
+          var actionBtn = isConfirmed
+            ? '<a class="btn-view" href="' + viewUrl + '"><i class="bi bi-eye"></i> 查看</a>'
+            : '<a class="btn-confirm-case" href="' + viewUrl + '"><i class="bi bi-check-circle"></i> 確認案件</a>';
+          var classDisplay = row.class_display || row.class_name || '—';
+          return '<tr>' +
+            '<td>' + escapeHtml(row.student_name || '—') + '</td>' +
+            '<td>' + escapeHtml(row.student_number || '—') + '</td>' +
+            '<td>' + escapeHtml(classDisplay) + '</td>' +
+            '<td>' + escapeHtml(row.company_name || '—') + '</td>' +
+            '<td>' + escapeHtml(row.job_title || '—') + '</td>' +
+            '<td>' + escapeHtml(row.reason_category || '—') + '</td>' +
+            '<td class="col-status"><span class="badge ' + statusClass + '">' + escapeHtml(statusText) + '</span></td>' +
+            '<td class="col-action">' + actionBtn + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+
       // 載入列表
       function loadList() {
         fetch('/teacher/api/withdraw_cases', { credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (!res.success || !Array.isArray(res.data)) {
-              caseListBody.innerHTML = '<tr><td colspan="7" class="empty-msg">無法載入列表</td></tr>';
+              caseListBody.innerHTML = '<tr><td colspan="8" class="empty-msg">無法載入列表</td></tr>';
               listEmpty.style.display = 'none';
               return;
             }
             var rows = res.data;
+            allWithdrawRows = rows;
             if (rows.length === 0) {
               caseListBody.innerHTML = '';
               listEmpty.style.display = 'block';
+              if (teacherClassFilter) teacherClassFilter.innerHTML = '<option value="">全部班級</option>';
               return;
             }
-            listEmpty.style.display = 'none';
-            caseListBody.innerHTML = rows.map(function (row) {
-              var statusClass = (row.status || '') === 'confirmed' ? 'badge-confirmed' : 'badge-withdrawing';
-              var statusText = (row.status || '') === 'confirmed' ? '已確認' : '待確認';
-              var viewUrl = '/teacher_remove_intern?id=' + row.id;
-              var isConfirmed = (row.status || '') === 'confirmed';
-              var actionBtn = isConfirmed
-                ? '<a class="btn-view" href="' + viewUrl + '"><i class="bi bi-eye"></i> 查看</a>'
-                : '<a class="btn-confirm-case" href="' + viewUrl + '"><i class="bi bi-check-circle"></i> 確認案件</a>';
-              return '<tr>' +
-                '<td>' + escapeHtml(row.student_name || '—') + '</td>' +
-                '<td>' + escapeHtml(row.student_number || '—') + '</td>' +
-                '<td>' + escapeHtml(row.company_name || '—') + '</td>' +
-                '<td>' + escapeHtml(row.job_title || '—') + '</td>' +
-                '<td>' + escapeHtml(row.reason_category || '—') + '</td>' +
-                '<td class="col-status"><span class="badge ' + statusClass + '">' + escapeHtml(statusText) + '</span></td>' +
-                '<td class="col-action">' + actionBtn + '</td>' +
-                '</tr>';
-            }).join('');
+            var classSet = {};
+            rows.forEach(function (row) {
+              var cd = (row.class_display || row.class_name || '').toString().trim();
+              if (cd) classSet[cd] = true;
+            });
+            if (teacherClassFilter) {
+              teacherClassFilter.innerHTML = '<option value="">全部班級</option>' +
+                Object.keys(classSet).sort().map(function (c) {
+                  return '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>';
+                }).join('');
+            }
+            applyTeacherFilter();
           })
           .catch(function () {
-            caseListBody.innerHTML = '<tr><td colspan="7" class="empty-msg">載入失敗，請重新整理</td></tr>';
+            caseListBody.innerHTML = '<tr><td colspan="8" class="empty-msg">載入失敗，請重新整理</td></tr>';
             listEmpty.style.display = 'none';
           });
       }
+
+      if (teacherClassFilter) teacherClassFilter.addEventListener('change', applyTeacherFilter);
+      if (teacherSearchInput) teacherSearchInput.addEventListener('input', applyTeacherFilter);
 
       // 載入詳情
       function loadDetail(id) {
@@ -824,7 +903,7 @@
               notesEl.readOnly = isConfirmed;
               notesEl.classList.toggle('meeting-notes-readonly', isConfirmed);
             }
-            if (meetingLabel) meetingLabel.textContent = isConfirmed ? '' : '請填寫與該學生的面談紀錄，確認異動時一併儲存。';
+            if (meetingLabel) meetingLabel.textContent = isConfirmed ? '以下為已儲存的與學生訪談紀錄（唯讀）。' : '請填寫與該學生的面談紀錄，確認異動時一併儲存。';
           })
           .catch(function () {
             document.getElementById('detailReasonCategory').textContent = '載入失敗';

@@ -207,7 +207,8 @@
 
     <div id="listCard" class="card">
       <h2><i class="bi bi-people-fill" style="margin-right: 8px; color: #0454a3;"></i>該班學生實習狀況</h2>
-      <div class="search-wrap">
+      <!-- 班導僅看所帶班級學生，不需班級下拉與搜尋 -->
+      <div class="search-wrap" style="display: none;" aria-hidden="true">
         <label for="classFilter">班級</label>
         <select id="classFilter" aria-label="篩選班級">
           <option value="">全部班級</option>
