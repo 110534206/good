@@ -516,6 +516,9 @@
                       <button type="button" class="btn btn-outline-success btn-sm" id="save-template-btn">
                         儲存
                       </button>
+                      <button type="button" class="btn btn-sm ms-2" id="before-after-btn" style="background-color: #6f42c1; color: #fff; border-color: #6f42c1;" title="查看最後一次套用 AI 比對的修改前後對照">
+                        📋 修改前後
+                      </button>
                       <input type="file" id="excel-file-input" accept=".xlsx,.xls" style="display:none;">
                     </div>
 
@@ -3901,6 +3904,84 @@
         });
       }
 
+      const beforeAfterBtn = document.getElementById('before-after-btn');
+      if (beforeAfterBtn) {
+        beforeAfterBtn.addEventListener('click', () => {
+          const snapshot = window._courseBeforeApplySnapshot;
+          if (!snapshot || !Array.isArray(snapshot) || snapshot.length === 0) {
+            Swal.fire({ icon: 'info', title: '修改前後對照', text: '尚無修改前後資料。請先使用「AI 成績單比對」並按「套用」後，即可在此查看修改前後的差異。' });
+            return;
+          }
+          const current = (typeof allCoursesData !== 'undefined' && Array.isArray(allCoursesData)) ? allCoursesData : [];
+          const byName = {};
+          current.forEach(c => { byName[String(c.name || '').trim()] = c; });
+          const rows = [];
+          snapshot.forEach(b => {
+            const name = b.name || '';
+            const cur = byName[name];
+            const beforeGrade = b.grade || '-';
+            const beforeCredits = b.credits || '-';
+            const afterGrade = (cur && (cur.grade != null)) ? String(cur.grade).trim() : '-';
+            const afterCredits = (cur && (cur.credits != null)) ? String(cur.credits).trim() : '-';
+            if (beforeGrade !== afterGrade || beforeCredits !== afterCredits) {
+              rows.push({ name, beforeGrade, beforeCredits, afterGrade, afterCredits });
+            }
+          });
+          if (rows.length === 0) {
+            Swal.fire({ icon: 'info', title: '修改前後對照', text: '目前沒有偵測到成績/學分的變更，或尚未套用過 AI 比對結果。' });
+            return;
+          }
+          const PAGE_SIZE = 10;
+          const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+          let currentPage = 1;
+          function getPageRows(p) {
+            const start = (p - 1) * PAGE_SIZE;
+            return rows.slice(start, start + PAGE_SIZE);
+          }
+          function rowToHtml(r) {
+            return `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.beforeCredits)} / ${escapeHtml(r.beforeGrade)}</td><td>${escapeHtml(r.afterCredits)} / ${escapeHtml(r.afterGrade)}</td></tr>`;
+          }
+          const initialRowsHtml = getPageRows(1).map(rowToHtml).join('');
+          const paginationHtml = totalPages > 1 ? `
+            <div id="before-after-pagination" class="mt-2 d-flex justify-content-center align-items-center gap-2 flex-wrap">
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="before-after-prev">上一頁</button>
+              <span class="small">第 <span id="before-after-page-num">1</span> / ${totalPages} 頁（共 ${rows.length} 筆）</span>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="before-after-next">下一頁</button>
+            </div>
+          ` : '';
+          Swal.fire({
+            title: '修改前後對照 (BEFORE / AFTER)',
+            html: `
+              <div class="table-responsive text-start" style="max-height: 320px;">
+                <table class="table table-sm table-bordered">
+                  <thead class="table-light sticky-top"><tr><th>課程名稱</th><th>修改前 (學分/成績)</th><th>修改後 (學分/成績)</th></tr></thead>
+                  <tbody id="before-after-tbody">${initialRowsHtml}</tbody>
+                </table>
+              </div>
+              ${paginationHtml}
+            `,
+            width: '700px',
+            confirmButtonText: '關閉',
+            didOpen: () => {
+              if (totalPages <= 1) return;
+              const tbody = document.getElementById('before-after-tbody');
+              const prevBtn = document.getElementById('before-after-prev');
+              const nextBtn = document.getElementById('before-after-next');
+              const pageNumSpan = document.getElementById('before-after-page-num');
+              function renderPage(p) {
+                currentPage = p;
+                tbody.innerHTML = getPageRows(p).map(rowToHtml).join('');
+                pageNumSpan.textContent = p;
+                prevBtn.disabled = p <= 1;
+                nextBtn.disabled = p >= totalPages;
+              }
+              prevBtn.addEventListener('click', () => { if (currentPage > 1) renderPage(currentPage - 1); });
+              nextBtn.addEventListener('click', () => { if (currentPage < totalPages) renderPage(currentPage + 1); });
+            }
+          });
+        });
+      }
+
       const form = document.getElementById("resumeForm");
 
       // 綁定圖片預覽：個人照片、成績單、缺勤佐證（選擇檔案時即時顯示）
@@ -5419,6 +5500,13 @@
                 let newCount = 0;
                 clearCourseDiffMarkers();
 
+                // 儲存套用前的快照，供「查看修改前後」使用
+                window._courseBeforeApplySnapshot = allCoursesData.map(c => ({
+                    name: String(c.name || '').trim(),
+                    grade: String(c.grade || '').trim(),
+                    credits: String(c.credits ?? '').trim()
+                }));
+
                 matchResults.forEach(item => {
                     const { ocrCourse, matchIndex, action, gradeDiff, creditsDiff } = item;
 
@@ -5429,11 +5517,7 @@
                             allCoursesData[matchIndex].grade = ocrCourse.grade;
                             changed = true;
                         }
-
-                        if (creditsDiff && ocrCourse.credits !== undefined && ocrCourse.credits !== null && String(ocrCourse.credits).trim() !== '') {
-                            allCoursesData[matchIndex].credits = ocrCourse.credits;
-                            changed = true;
-                        }
+                        // 學分數一律以 Excel 為準，套用時不覆蓋
 
                         if (changed) {
                             allCoursesData[matchIndex].isNotTaken = false;

@@ -2,7 +2,10 @@ from flask import Blueprint, request, jsonify, render_template, session, send_fi
 from config import get_db
 from datetime import datetime
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash
 import os
+import re
+import secrets
 import traceback
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
@@ -370,6 +373,31 @@ def upload_company():
         conn = get_db()
         cursor = conn.cursor()
 
+        # 情境二：指導老師/主任可選擇「同時建立廠商帳號」。使用表單 E-mail（contact_email）為廠商帳號，帳密寄至該廠商 Email
+        create_vendor_account = False
+        vendor_username = None
+        vendor_plain_password = None
+        if request.is_json and role in ['teacher', 'director'] and data.get('create_vendor_account'):
+            vendor_email = (data.get('email') or '').strip()  # 表單「E-mail」欄位 = contact_email
+            if not vendor_email:
+                return jsonify({"success": False, "message": "請填寫「E-mail」欄位（用於建立廠商帳號並寄送登入資訊）"}), 400
+            if not re.match(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$', vendor_email):
+                return jsonify({"success": False, "message": "E-mail 格式錯誤"}), 400
+            cursor.execute("SELECT id FROM users WHERE email = %s", (vendor_email,))
+            if cursor.fetchone():
+                return jsonify({"success": False, "message": "該 Email 已被使用"}), 400
+            base_username = (re.sub(r'[^a-zA-Z0-9]', '', (vendor_email.split('@')[0] or 'vendor')[:20]) or 'vendor')
+            vendor_username = base_username
+            n = 1
+            while True:
+                cursor.execute("SELECT id FROM users WHERE username = %s", (vendor_username,))
+                if not cursor.fetchone():
+                    break
+                vendor_username = f"{base_username}{n}"
+                n += 1
+            vendor_plain_password = secrets.token_urlsafe(10)
+            create_vendor_account = True
+
         # 如果是科助，自動填入 advisor_user_id 和 reviewed_by_user_id，並設為已核准狀態
         if role == 'ta':
             advisor_user_id = user_id
@@ -399,44 +427,17 @@ def upload_company():
             status = 'pending'
             reviewed_at = None
         else:
-            # 如果是老師或主任，預設上傳教師為指導老師
-            updated_vendor_username = None  # 初始化變數
+            # 老師或主任：預設上傳者為指導老師；公司一律待主任/科助審核，不因建立廠商帳號而自動審核通過
             if role in ['teacher', 'director']:
                 advisor_user_id = user_id
-                
-                # 取得上傳者的名字（用於更新廠商的 teacher_name）
-                cursor.execute("SELECT name FROM users WHERE id = %s", (user_id,))
-                teacher_info = cursor.fetchone()
-                teacher_name = teacher_info[0] if teacher_info and teacher_info[0] else None
-                
-                # 檢查公司名稱是否匹配廠商對應的公司名稱
-                # 如果匹配，則更新該廠商的 teacher_name 為該指導老師的名字
-                vendor_company_map = {
-                    'vendor': '人人人',
-                    'vendora': '嘻嘻嘻'
-                }
-                
-                # 檢查公司名稱是否在 vendor_company_map 的值中
-                matched_vendor_username = None
-                for vendor_username, mapped_company_name in vendor_company_map.items():
-                    if company_name == mapped_company_name:
-                        matched_vendor_username = vendor_username
-                        break
-                
-                # 如果找到匹配的廠商，更新該廠商的 teacher_name 為該指導老師的名字
-                if matched_vendor_username and teacher_name:
-                    cursor.execute("""
-                        UPDATE users 
-                        SET teacher_name = %s 
-                        WHERE username = %s AND role = 'vendor'
-                    """, (teacher_name, matched_vendor_username))
-                    # 記錄更新的廠商資訊（用於後續的成功訊息）
-                    updated_vendor_username = matched_vendor_username
+                status = 'pending'
+                reviewed_at = None
+                reviewed_by_user_id = None
             else:
                 advisor_user_id = None
-            reviewed_by_user_id = None
-            status = 'pending'
-            reviewed_at = None
+                reviewed_by_user_id = None
+                status = 'pending'
+                reviewed_at = None
 
         # 準備公司資料
         if request.is_json:
@@ -485,9 +486,54 @@ def upload_company():
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, job_records)
 
+        # 情境二：建立廠商帳號（指導老師/主任），使用表單 email = contact_email，帳密寄至廠商 Email
+        if create_vendor_account and vendor_username and vendor_plain_password:
+            vendor_email_val = (data.get('email') or '').strip()  # 與 contact_email 一致
+            vendor_name_val = (data.get('vendor_display_name') or data.get('contact_person') or '').strip() or company_name
+            hashed = generate_password_hash(vendor_plain_password)
+            cursor.execute("""
+                INSERT INTO users (username, password, email, role, teacher_id, status)
+                VALUES (%s, %s, %s, 'vendor', %s, 'active')
+            """, (vendor_username, hashed, vendor_email_val, user_id))
+            new_vendor_id = cursor.lastrowid
+            if new_vendor_id and vendor_name_val:
+                try:
+                    cursor.execute("UPDATE users SET name = %s WHERE id = %s", (vendor_name_val, new_vendor_id))
+                except Exception:
+                    pass
+
         conn.commit()
 
         job_count = len(jobs_data)
+        
+        # 寄送廠商帳密至廠商 Email（表單 E-mail = contact_email），並同步寫入指導老師通知中心（通知內為可查看之明文密碼）
+        vendor_email_sent = False
+        if create_vendor_account and vendor_username and vendor_plain_password:
+            try:
+                login_url = (request.host_url or request.url_root or '').rstrip('/') + (url_for('auth_bp.login_page', _external=False) or '/login')
+            except Exception:
+                login_url = (request.host_url or '').rstrip('/') + '/login'
+            vendor_email_val = (data.get('email') or '').strip()
+            if vendor_email_val:
+                try:
+                    from email_service import send_vendor_credentials_to_vendor_email
+                    ok, _msg, _log = send_vendor_credentials_to_vendor_email(
+                        vendor_email_val, company_name, vendor_username, vendor_plain_password, login_url
+                    )
+                    vendor_email_sent = ok
+                    if not ok:
+                        traceback.print_exc()
+                except Exception as send_err:
+                    traceback.print_exc()
+            # 指導老師通知不顯示廠商帳密，僅提示已建立並已寄至廠商 Email
+            notif_msg = (
+                f"公司名稱：{company_name}\n\n"
+                "廠商帳號已建立，帳密已寄至廠商 E-mail，廠商可直接登入。若廠商未收到信，請廠商檢查垃圾信匣或聯絡系統管理員。"
+            )
+            try:
+                create_notification(user_id, "廠商帳號已建立（帳密已寄至廠商 Email）", notif_msg, category="company", link_url="/notifications")
+            except Exception as notif_err:
+                traceback.print_exc()
         
         # 根據角色顯示不同的成功訊息
         if role == 'ta':
@@ -496,16 +542,22 @@ def upload_company():
             message = f"公司 '{company_name}' ({job_count} 個職缺) 上傳成功，資料已標記為「待科助開放」。"
         else:
             # 老師或主任上傳
-            message = f"公司 '{company_name}' ({job_count} 個職缺) 上傳成功，等待審核。"
-            # 如果匹配到廠商並更新了 teacher_name，在訊息中提示
-            if updated_vendor_username:
-                message += f" 已自動更新廠商 '{updated_vendor_username}' 的指導老師關聯。"
+            if create_vendor_account:
+                message = (
+                    f"公司 '{company_name}' ({job_count} 個職缺) 與廠商帳號已建立。"
+                    f"{'廠商預設帳密已寄至表單 E-mail，廠商可直接登入。' if vendor_email_sent else '寄信至廠商 E-mail 未成功（請檢查系統郵件設定或垃圾信匣）。'}"
+                    " 帳密亦已記錄於您的「通知中心」（可查看密碼），若廠商未收到信可由此轉交。"
+                )
+            else:
+                message = f"公司 '{company_name}' ({job_count} 個職缺) 上傳成功，等待審核。"
 
         response_data = {
             "success": True,
             "message": message,
             "company_id": company_id
         }
+        if create_vendor_account:
+            response_data["vendor_email_sent"] = vendor_email_sent
         
         # 如果是新方式（JSON），提供下載連結
         if request.is_json and file_path:
@@ -540,23 +592,64 @@ def get_my_companies():
             return jsonify({"success": False, "message": "請先登入"}), 403
 
         user_id = session['user_id']
+        role = session.get('role', '')
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
 
-        cursor.execute("""
-            SELECT 
-                ic.id,
-                ic.company_name,
-                ic.status,
-                ic.company_doc_path AS filepath,
-                ic.submitted_at AS upload_time,
-                u.role AS uploader_role
-            FROM internship_companies ic
-            JOIN users u ON ic.uploaded_by_user_id = u.id
-            WHERE ic.uploaded_by_user_id = %s
-            ORDER BY ic.submitted_at DESC
-        """, (user_id,))
-        records = cursor.fetchall()
+        if role == 'vendor':
+            # 廠商：顯示自己上傳的 + 指導老師為其建立的公司（advisor_user_id = 廠商的 teacher_id）
+            cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (user_id,))
+            row = cursor.fetchone()
+            teacher_id = (row.get('teacher_id') or 0) if row else 0
+            if teacher_id:
+                cursor.execute("""
+                    SELECT 
+                        ic.id,
+                        ic.company_name,
+                        ic.status,
+                        ic.company_doc_path AS filepath,
+                        ic.submitted_at AS upload_time,
+                        u.role AS uploader_role,
+                        CASE WHEN ic.uploaded_by_user_id = %s THEN 0 ELSE 1 END AS sort_own_first,
+                        (ic.uploaded_by_user_id != %s) AS is_from_advisor
+                    FROM internship_companies ic
+                    JOIN users u ON ic.uploaded_by_user_id = u.id
+                    WHERE ic.uploaded_by_user_id = %s
+                       OR (ic.advisor_user_id = %s AND ic.uploaded_by_user_id != %s)
+                    ORDER BY sort_own_first ASC, ic.submitted_at DESC
+                """, (user_id, user_id, user_id, teacher_id, user_id))
+            else:
+                cursor.execute("""
+                    SELECT 
+                        ic.id,
+                        ic.company_name,
+                        ic.status,
+                        ic.company_doc_path AS filepath,
+                        ic.submitted_at AS upload_time,
+                        u.role AS uploader_role,
+                        0 AS sort_own_first,
+                        FALSE AS is_from_advisor
+                    FROM internship_companies ic
+                    JOIN users u ON ic.uploaded_by_user_id = u.id
+                    WHERE ic.uploaded_by_user_id = %s
+                    ORDER BY ic.submitted_at DESC
+                """, (user_id,))
+            records = cursor.fetchall()
+        else:
+            cursor.execute("""
+                SELECT 
+                    ic.id,
+                    ic.company_name,
+                    ic.status,
+                    ic.company_doc_path AS filepath,
+                    ic.submitted_at AS upload_time,
+                    u.role AS uploader_role
+                FROM internship_companies ic
+                JOIN users u ON ic.uploaded_by_user_id = u.id
+                WHERE ic.uploaded_by_user_id = %s
+                ORDER BY ic.submitted_at DESC
+            """, (user_id,))
+            records = cursor.fetchall()
 
         # === 🕒 加上台灣時區轉換 ===
         from datetime import datetime, timezone, timedelta
@@ -591,7 +684,10 @@ def download_company_file(file_id):
     try:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT company_doc_path FROM internship_companies WHERE id=%s", (file_id,))
+        cursor.execute("""
+            SELECT ic.id, ic.company_doc_path, ic.uploaded_by_user_id, ic.advisor_user_id
+            FROM internship_companies ic WHERE ic.id = %s
+        """, (file_id,))
         record = cursor.fetchone()
         
         if not record:
@@ -613,6 +709,20 @@ def download_company_file(file_id):
                 <a href="javascript:history.back()">返回</a>
                 </body></html>
             ''', file_id=file_id), 404
+
+        # 權限：登入者需為上傳者、或廠商時為指導老師建立的公司（advisor_user_id = 廠商 teacher_id）
+        if 'user_id' in session:
+            uid = session['user_id']
+            role = session.get('role', '')
+            if record['uploaded_by_user_id'] != uid:
+                if role == 'vendor':
+                    cursor.execute("SELECT teacher_id FROM users WHERE id = %s", (uid,))
+                    rv = cursor.fetchone()
+                    teacher_id = (rv.get('teacher_id') or 0) if rv else 0
+                    if record.get('advisor_user_id') != teacher_id:
+                        return jsonify({"success": False, "message": "無權限下載此檔案"}), 403
+                else:
+                    return jsonify({"success": False, "message": "無權限下載此檔案"}), 403
 
         project_root = os.path.dirname(current_app.root_path)
         abs_path = os.path.join(project_root, record["company_doc_path"])

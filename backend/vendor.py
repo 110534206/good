@@ -5837,6 +5837,7 @@ def class_teacher_intern_status():
                 return base + " (" + str(ay).strip() + "屆)"
             return base or ""
 
+        # matching_results 可能無 semester_id 欄位，改用以學生為單位取一筆錄取（與 director_intern_status 一致）
         try:
             cursor.execute("""
                 SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
@@ -5847,7 +5848,9 @@ def class_teacher_intern_status():
                 FROM users u
                 JOIN classes c ON c.id = u.class_id
                 JOIN classes_teacher ct ON ct.class_id = c.id AND ct.teacher_id = %s AND ct.role = 'classteacher'
-                LEFT JOIN matching_results mr ON mr.student_id = u.id AND mr.semester_id <=> %s
+                LEFT JOIN (SELECT mr1.* FROM matching_results mr1
+                    INNER JOIN (SELECT student_id, MAX(id) AS max_id FROM matching_results GROUP BY student_id) mr2
+                    ON mr1.student_id = mr2.student_id AND mr1.id = mr2.max_id) mr ON mr.student_id = u.id
                 LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
                 LEFT JOIN internship_companies ic ON ic.id = mr.company_id
                 LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
@@ -5858,7 +5861,7 @@ def class_teacher_intern_status():
                     AND (cfg.user_id = u.id OR (cfg.user_id IS NULL AND cfg.admission_year = c.admission_year))
                 )
                 ORDER BY c.name, u.username
-            """, (teacher_id, current_semester_id, current_semester_id, current_semester_id))
+            """, (teacher_id, current_semester_id, current_semester_id))
         except Exception as sem_err:
             if "semester_id" in str(sem_err) or "Unknown column" in str(sem_err) or "internship_configs" in str(sem_err):
                 cursor.execute("""
@@ -5870,7 +5873,9 @@ def class_teacher_intern_status():
                     FROM users u
                     JOIN classes c ON c.id = u.class_id
                     JOIN classes_teacher ct ON ct.class_id = c.id AND ct.teacher_id = %s AND ct.role = 'classteacher'
-                    LEFT JOIN matching_results mr ON mr.student_id = u.id AND mr.semester_id <=> %s
+                    LEFT JOIN (SELECT mr1.* FROM matching_results mr1
+                        INNER JOIN (SELECT student_id, MAX(id) AS max_id FROM matching_results GROUP BY student_id) mr2
+                        ON mr1.student_id = mr2.student_id AND mr1.id = mr2.max_id) mr ON mr.student_id = u.id
                     LEFT JOIN internship_jobs ij ON ij.id = mr.job_id
                     LEFT JOIN internship_companies ic ON ic.id = mr.company_id
                     LEFT JOIN internship_records vri ON vri.student_id = u.id AND vri.semester_id = %s
