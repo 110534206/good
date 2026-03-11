@@ -67,8 +67,6 @@
       padding: 12px 16px;
     }
     
-    #commentInput { width: 100%; height: 180px; resize: vertical; padding: 0.5rem; font-size: 1rem; line-height: 1.4; }
-    
     /* 側邊選單樣式 */
     #side-menu {
       position: fixed;
@@ -202,12 +200,11 @@
               <th style="padding: 14px 16px; font-weight: 600;">公司</th>
               <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
               <th id="statusHeader" style="padding: 14px 16px; font-weight: 600; display: none;">狀態</th>
-              <th style="padding: 14px 16px; font-weight: 600;" id="commentHeader">留言</th>
               <th style="padding: 14px 16px; font-weight: 600;">操作</th>
             </tr>
           </thead>
           <tbody id="resumeTableBody">
-            <tr><td colspan="10" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
+            <tr><td colspan="9" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -219,13 +216,13 @@
     <div class="modal-dialog modal-lg modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="commentModalLabel">編輯留言</h5>
+          <h5 class="modal-title" id="commentModalLabel">填寫退件原因</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body"><textarea id="commentInput"></textarea></div>
+        <div class="modal-body"><textarea id="commentInput" style="width:100%; height:180px; resize:vertical; padding:0.5rem; font-size:1rem; line-height:1.4;"></textarea></div>
         <div class="modal-footer">
           <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button class="btn btn-primary" id="saveCommentBtn">送出</button>
+          <button class="btn btn-primary" id="saveCommentBtn">確認退件</button>
         </div>
       </div>
     </div>
@@ -361,8 +358,6 @@
       document.getElementById("companyFilter").addEventListener("change", applyFilters);
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
-      document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
-
       // 全選/取消全選（與主任頁面一致）
       document.addEventListener("change", function(e) {
         if (e.target.id === "selectAllCheckbox") {
@@ -423,46 +418,16 @@
       deptSelect.innerHTML = `<option value="">所有學年</option><option value="1132">1132</option><option value="1142">1142</option>`;
       
       const classSelect = document.getElementById("classFilter");
-      if (isDirectorMode) {
-          // 主任模式：與 class_review_resume.html 一樣的邏輯
-          classSelect.innerHTML = `
-            <option value="">所有班級</option>
-            <option value="忠班">忠班</option>
-            <option value="孝班">孝班</option>
-          `;
-          
-          // 動態添加其他班級（如果有的話）
-          const classSet = new Set();
-          data.forEach(r => { 
-            if(r.className && r.className !== "忠班" && r.className !== "孝班") {
-              classSet.add(r.className);
-            }
-          });
-          
-          // 將其他班級按字母順序排序後加入選單
-          Array.from(classSet).sort().forEach(c => {
-            classSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
-          });
-      } else {
-          // 班導模式：顯示班導的班級
-          classSelect.innerHTML = `
-            <option value="">所有班級</option>
-            <option value="忠班">忠班</option>
-            <option value="孝班">孝班</option>
-          `;
-          
-          // 動態添加其他班級（如果有的話）
-          const classSet = new Set();
-          data.forEach(r => { 
-            if(r.className && r.className !== "忠班" && r.className !== "孝班") {
-              classSet.add(r.className);
-            }
-          });
-          
-          Array.from(classSet).sort().forEach(c => {
-            classSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
-          });
-      }
+      classSelect.innerHTML = `<option value="">所有班級</option>`;
+      const classSet = new Set();
+      data.forEach(r => {
+        if (r.className && r.className.trim()) {
+          classSet.add(r.className.trim());
+        }
+      });
+      Array.from(classSet).sort().forEach(c => {
+        classSelect.innerHTML += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`;
+      });
 
       // 填充公司名稱下拉選單
       const companyNameSelect = document.getElementById("companyNameFilter");
@@ -605,7 +570,7 @@
       }
       
       if (resumes.length === 0) {
-        const colspan = isViewOnlyMode ? 9 : 10;
+        const colspan = isViewOnlyMode ? 8 : 9;
         tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
         const pagination = document.getElementById("pagination");
         if (pagination) pagination.innerHTML = "";
@@ -687,9 +652,6 @@
            <td style="padding: 14px 16px;">${escapeHtml(row.display_job)}</td>
            ${statusCell}
            <td style="padding: 14px 16px;">
-             ${ renderCommentBtn(row, isViewOnly, pid) }
-           </td>
-           <td style="padding: 14px 16px;">
              ${ renderActionBtns(row, isViewOnly, pid, isViewOnlyMode) }
            </td>
         `;
@@ -697,21 +659,6 @@
       });
 
       renderPagination(allRowsData.length);
-    }
-
-    function renderCommentBtn(row, isViewOnly, pid) {
-        const hasComment = row.comment && row.comment.trim() !== '';
-        const btnClass = hasComment ? 'text-success' : '';
-        const btnText = hasComment ? '已填寫' : '未填寫';
-        
-        if (isViewOnly) {
-            if (hasComment) {
-                return `<button class="btn btn-sm btn-outline-secondary text-success" onclick="openCommentModal(${row.id}, '${escapeHtml(row.comment)}', ${pid}, true)">已填寫</button>`;
-            } else {
-                return `<span style="color:#aaa; font-size:0.9em;">未填寫</span>`;
-            }
-        }
-        return `<button class="btn btn-sm btn-outline-secondary ${btnClass}" onclick="openCommentModal(${row.id}, '${escapeHtml(row.comment)}', ${pid}, false)">${btnText}</button>`;
     }
 
     function renderActionBtns(row, isViewOnly, pid, isDirectorMode = false) {
@@ -831,48 +778,6 @@
                }
            });
        };
-    }
-
-    function openCommentModal(id, comment, pid, readonly) {
-        document.getElementById("commentInput").value = comment;
-        document.getElementById("commentInput").readOnly = readonly;
-        document.getElementById("commentModalLabel").textContent = readonly ? "查看留言" : "編輯留言";
-        const saveBtn = document.getElementById("saveCommentBtn");
-        saveBtn.style.display = readonly ? 'none' : 'block';
-        saveBtn.textContent = "儲存";
-        
-        if (!readonly) {
-            currentResumeId = id;
-            currentPreferenceId = pid;
-            saveBtn.onclick = saveComment; 
-        }
-        new bootstrap.Modal(document.getElementById("commentModal")).show();
-    }
-
-    function saveComment() {
-        const val = document.getElementById("commentInput").value.trim();
-        const body = { field: 'comment', value: val, resume_id: currentResumeId };
-        if(currentPreferenceId) body.preference_id = currentPreferenceId;
-
-        fetch("/api/update_resume_field", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body)
-        }).then(res => res.json()).then(data => {
-             if(data.success) {
-                 alert("留言已更新");
-                 bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
-                 // 重新載入資料（與 review_resume.html 一致）
-                 fetch('/api/teacher_review_resumes').then(r=>r.json()).then(d=>{
-                   if(d.success) { 
-                     allResumes = d.data || []; 
-                     isDeadlinePassed = d.is_deadline_passed || false;
-                     applyFilters(); 
-                   }
-                 });
-             } else {
-                 alert("失敗");
-             }
-        });
     }
 
   </script>

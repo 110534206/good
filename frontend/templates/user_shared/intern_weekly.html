@@ -411,15 +411,16 @@
           <td>${w.due_date || '—'}</td>
           <td>${w.filled_at || '—'}</td>
           <td>
-            <span class="${w.reviewed ? 'weekly-status-done' : 'weekly-status-empty'}">
-              ${w.reviewed ? '已批閱' : '未批閱'}
+            <span class="${w.status === 'returned' ? 'weekly-status-empty' : w.reviewed ? 'weekly-status-done' : 'weekly-status-empty'}"
+                  style="${w.status === 'returned' ? 'color:#e67e22;font-weight:600;' : ''}">
+              ${w.status === 'returned' ? '退回修改' : w.reviewed ? '已批閱' : '未批閱'}
             </span>
           </td>
           <td>
             <button type="button"
-                    class="btn ${w.filled_at ? 'btn-outline-secondary' : 'btn-outline-primary'}" style="padding:6px 18px; font-size:1rem;"
+                    class="btn ${w.status === 'returned' ? 'btn-outline-warning' : w.filled_at ? 'btn-outline-secondary' : 'btn-outline-primary'}" style="padding:6px 18px; font-size:1rem;"
                     onclick="handleWeeklyAction(${w.id || 'null'})">
-              ${w.filled_at ? '檢視' : '填寫'}
+              ${w.status === 'returned' ? '修改' : w.filled_at ? '檢視' : '填寫'}
             </button>
           </td>
         `;
@@ -475,7 +476,8 @@
 
       semesterEl.value = document.getElementById('weeklySemester')?.textContent || '';
 
-      const isViewOnly = !!(week && week.filled_at);
+      const isReturned = !!(week && week.status === 'returned');
+      const isViewOnly = !!(week && week.filled_at) && !isReturned;
       const saveBtn = document.getElementById('saveWeeklyBtn');
 
       titleEl.readOnly = isViewOnly;
@@ -552,7 +554,8 @@
         week.filled_at = data.filled_at || week.filled_at;
         week.file_name = data.file_name || week.file_name;
         week.file_path = data.file_path || week.file_path;
-        week.reviewed = week.reviewed || false;
+        week.status = 'submitted';
+        week.reviewed = false;
 
         renderWeeklyTable(allWeeks);
 
@@ -602,6 +605,7 @@
                 target.reflection = rec.reflection || '';
                 target.due_date = rec.due_date || target.due_date;
                 target.filled_at = rec.filled_at || '';
+                target.status = rec.status || '';
                 target.reviewed = rec.status === 'reviewed';
                 target.teacher_comment = rec.teacher_comment || '';
                 target.reviewed_at = rec.reviewed_at || '';

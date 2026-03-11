@@ -1323,6 +1323,7 @@ def get_all_admissions():
     user_role = session.get('role')
     
     class_id = request.args.get('class_id', type=int)
+    class_name = request.args.get('class_name', '').strip()
     semester = request.args.get('semester', '').strip()
     company_id = request.args.get('company_id', type=int)
     keyword = request.args.get('keyword', '').strip()
@@ -1404,6 +1405,10 @@ def get_all_admissions():
             base_query += " AND u_student.class_id = %s"
             params.append(class_id)
         
+        if class_name:
+            base_query += " AND TRIM(c.name) = %s"
+            params.append(class_name.strip())
+        
         if semester:
             pass
         
@@ -1418,8 +1423,10 @@ def get_all_admissions():
         
         base_query += " ORDER BY mr.matched_at DESC, u_student.name ASC"
         
+        print(f"🔍 [DEBUG get_all_admissions] class_name={class_name!r}, class_id={class_id}")
         cursor.execute(base_query, params)
         students = cursor.fetchall()
+        print(f"🔍 [DEBUG get_all_admissions] 結果: {len(students)} 筆")
         
         # 格式化日期
         for s in students:

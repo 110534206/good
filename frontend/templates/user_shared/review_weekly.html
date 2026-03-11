@@ -637,19 +637,31 @@
       const workMatch = document.getElementById('rvWorkMatch').value;
       const performance = document.getElementById('rvPerformance').value;
       const reportStatus = document.getElementById('rvReportStatus').value;
+      const comment = document.getElementById('rvTeacherComment').value.trim();
 
-      if (!adaptation || !workMatch || !performance || !reportStatus) {
-        alert('請完成前 4 項評估項目後再送出。');
-        return;
+      if (action === 'approve') {
+        if (!adaptation || !workMatch || !performance || !reportStatus) {
+          alert('請完成前 4 項評估項目後再送出。');
+          return;
+        }
+      } else {
+        if (!comment) {
+          alert('退回修改時請填寫評語，讓學生知道需要修改的地方。');
+          return;
+        }
       }
 
-      const comment = document.getElementById('rvTeacherComment').value.trim();
-      const reviewData = [
-        `1. 適應情況是否良好:${adaptation}`,
-        `2. 工作內容是否符合資管專業:${workMatch}`,
-        `3. 工作表現是否符合單位期待:${performance}`,
-        `4. 成果報告進行狀況:${reportStatus}`,
-      ].join('\n') + (comment ? `\n${comment}` : '');
+      let reviewData = '';
+      if (adaptation || workMatch || performance || reportStatus) {
+        reviewData = [
+          `1. 適應情況是否良好:${adaptation || '未填'}`,
+          `2. 工作內容是否符合資管專業:${workMatch || '未填'}`,
+          `3. 工作表現是否符合單位期待:${performance || '未填'}`,
+          `4. 成果報告進行狀況:${reportStatus || '未填'}`,
+        ].join('\n') + (comment ? `\n${comment}` : '');
+      } else {
+        reviewData = comment;
+      }
 
       const url = action === 'approve'
         ? `/intern_weekly/api/approve/${currentReviewId}`

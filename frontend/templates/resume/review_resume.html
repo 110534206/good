@@ -98,8 +98,6 @@
       padding: 12px 16px;
     }
     
-    #commentInput { width: 100%; height: 180px; resize: vertical; padding: 0.5rem; font-size: 1rem; line-height: 1.4; }
-    
     /* 側邊選單樣式（參考 director_home） */
     #side-menu {
       position: fixed;
@@ -235,34 +233,17 @@
               <th style="padding: 14px 16px; font-weight: 600;">選擇公司</th>
               <th style="padding: 14px 16px; font-weight: 600;">職缺</th>
               <th id="statusHeader" style="padding: 14px 16px; font-weight: 600; display: none;">狀態</th>
-              <th style="padding: 14px 16px; font-weight: 600;" id="commentHeader">留言</th>
               <th style="padding: 14px 16px; font-weight: 600;">操作</th>
             </tr>
           </thead>
           <tbody id="resumeTableBody">
-            <tr><td colspan="10" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
+            <tr><td colspan="9" style="padding: 14px 16px; text-align: center; color: #64748b;">載入中...</td></tr>
           </tbody>
         </table>
       </div>
       <nav><ul class="pagination justify-content-center mt-3" id="pagination"></ul></nav>
     </section>
   </main>
-
-  <div class="modal fade" id="commentModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="commentModalLabel">編輯留言</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body"><textarea id="commentInput"></textarea></div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-          <button class="btn btn-primary" id="saveCommentBtn">送出</button>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- 側邊選單（指導老師預設；主任由 JS 依角色替換為 director 選單） -->
   <nav id="side-menu" aria-hidden="true">
@@ -286,9 +267,6 @@
 
   <script>
     let allResumes = [];
-    let currentResumeId = null;
-    let currentPreferenceId = null;
-    let currentApplicationId = null;  // 指導老師審核用（投遞紀錄 id）
     let currentPage = 1;
     const rowsPerPage = 10;
     let userRole = null;
@@ -410,10 +388,7 @@
           let apiUrl;
           if (userRole === 'vendor') {
             apiUrl = '/vendor/api/resumes';
-            const commentHeader = document.getElementById('commentHeader');
-            if (commentHeader) commentHeader.textContent = '廠商留言';
           } else {
-            // 使用 /api/teacher_review_resumes API
             apiUrl = '/api/teacher_review_resumes';
           }
 
@@ -576,8 +551,6 @@
       document.getElementById("companyFilter").addEventListener("change", applyFilters);
       document.getElementById("statusFilter").addEventListener("change", applyFilters);
       document.getElementById("searchBox").addEventListener("input", applyFilters);
-      document.getElementById("saveCommentBtn").addEventListener("click", saveComment);
-      
       // 傳送給廠商按鈕事件
       const sendToVendorBtn = document.getElementById("sendToVendorBtn");
       if (sendToVendorBtn) {
@@ -925,7 +898,7 @@
       }
       
       if (resumes.length === 0) {
-        const colspan = isViewOnlyMode ? 9 : 10;
+        const colspan = isViewOnlyMode ? 8 : 9;
         tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; color: #64748b; padding: 16px;">目前沒有資料</td></tr>`;
         document.getElementById("pagination").innerHTML = "";
         return;
@@ -964,8 +937,6 @@
           // 班導和其他角色：使用 display_status
           st = r.display_status || 'uploaded';
         }
-        const cm = r.comment || '';
-
         // 狀態篩選
         if (filterStatus && st !== filterStatus) return;
         
@@ -978,7 +949,6 @@
             display_job: job,
             preference_id: pid,
             display_status: st,
-            comment: cm,
             isMultiRow: true
         });
       });
@@ -1046,9 +1016,6 @@
            <td style="padding: 14px 16px;">${escapeHtml(row.display_job)}</td>
            ${statusCell}
            <td style="padding: 14px 16px;">
-             ${ renderCommentBtn(row, isViewOnly, pid) }
-           </td>
-           <td style="padding: 14px 16px;">
              ${ renderActionBtns(row, isViewOnly, pid, isViewOnlyMode) }
            </td>
         `;
@@ -1069,24 +1036,6 @@
           selectAllCheckbox.style.opacity = '0.5';
         }
       }
-    }
-
-    function renderCommentBtn(row, isViewOnly, pid) {
-        const hasComment = row.comment && row.comment.trim() !== '';
-        const btnClass = hasComment ? 'text-success' : '';
-        const btnText = hasComment ? '已填寫' : '未填寫';
-        const appId = row.application_id != null ? row.application_id : 'null';
-        const commentEsc = (row.comment || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r/g, '').replace(/\n/g, ' ');
-        if (isViewOnly) {
-            if (hasComment) {
-                return `<button class="btn btn-sm btn-outline-secondary text-success" onclick="openCommentModal(${row.id}, '${commentEsc}', ${pid}, ${appId}, true)">已填寫</button>`;
-            } else {
-                return `<span style="color:#aaa; font-size:0.9em;">未填寫</span>`;
-            }
-        }
-        // 班導僅能查看留言，不可編輯
-        const commentReadonly = userRole === 'class_teacher';
-        return `<button class="btn btn-sm btn-outline-secondary ${btnClass}" onclick="openCommentModal(${row.id}, '${commentEsc}', ${pid}, ${appId}, ${commentReadonly})">${btnText}</button>`;
     }
 
     function renderActionBtns(row, isViewOnly, pid, isViewOnlyMode = false) {
@@ -1184,56 +1133,6 @@
       });
     }
 
-
-    function openCommentModal(id, comment, pid, applicationId, readonly) {
-        document.getElementById("commentInput").value = comment;
-        document.getElementById("commentInput").readOnly = readonly;
-        document.getElementById("commentModalLabel").textContent = readonly ? "查看留言" : "編輯留言";
-        const saveBtn = document.getElementById("saveCommentBtn");
-        saveBtn.style.display = readonly ? 'none' : 'block';
-        saveBtn.textContent = "儲存";
-        
-        if (!readonly) {
-            currentResumeId = id;
-            currentPreferenceId = pid;
-            currentApplicationId = applicationId != null && applicationId !== 'null' ? applicationId : null;
-            saveBtn.onclick = saveComment; 
-        }
-        new bootstrap.Modal(document.getElementById("commentModal")).show();
-    }
-
-    function saveComment() {
-        const val = document.getElementById("commentInput").value.trim();
-        const body = { field: 'comment', value: val };
-        if ((userRole === 'teacher' || userRole === 'class_teacher') && currentApplicationId != null) {
-            body.application_id = currentApplicationId;
-        } else {
-            body.resume_id = currentResumeId;
-        }
-        if (currentPreferenceId) body.preference_id = currentPreferenceId;
-
-        fetch("/api/update_resume_field", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body)
-        }).then(res => res.json()).then(data => {
-             if(data.success) {
-                 alert("留言已更新");
-                 bootstrap.Modal.getInstance(document.getElementById("commentModal")).hide();
-                 // 重新載入資料
-                 if (userRole === 'vendor') {
-                   fetch('/vendor/api/resumes').then(r=>r.json()).then(d=>{
-                     if(d.success) { allResumes=d.resumes || []; applyFilters(); }
-                   });
-                 } else {
-                   fetch('/api/teacher_review_resumes').then(r=>r.json()).then(d=>{
-                     if(d.success) { allResumes=d.data || []; applyFilters(); }
-                   });
-                 }
-             } else {
-                 alert("失敗");
-             }
-        });
-    }
 
     // 批量標記選中的履歷為通過（等待截止時間後統一傳送給廠商）
     async function sendSelectedToVendor() {
