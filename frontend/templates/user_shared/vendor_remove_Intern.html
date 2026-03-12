@@ -570,6 +570,11 @@
       border: none; background: #0454a3; color: #fff; font-size: 0.85rem; cursor: pointer; text-decoration: none;
     }
     .btn-view-history:hover { background: #0369a1; color: #fff; }
+    .btn-confirm-case-table {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
+      border: none; background: #dc2626; color: #fff; font-size: 0.85rem; cursor: pointer; text-decoration: none;
+    }
+    .btn-confirm-case-table:hover { background: #b91c1c; color: #fff; }
     .btn-revoke-withdraw {
       display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
       border: none; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff;
@@ -637,6 +642,26 @@
       overflow-y: auto;
       flex: 1;
     }
+    .history-detail-footer {
+      padding: 16px 32px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+    }
+    .history-detail-footer .btn-confirm-red {
+      min-width: 120px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      background: #dc2626;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .history-detail-footer .btn-confirm-red:hover { background: #b91c1c; }
+    .history-detail-footer .btn-confirm-red:disabled { background: #94a3b8; cursor: not-allowed; }
     .history-detail-block {
       background: #f8fafc;
       border-radius: 12px;
@@ -833,6 +858,9 @@
           <h4>與學生訪談紀錄（指導老師填寫）</h4>
           <p class="value" id="historyDetailMeetingNotes" style="white-space: pre-wrap;">—</p>
         </div>
+      </div>
+      <div class="history-detail-footer" id="historyDetailFooter" style="display: none;">
+        <button type="button" class="btn-confirm-red" id="vendorConfirmTeacherCaseBtn">確認案件</button>
       </div>
     </div>
   </div>
@@ -1052,8 +1080,8 @@
             var status = (row.status || '').toLowerCase();
             var info = statusMap[status] || { text: status || '—', class: 'intern-status-pending' };
             var recordId = row.record_id != null ? row.record_id : '';
-            var previewBtn = recordId ? '<button type="button" class="btn-view-history btn-preview-intern" data-case-id="' + escapeHtml(String(recordId)) + '"><i class="bi bi-eye"></i> 預覽</button>' : '—';
-            return '<tr><td>' + escapeHtml(row.student_name || '—') + '</td><td>' + escapeHtml(row.student_number || '—') + '</td><td>' + escapeHtml(row.class_display || row.class_name || '—') + '</td><td>' + escapeHtml(row.company_name || '—') + '</td><td>' + escapeHtml(row.job_title || '—') + '</td><td>' + escapeHtml(row.reason_category || '—') + '</td><td class="col-status"><span class="intern-status ' + info.class + '">' + escapeHtml(info.text) + '</span></td><td class="col-action">' + previewBtn + '</td></tr>';
+            var confirmBtn = recordId ? '<button type="button" class="btn-confirm-case-table btn-preview-intern" data-case-id="' + escapeHtml(String(recordId)) + '"><i class="bi bi-check-circle"></i> 確認案件</button>' : '—';
+            return '<tr><td>' + escapeHtml(row.student_name || '—') + '</td><td>' + escapeHtml(row.student_number || '—') + '</td><td>' + escapeHtml(row.class_display || row.class_name || '—') + '</td><td>' + escapeHtml(row.company_name || '—') + '</td><td>' + escapeHtml(row.job_title || '—') + '</td><td>' + escapeHtml(row.reason_category || '—') + '</td><td class="col-status"><span class="intern-status ' + info.class + '">' + escapeHtml(info.text) + '</span></td><td class="col-action">' + confirmBtn + '</td></tr>';
           }).join('');
         } catch (e) {
           teacherWithdrawTbody.innerHTML = '<tr><td class="intern-table-empty" colspan="8">載入失敗，請重新整理。</td></tr>';
@@ -1116,8 +1144,11 @@
           var attBlock = document.getElementById('historyDetailAttachmentsBlock');
           var attList = document.getElementById('historyDetailAttachmentsList');
           var meetingBlock = document.getElementById('historyDetailMeetingBlock');
+          var detailFooter = document.getElementById('historyDetailFooter');
+          var confirmCaseBtn = document.getElementById('vendorConfirmTeacherCaseBtn');
           if (attBlock) attBlock.style.display = 'none';
           if (meetingBlock) meetingBlock.style.display = 'none';
+          if (detailFooter) detailFooter.style.display = 'none';
 
           fetch('/vendor/api/withdraw_case_detail?id=' + encodeURIComponent(recordId), { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
@@ -1136,6 +1167,15 @@
               if (d.teacher_meeting_notes && meetingBlock) meetingBlock.style.display = 'block';
 
               var isTeacherInitiated = (d.initiated_by || '').toLowerCase() === 'teacher';
+              var isWithdrawing = (d.status || '').toLowerCase() === 'withdrawing';
+              if (detailFooter && confirmCaseBtn) {
+                if (isTeacherInitiated && isWithdrawing) {
+                  confirmCaseBtn.setAttribute('data-case-id', String(d.id));
+                  detailFooter.style.display = 'flex';
+                } else {
+                  detailFooter.style.display = 'none';
+                }
+              }
               var attTitle = document.getElementById('historyDetailAttachmentsTitle');
               if (attTitle) attTitle.textContent = isTeacherInitiated ? '指導老師佐證 (圖片/檔案)' : '廠商佐證 (圖片/檔案)';
               if (attBlock && attList) {
@@ -1194,6 +1234,35 @@
           historyDetailCloseBtn.addEventListener('click', function () {
             historyDetailBackdrop.classList.remove('show');
             historyDetailBackdrop.setAttribute('aria-hidden', 'true');
+          });
+        }
+        var vendorConfirmTeacherCaseBtn = document.getElementById('vendorConfirmTeacherCaseBtn');
+        if (vendorConfirmTeacherCaseBtn) {
+          vendorConfirmTeacherCaseBtn.addEventListener('click', function () {
+            var caseId = vendorConfirmTeacherCaseBtn.getAttribute('data-case-id');
+            if (!caseId) return;
+            if (!window.confirm('確定要確認此退實習案件？確認後案件狀態將變更為已確認。')) return;
+            vendorConfirmTeacherCaseBtn.disabled = true;
+            fetch('/vendor/api/withdraw_confirm_teacher_case', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ id: caseId })
+            })
+              .then(function (r) { return r.json(); })
+              .then(function (data) {
+                if (data.success) {
+                  if (historyDetailBackdrop) {
+                    historyDetailBackdrop.classList.remove('show');
+                    historyDetailBackdrop.setAttribute('aria-hidden', 'true');
+                  }
+                  loadTeacherWithdrawList();
+                } else {
+                  alert(data.message || '確認失敗');
+                }
+              })
+              .catch(function () { alert('網路錯誤，請稍後再試'); })
+              .finally(function () { vendorConfirmTeacherCaseBtn.disabled = false; });
           });
         }
         if (historyDetailBackdrop) {

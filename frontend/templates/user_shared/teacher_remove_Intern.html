@@ -211,13 +211,46 @@
     }
     .meeting-notes-input:focus { outline: none; border-color: #0454a3; box-shadow: 0 0 0 2px rgba(4, 84, 163, 0.2); }
     .meeting-notes-input.meeting-notes-readonly { background: #f8fafc; cursor: default; color: #475569; }
+    .detail-actions {
+      margin-top: 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      align-items: center;
+    }
+    .detail-actions .btn-confirm,
+    .detail-actions .btn-reject {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
     .btn-confirm {
-      padding: 12px 24px; border-radius: 8px; border: none; background: #dc2626; color: #fff;
-      font-size: 1rem; font-weight: 600; cursor: pointer;
+      border: none;
+      background: #dc2626;
+      color: #fff;
     }
     .btn-confirm:hover { background: #b91c1c; }
     .btn-confirm:disabled { background: #94a3b8; cursor: not-allowed; }
-    .detail-actions { margin-top: 24px; text-align: center; }
+    .btn-reject {
+      border: none;
+      background: #64748b;
+      color: #fff;
+      min-width: 110px;
+    }
+    .btn-reject:hover { background: #475569; }
+    .btn-reject:disabled {
+      background: #94a3b8;
+      color: #fff;
+      cursor: not-allowed;
+    }
     .empty-msg { text-align: center; padding: 24px; color: #64748b; }
     .alert { padding: 14px 16px; border-radius: 8px; margin-bottom: 20px; }
     .alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
@@ -739,6 +772,7 @@
 
       <div class="detail-actions">
         <button type="button" class="btn-confirm" id="confirmBtn">確認異動</button>
+        <button type="button" class="btn-reject" id="rejectBtn">駁回</button>
       </div>
     </div>
   </div>
@@ -763,6 +797,7 @@
       const successMessage = document.getElementById('successMessage');
       const errorMessage = document.getElementById('errorMessage');
       const confirmBtn = document.getElementById('confirmBtn');
+      const rejectBtn = document.getElementById('rejectBtn');
 
       function showError(msg) {
         errorMessage.textContent = msg || '發生錯誤';
@@ -1268,6 +1303,11 @@
             var isTeacherInitiated = (d.initiated_by || '').toLowerCase() === 'teacher';
             var readOnlyMode = isConfirmed || viewOnly;
             confirmBtn.disabled = readOnlyMode;
+            if (rejectBtn) {
+              rejectBtn.disabled = readOnlyMode;
+              rejectBtn.style.display = isTeacherInitiated ? 'none' : '';
+              rejectBtn.setAttribute('data-case-id', d.id);
+            }
             if (detailActions) detailActions.style.display = viewOnly ? 'none' : '';
             confirmBtn.setAttribute('data-case-id', d.id);
             confirmBtn.setAttribute('data-initiated-by', d.initiated_by || 'vendor');
@@ -1338,6 +1378,35 @@
             confirmBtn.disabled = false;
           });
       });
+
+      if (rejectBtn) {
+        rejectBtn.addEventListener('click', function () {
+          var id = rejectBtn.getAttribute('data-case-id');
+          if (!id) return;
+          if (!window.confirm('確定要駁回此退實習申請？駁回後該申請將不再進行退實習流程。')) return;
+          hideMessages();
+          rejectBtn.disabled = true;
+          fetch('/teacher/api/withdraw_reject', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id }),
+            credentials: 'same-origin'
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+              if (res.success) {
+                window.location.href = '/teacher_remove_intern';
+              } else {
+                showError(res.message || '駁回失敗');
+                rejectBtn.disabled = false;
+              }
+            })
+            .catch(function () {
+              showError('網路錯誤，請稍後再試');
+              rejectBtn.disabled = false;
+            });
+        });
+      }
     })();
   </script>
 </body>
