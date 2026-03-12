@@ -483,6 +483,14 @@
     }
     .btn-apply-withdraw:hover { opacity: 0.95; }
     .btn-apply-withdraw:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-revoke-teacher-apply {
+      display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
+      padding: 6px 12px; border-radius: 6px; border: none;
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff;
+      font-size: 0.9rem; cursor: pointer;
+    }
+    .btn-revoke-teacher-apply:hover { background: linear-gradient(135deg, #d97706 0%, #b45309 100%); }
+    .btn-revoke-teacher-apply:disabled { opacity: 0.7; cursor: not-allowed; }
     .badge-teacher-applying { background: #fef3c7; color: #92400e; }
     /* 提出申請表單區塊（同頁顯示，非彈窗） */
     .apply-form-wrap { margin-top: 8px; padding-top: 20px; border-top: 1px solid #e2e8f0; }
@@ -935,8 +943,11 @@
                 : '<span class="badge badge-teacher-applying">退實習審核中</span>')
             : '<span class="badge" style="background:#20B2AE;color:#fff;">實習中</span>';
           var viewUrl = recordId ? ('/teacher_remove_intern?id=' + encodeURIComponent(recordId) + '&view=1') : '';
+          var isTeacherInitiated = (row.initiated_by || '').toLowerCase() === 'teacher';
+          var canRevoke = hasRecord && status === 'withdrawing' && isTeacherInitiated;
           var actionHtml = hasRecord
-            ? '<a class="btn-view" href="' + viewUrl + '"><i class="bi bi-eye"></i> 查看</a>'
+            ? ('<a class="btn-view" href="' + viewUrl + '"><i class="bi bi-eye"></i> 查看</a>' +
+               (canRevoke ? '<button type="button" class="btn-revoke-teacher-apply" data-record-id="' + escapeHtml(String(recordId)) + '" title="撤回後該學生恢復為實習中"><i class="bi bi-arrow-counterclockwise"></i> 撤回</button>' : ''))
             : '<button type="button" class="btn-apply-withdraw" data-student-id="' + escapeHtml(String(row.student_id)) + '" data-company-id="' + escapeHtml(String(row.company_id)) + '" data-student-name="' + escapeHtml(row.student_name || '') + '" data-student-number="' + escapeHtml(row.student_number || '') + '" data-company-name="' + escapeHtml(row.company_name || '') + '" data-job-title="' + escapeHtml(row.job_title || '') + '">申請退實習</button>';
           var classDisplay = row.class_display || row.class_name || '—';
           return '<tr>' +
@@ -1028,6 +1039,30 @@
       }
 
       document.addEventListener('click', function (ev) {
+        var revokeBtn = ev.target && ev.target.closest && ev.target.closest('.btn-revoke-teacher-apply');
+        if (revokeBtn && !revokeBtn.disabled) {
+          var recordId = revokeBtn.getAttribute('data-record-id');
+          if (!recordId) return;
+          if (!confirm('確定要撤回此筆退實習申請？撤回後該學生狀態將恢復為實習中。')) return;
+          revokeBtn.disabled = true;
+          fetch('/teacher/api/withdraw_revoke', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ record_id: recordId })
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+              if (res.success) {
+                loadApplyList();
+              } else {
+                alert(res.message || '撤回失敗');
+              }
+            })
+            .catch(function () { alert('網路錯誤，請稍後再試'); })
+            .finally(function () { revokeBtn.disabled = false; });
+          return;
+        }
         var btn = ev.target && ev.target.closest && ev.target.closest('.btn-apply-withdraw');
         if (!btn || btn.disabled) return;
         var studentId = btn.getAttribute('data-student-id');

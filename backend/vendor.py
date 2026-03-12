@@ -5539,6 +5539,52 @@ def vendor_revoke_withdraw():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
+@vendor_bp.route("/teacher/api/withdraw_revoke", methods=["POST"])
+def teacher_revoke_withdraw():
+    """指導老師：撤回自己提出的退實習申請（僅「退實習審核中」可撤回，刪除該筆 internship_records）"""
+    if "user_id" not in session or session.get("role") not in ("teacher", "director", "class_teacher"):
+        return jsonify({"success": False, "message": "未授權"}), 403
+    data = request.get_json() or {}
+    record_id = data.get("record_id") or data.get("id")
+    if not record_id:
+        return jsonify({"success": False, "message": "缺少 record_id"}), 400
+    try:
+        teacher_id = session.get("user_id")
+        try:
+            record_id_int = int(record_id)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "message": "record_id 格式錯誤"}), 400
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT ir.id, ir.status, COALESCE(ir.initiated_by, 'vendor') AS initiated_by
+            FROM internship_records ir
+            JOIN internship_companies ic ON ic.id = ir.company_id AND ic.advisor_user_id = %s
+            WHERE ir.id = %s
+        """, (teacher_id, record_id_int))
+        row = cursor.fetchone()
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "找不到該筆申請或無權限"}), 404
+        if (row.get("initiated_by") or "").strip().lower() != "teacher":
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "僅能撤回由指導老師提出的申請。"}), 400
+        if (row.get("status") or "").lower() != "withdrawing":
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "僅「退實習審核中」的申請可撤回。"}), 400
+        cursor.execute("DELETE FROM internship_records WHERE id = %s", (record_id_int,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "message": "已撤回退實習申請。"})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 # =========================================================
 # 指導老師端：退實習確認（解約報告預覽、廠商原因、日誌、確認異動）
 # =========================================================
@@ -6034,31 +6080,62 @@ def teacher_get_withdraw_apply_list():
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         current_semester_id = get_current_semester_id(cursor)
-        cursor.execute("""
-            SELECT mr.student_id, mr.company_id,
-                   u.name AS student_name, u.username AS student_number,
-                   c.name AS class_name, c.department, c.admission_year,
-                   ic.company_name,
-                   COALESCE(
-                     (SELECT ij.title FROM student_job_applications sja
-                      JOIN internship_jobs ij ON ij.id = sja.job_id
-                      WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id
-                      LIMIT 1),
-                     (SELECT ij.title FROM internship_jobs ij
-                      WHERE ij.company_id = mr.company_id AND (ij.is_active = 1 OR ij.is_active IS NULL)
-                      ORDER BY ij.id LIMIT 1)
-                   ) AS job_title,
-                   ir.id AS record_id, ir.status AS status
-            FROM matching_results mr
-            JOIN internship_companies ic ON ic.id = mr.company_id AND ic.advisor_user_id = %s
-            JOIN users u ON u.id = mr.student_id
-            LEFT JOIN classes c ON c.id = u.class_id
-            LEFT JOIN internship_records ir
-                  ON ir.student_id = mr.student_id AND ir.company_id = mr.company_id
-                  AND (%s IS NULL OR ir.semester_id = %s)
-            ORDER BY ic.company_name, u.name
-        """, (teacher_id, current_semester_id, current_semester_id))
-        rows = cursor.fetchall() or []
+        try:
+            cursor.execute("""
+                SELECT mr.student_id, mr.company_id,
+                       u.name AS student_name, u.username AS student_number,
+                       c.name AS class_name, c.department, c.admission_year,
+                       ic.company_name,
+                       COALESCE(
+                         (SELECT ij.title FROM student_job_applications sja
+                          JOIN internship_jobs ij ON ij.id = sja.job_id
+                          WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id
+                          LIMIT 1),
+                         (SELECT ij.title FROM internship_jobs ij
+                          WHERE ij.company_id = mr.company_id AND (ij.is_active = 1 OR ij.is_active IS NULL)
+                          ORDER BY ij.id LIMIT 1)
+                       ) AS job_title,
+                       ir.id AS record_id, ir.status AS status,
+                       COALESCE(ir.initiated_by, 'vendor') AS initiated_by
+                FROM matching_results mr
+                JOIN internship_companies ic ON ic.id = mr.company_id AND ic.advisor_user_id = %s
+                JOIN users u ON u.id = mr.student_id
+                LEFT JOIN classes c ON c.id = u.class_id
+                LEFT JOIN internship_records ir
+                      ON ir.student_id = mr.student_id AND ir.company_id = mr.company_id
+                      AND (%s IS NULL OR ir.semester_id = %s)
+                ORDER BY ic.company_name, u.name
+            """, (teacher_id, current_semester_id, current_semester_id))
+            rows = cursor.fetchall() or []
+        except Exception:
+            cursor.execute("""
+                SELECT mr.student_id, mr.company_id,
+                       u.name AS student_name, u.username AS student_number,
+                       c.name AS class_name, c.department, c.admission_year,
+                       ic.company_name,
+                       COALESCE(
+                         (SELECT ij.title FROM student_job_applications sja
+                          JOIN internship_jobs ij ON ij.id = sja.job_id
+                          WHERE sja.student_id = mr.student_id AND sja.company_id = mr.company_id
+                          LIMIT 1),
+                         (SELECT ij.title FROM internship_jobs ij
+                          WHERE ij.company_id = mr.company_id AND (ij.is_active = 1 OR ij.is_active IS NULL)
+                          ORDER BY ij.id LIMIT 1)
+                       ) AS job_title,
+                       ir.id AS record_id, ir.status AS status
+                FROM matching_results mr
+                JOIN internship_companies ic ON ic.id = mr.company_id AND ic.advisor_user_id = %s
+                JOIN users u ON u.id = mr.student_id
+                LEFT JOIN classes c ON c.id = u.class_id
+                LEFT JOIN internship_records ir
+                      ON ir.student_id = mr.student_id AND ir.company_id = mr.company_id
+                      AND (%s IS NULL OR ir.semester_id = %s)
+                ORDER BY ic.company_name, u.name
+            """, (teacher_id, current_semester_id, current_semester_id))
+            rows = cursor.fetchall() or []
+        for r in rows:
+            if r.get("initiated_by") is None:
+                r["initiated_by"] = "vendor"
         current_semester_code = get_current_semester_code(cursor) or ""
         try:
             current_year = int(str(current_semester_code)[:3]) if (current_semester_code and len(str(current_semester_code)) >= 3) else None
