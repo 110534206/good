@@ -597,8 +597,7 @@ def get_my_companies():
         cursor = conn.cursor(dictionary=True)
 
         if role == 'vendor':
-            # 廠商：僅顯示「自己上傳」的紀錄（uploaded_by_user_id = 廠商本人）
-            # 指導老師上傳的（uploaded_by_user_id = 老師）不顯示在廠商的上傳紀錄中
+            # 廠商：顯示 (1) 自己上傳的 (2) 該廠商的指導老師上傳的（上傳者=指導老師、綁定=指導老師），以「聯絡信箱=廠商email」或「公司名稱=廠商名稱」連動，讓 A 廠商能看到 A 指導老師之前上傳的檔案
             cursor.execute("""
                 SELECT 
                     ic.id,
@@ -607,15 +606,25 @@ def get_my_companies():
                     ic.company_doc_path AS filepath,
                     ic.submitted_at AS upload_time,
                     u.role AS uploader_role,
-                    0 AS sort_own_first,
-                    FALSE AS is_from_advisor
+                    CASE WHEN ic.uploaded_by_user_id = %s THEN 0 ELSE 1 END AS sort_own_first,
+                    (ic.uploaded_by_user_id != %s AND u.role IN ('teacher', 'director')) AS is_from_advisor
                 FROM internship_companies ic
                 JOIN users u ON ic.uploaded_by_user_id = u.id
                 WHERE ic.uploaded_by_user_id = %s
-                ORDER BY ic.submitted_at DESC
-            """, (user_id,))
+                   OR (ic.advisor_user_id = (SELECT teacher_id FROM users WHERE id = %s AND role = 'vendor' LIMIT 1)
+                       AND ic.uploaded_by_user_id = (SELECT teacher_id FROM users WHERE id = %s AND role = 'vendor' LIMIT 1)
+                       AND u.role IN ('teacher', 'director')
+                       AND ic.status IN ('pending', 'approved', 'rejected')
+                       AND (
+                           (TRIM(COALESCE(ic.contact_email, '')) != ''
+                            AND LOWER(TRIM(ic.contact_email)) = LOWER(TRIM(COALESCE((SELECT email FROM users WHERE id = %s AND role = 'vendor' LIMIT 1), ''))))
+                           OR (LOWER(TRIM(COALESCE(ic.company_name, ''))) = LOWER(TRIM(COALESCE((SELECT name FROM users WHERE id = %s AND role = 'vendor' LIMIT 1), ''))))
+                       ))
+                ORDER BY sort_own_first ASC, ic.submitted_at DESC
+            """, (user_id, user_id, user_id, user_id, user_id, user_id, user_id))
             records = cursor.fetchall()
         else:
+            # 老師/主任/科助：顯示 (1) 自己上傳的 (2) 綁定為指導老師的公司（如廠商上傳後審核預設指導老師為主任，主任應能在上傳紀錄看到）
             cursor.execute("""
                 SELECT 
                     ic.id,
@@ -623,12 +632,13 @@ def get_my_companies():
                     ic.status,
                     ic.company_doc_path AS filepath,
                     ic.submitted_at AS upload_time,
-                    u.role AS uploader_role
+                    u.role AS uploader_role,
+                    (u.role = 'vendor') AS is_from_vendor
                 FROM internship_companies ic
                 JOIN users u ON ic.uploaded_by_user_id = u.id
-                WHERE ic.uploaded_by_user_id = %s
-                ORDER BY ic.submitted_at DESC
-            """, (user_id,))
+                WHERE ic.uploaded_by_user_id = %s OR ic.advisor_user_id = %s
+                ORDER BY (ic.uploaded_by_user_id = %s) DESC, ic.submitted_at DESC
+            """, (user_id, user_id, user_id))
             records = cursor.fetchall()
 
         # === 🕒 加上台灣時區轉換 ===
@@ -1505,24 +1515,30 @@ def api_update_company_advisor():
                 if vendor['id'] not in vendor_ids_to_update:
                     vendor_ids_to_update.append(vendor['id'])
         
-        # 3. 更新所有找到的廠商的 teacher_name
-        # 如果 advisor_user_id 為 None，則清除 teacher_name（設為 NULL）
-        # 如果 advisor_user_id 有值，則設定為指導老師的名稱
+        # 3. 同步更新廠商的 teacher_id（讓廠商在 manage_positions / upload_company 仍能看到此公司）與 teacher_name（若欄位存在）
+        teacher_id_value = advisor_user_id  # 指導老師 user_id，用於 advisor_user_id = vendor.teacher_id 的權限
         teacher_name_value = advisor_name if advisor_user_id and advisor_name else None
-        for vendor_id in vendor_ids_to_update:
+        for vid in vendor_ids_to_update:
             cursor.execute("""
                 UPDATE users 
-                SET teacher_name = %s 
+                SET teacher_id = %s 
                 WHERE id = %s AND role = 'vendor'
-            """, (teacher_name_value, vendor_id))
+            """, (teacher_id_value, vid))
             updated_vendor_count += 1
+            try:
+                cursor.execute("""
+                    UPDATE users 
+                    SET teacher_name = %s 
+                    WHERE id = %s AND role = 'vendor'
+                """, (teacher_name_value, vid))
+            except Exception:
+                pass  # 若無 teacher_name 欄位則略過
         
         conn.commit()
         
         message = f"公司「{company['company_name']}」的指導老師已更新"
-        # 如果更新了廠商的 teacher_name，在訊息中提示
         if updated_vendor_count > 0:
-            message += f" 已自動更新 {updated_vendor_count} 個相關廠商的指導老師關聯。"
+            message += f" 已自動更新 {updated_vendor_count} 個相關廠商的指導老師關聯（teacher_id 已同步）。"
         
         return jsonify({
             "success": True,

@@ -1979,23 +1979,36 @@ def get_internship_flows_current():
         if not current_semester_id:
             return jsonify({"success": True, "semester_id": None, "semester_code": None, "flow": None, "message": "尚未設定當前學期"})
         semester_code = get_flow_semester_code(cursor)
-        cursor.execute("""
-            SELECT id, semester_id, resume_deadline, preference_deadline, advisor_deadline, vendor_deadline, updated_at
-            FROM internship_flows
-            WHERE semester_id = %s
-            LIMIT 1
-        """, (current_semester_id,))
+        try:
+            cursor.execute("""
+                SELECT id, semester_id, company_data_deadline, resume_deadline, preference_deadline, advisor_deadline, vendor_deadline,
+                       round2_start_date, round2_deadline, updated_at
+                FROM internship_flows
+                WHERE semester_id = %s
+                LIMIT 1
+            """, (current_semester_id,))
+        except Exception:
+            cursor.execute("""
+                SELECT id, semester_id, resume_deadline, preference_deadline, advisor_deadline, vendor_deadline, updated_at
+                FROM internship_flows
+                WHERE semester_id = %s
+                LIMIT 1
+            """, (current_semester_id,))
         flow = cursor.fetchone()
         if flow:
-            for k in ('resume_deadline', 'preference_deadline', 'advisor_deadline', 'vendor_deadline'):
+            datetime_keys = ('company_data_deadline', 'resume_deadline', 'preference_deadline', 'advisor_deadline', 'vendor_deadline', 'round2_start_date', 'round2_deadline')
+            for k in datetime_keys:
                 if flow.get(k) and hasattr(flow[k], 'strftime'):
                     flow[k] = flow[k].strftime('%Y-%m-%dT%H:%M')
             if flow.get('updated_at') and hasattr(flow['updated_at'], 'strftime'):
                 flow['updated_at'] = flow['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+            flow['company_data_deadline_display'] = flow.get('company_data_deadline') or '—'
             flow['resume_deadline_display'] = flow.get('resume_deadline') or '—'
             flow['preference_deadline_display'] = flow.get('preference_deadline') or '—'
             flow['advisor_deadline_display'] = flow.get('advisor_deadline') or '—'
             flow['vendor_deadline_display'] = flow.get('vendor_deadline') or '—'
+            flow['round2_start_date_display'] = flow.get('round2_start_date') or '—'
+            flow['round2_deadline_display'] = flow.get('round2_deadline') or '—'
         return jsonify({
             "success": True,
             "semester_id": current_semester_id,
@@ -2021,34 +2034,56 @@ def save_internship_flows_current():
         current_semester_id = get_flow_semester_id(cursor)
         if not current_semester_id:
             return jsonify({"success": False, "message": "尚未設定當前學期"}), 400
+        company_data_deadline = data.get('company_data_deadline')
         resume_deadline = data.get('resume_deadline')
         preference_deadline = data.get('preference_deadline')
         advisor_deadline = data.get('advisor_deadline')
         vendor_deadline = data.get('vendor_deadline')
+        round2_start_date = data.get('round2_start_date')
+        round2_deadline = data.get('round2_deadline')
         def parse_dt(s):
             if not s: return None
             s = s.strip().replace('T', ' ').rstrip('Z')
             if len(s) <= 16 and ':' in s: s = s + ':00'
             return s
+        company_dt = parse_dt(company_data_deadline)
         resume_dt = parse_dt(resume_deadline)
         pref_dt = parse_dt(preference_deadline)
         advisor_dt = parse_dt(advisor_deadline)
         vendor_dt = parse_dt(vendor_deadline)
+        round2_start_dt = parse_dt(round2_start_date)
+        round2_deadline_dt = parse_dt(round2_deadline)
         cursor.execute("SELECT id FROM internship_flows WHERE semester_id = %s LIMIT 1", (current_semester_id,))
         existing = cursor.fetchone()
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         user_id = session.get('user_id')
-        if existing:
-            cursor.execute("""
-                UPDATE internship_flows
-                SET resume_deadline=%s, preference_deadline=%s, advisor_deadline=%s, vendor_deadline=%s, updated_by=%s, updated_at=%s
-                WHERE semester_id=%s
-            """, (resume_dt, pref_dt, advisor_dt, vendor_dt, user_id, now, current_semester_id))
-        else:
-            cursor.execute("""
-                INSERT INTO internship_flows (semester_id, resume_deadline, preference_deadline, advisor_deadline, vendor_deadline, updated_by, updated_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
-            """, (current_semester_id, resume_dt, pref_dt, advisor_dt, vendor_dt, user_id, now))
+        try:
+            if existing:
+                cursor.execute("""
+                    UPDATE internship_flows
+                    SET company_data_deadline=%s, resume_deadline=%s, preference_deadline=%s, advisor_deadline=%s, vendor_deadline=%s,
+                        round2_start_date=%s, round2_deadline=%s, updated_by=%s, updated_at=%s
+                    WHERE semester_id=%s
+                """, (company_dt, resume_dt, pref_dt, advisor_dt, vendor_dt, round2_start_dt, round2_deadline_dt, user_id, now, current_semester_id))
+            else:
+                cursor.execute("""
+                    INSERT INTO internship_flows (semester_id, company_data_deadline, resume_deadline, preference_deadline, advisor_deadline, vendor_deadline, round2_start_date, round2_deadline, updated_by, updated_at)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """, (current_semester_id, company_dt, resume_dt, pref_dt, advisor_dt, vendor_dt, round2_start_dt, round2_deadline_dt, user_id, now))
+        except Exception as e:
+            err = str(e).lower()
+            if 'company_data_deadline' in err or 'round2' in err or 'unknown column' in err:
+                if existing:
+                    cursor.execute("""
+                        UPDATE internship_flows
+                        SET resume_deadline=%s, preference_deadline=%s, advisor_deadline=%s, vendor_deadline=%s, updated_by=%s, updated_at=%s
+                        WHERE semester_id=%s
+                    """, (resume_dt, pref_dt, advisor_dt, vendor_dt, user_id, now, current_semester_id))
+                else:
+                    cursor.execute("""
+                        INSERT INTO internship_flows (semester_id, resume_deadline, preference_deadline, advisor_deadline, vendor_deadline, updated_by, updated_at)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    """, (current_semester_id, resume_dt, pref_dt, advisor_dt, vendor_dt, user_id, now))
         conn.commit()
         return jsonify({"success": True, "message": "已儲存本學期流程期限"})
     except Exception as e:

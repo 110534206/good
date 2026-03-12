@@ -7,12 +7,32 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { font-family: "Noto Sans TC", sans-serif; background: #f5f8ff; min-height: 100vh; padding-top: 60px; }
-    .top-bar { background: linear-gradient(135deg, #0454a3 0%, #0369a1 100%); color: #fff; padding: 1rem 2rem; position: fixed; top: 0; left: 0; right: 0; z-index: 1000; }
-    .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-    .company-block { border: 1px solid #e2e8f0; border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; background: #fff; }
-    .company-block h6 { margin-bottom: 1rem; color: #1e293b; }
-    .assigned-table { font-size: 0.9rem; }
+    :root {
+      --sr-primary: #0454a3;
+      --sr-primary-light: #0369a1;
+      --sr-bg: #f0f4f9;
+      --sr-card-bg: #fff;
+      --sr-border: #e2e8f0;
+      --sr-text: #1e293b;
+      --sr-text-muted: #64748b;
+      --sr-radius: 12px;
+      --sr-font-body: 1.0625rem;
+    }
+    body { font-family: "Noto Sans TC", sans-serif; background: var(--sr-bg); min-height: 100vh; padding-top: 60px; font-size: var(--sr-font-body); }
+    .top-bar { background: linear-gradient(135deg, var(--sr-primary) 0%, var(--sr-primary-light) 100%); color: #fff; padding: 1rem 2rem; position: fixed; top: 0; left: 0; right: 0; z-index: 1000; font-size: 1.1rem; }
+    .card { border: 1px solid var(--sr-border); border-radius: var(--sr-radius); box-shadow: 0 2px 12px rgba(4, 84, 163, 0.08); background: var(--sr-card-bg); }
+    /* 各公司填寫區塊：與「本公司剩餘職缺名額」相同外框風格（淺藍底、左側藍線） */
+    .company-block {
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      border: 1px solid #bae6fd;
+      border-left: 4px solid #0369a1;
+      border-radius: 12px;
+      padding: 1.5rem 1.5rem;
+      margin-bottom: 1.25rem;
+      box-shadow: 0 1px 3px rgba(3, 105, 161, 0.08);
+    }
+    .company-block h6 { margin-bottom: 1.1rem; color: var(--sr-text); font-size: 1.15rem; font-weight: 700; }
+    .assigned-table { font-size: 1rem; }
     .assigned-table th { background: #f8fafc; font-weight: 600; }
     .badge-pending { background: #fef3c7; color: #92400e; }
     .badge-accepted { background: #d1fae5; color: #065f46; }
@@ -30,17 +50,17 @@
     .quota-summary-wrap .quota-title {
       color: #0c4a6e;
       font-weight: 700;
-      font-size: 1.05rem;
+      font-size: 1.15rem;
       margin-bottom: 0.35rem;
       display: flex;
       align-items: center;
       gap: 0.5rem;
     }
     .quota-summary-wrap .quota-desc {
-      color: #64748b;
-      font-size: 0.875rem;
-      margin-bottom: 1rem;
-      line-height: 1.45;
+      color: var(--sr-text-muted);
+      font-size: 1rem;
+      margin-bottom: 1.75rem;
+      line-height: 1.5;
     }
     .quota-summary-wrap .company-quota {
       background: #fff;
@@ -71,7 +91,7 @@
       gap: 0.6rem;
       padding: 0.6rem 0;
       border-bottom: 1px solid #f8fafc;
-      font-size: 0.9rem;
+      font-size: 1rem;
     }
     .quota-summary-wrap .job-quota-row:last-child { border-bottom: none; padding-bottom: 0; }
     .quota-summary-wrap .job-quota-row .job-title { font-weight: 500; color: #334155; min-width: 0; }
@@ -80,15 +100,24 @@
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
-      padding: 0.3rem 0.65rem;
+      padding: 0.35rem 0.75rem;
       border-radius: 8px;
-      font-size: 0.8rem;
+      font-size: 0.95rem;
       font-weight: 600;
       white-space: nowrap;
     }
     .quota-summary-wrap .stat-pill.slots { background: #e0f2fe; color: #0369a1; }
     .quota-summary-wrap .stat-pill.filled { background: #fef3c7; color: #92400e; }
     .quota-summary-wrap .stat-pill.remaining { background: #d1fae5; color: #065f46; }
+    .quota-summary-wrap .stat-pill.admitted-link {
+      text-decoration: none;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .quota-summary-wrap .stat-pill.admitted-link:hover {
+      opacity: 0.9;
+      text-decoration: underline;
+    }
     /* 與 upload_company 一致的輸入框樣式（職缺名稱等） */
     .company-block .input-job-title {
       border-radius: 6px;
@@ -106,35 +135,56 @@
     .company-block .input-job-title::placeholder {
       color: #6c757d;
     }
+    /* 薪資選擇：單選 + 金額輸入 */
+    .salary-options { display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; align-items: flex-start; margin-bottom: 0.75rem; }
+    .salary-option { display: flex; align-items: center; gap: 0.5rem; font-size: 1rem; }
+    .salary-option input[type="radio"] { width: 1.1rem; height: 1.1rem; accent-color: var(--sr-primary); }
+    .salary-option label { margin: 0; cursor: pointer; font-weight: 500; color: var(--sr-text); }
+    .salary-amount-wrap { display: flex; align-items: center; gap: 0.5rem; margin-left: 0.25rem; }
+    .salary-amount-wrap input { width: 120px; padding: 0.5rem 0.6rem; border-radius: 8px; border: 1px solid var(--sr-border); font-size: 1rem; }
+    .salary-amount-wrap input:focus { border-color: var(--sr-primary); outline: none; box-shadow: 0 0 0 2px rgba(4, 84, 163, 0.15); }
+    .salary-other-wrap { margin-top: 0.5rem; }
+    .salary-other-wrap input { width: 100%; max-width: 320px; padding: 0.5rem 0.6rem; border-radius: 8px; border: 1px solid var(--sr-border); font-size: 1rem; }
+    .form-label-sr { font-size: 1rem; font-weight: 600; color: var(--sr-text); margin-bottom: 0.5rem; display: block; }
+    .page-intro { font-size: 1.05rem; color: var(--sr-text-muted); line-height: 1.55; margin-bottom: 1.25rem; }
+    .section-title-sr { font-size: 1.1rem; font-weight: 700; color: var(--sr-text); margin-bottom: 0.5rem; }
+    .section-desc { font-size: 1rem; color: var(--sr-text-muted); margin-bottom: 1rem; }
+    .btn-save-sr { background: linear-gradient(135deg, var(--sr-primary) 0%, var(--sr-primary-light) 100%); border: none; padding: 0.6rem 1.25rem; font-size: 1.05rem; font-weight: 600; border-radius: 10px; }
+    .btn-save-sr:hover { filter: brightness(1.05); color: #fff; }
   </style>
 </head>
 <body>
   <div class="top-bar d-flex align-items-center justify-content-between">
     <a href="/vendor_home" class="text-white text-decoration-none"><i class="fas fa-arrow-left me-2"></i>返回廠商首頁</a>
-    <h5 class="mb-0">二輪媒合意願填寫</h5>
+    <h3 class="mb-0">二輪媒合意願填寫</h3>
     <span></span>
   </div>
 
   <div class="container py-4">
     <div id="alertPlace" class="mb-3"></div>
-    <div id="notOpenMsg" class="alert alert-info d-none">
+    <div id="notOpenMsg" class="alert alert-info d-none" style="font-size: 1.05rem;">
       目前二輪媒合尚未開啟，請待科助公告第一輪錄取結果並開啟二輪後再填寫。
     </div>
     <div id="contentCard" class="card p-4 d-none">
-      <p class="text-muted mb-3">請勾選是否參與二輪媒合，並填寫名額、薪資說明與職缺名稱（可與第一輪不同）。</p>
+      <div id="secondRoundDeadlineWrap" class="alert mb-3 d-none" style="font-size:1rem;" role="status">
+        <i class="fas fa-clock me-2"></i>二面流程截止時間：<strong id="secondRoundDeadlineText"></strong>
+        <span id="secondRoundDeadlineExpiredHint" class="d-none ms-2 fw-bold">（已過期，僅供檢視）</span>
+      </div>
+      <p class="page-intro">請勾選是否參與二輪媒合，並填寫名額、薪資類型與金額、職缺名稱（可與第一輪不同）。</p>
       <!-- 主任排序後本公司剩餘職缺名額（填寫二輪名額前可參考） -->
       <div id="jobSlotsSummaryWrap" class="quota-summary-wrap d-none">
         <div class="quota-title"><i class="fas fa-briefcase"></i>本公司剩餘職缺名額</div>
         <p class="quota-desc mb-0">以下為一面媒合後各職缺之名額、已錄取與剩餘人數，填寫二輪名額時可參考。</p>
+      <br>
         <div id="jobSlotsSummaryContent"></div>
       </div>
       <div id="companyList"></div>
-      <div class="mt-3">
-        <button type="button" class="btn btn-primary" id="btnSaveAll"><i class="fas fa-save me-1"></i>全部儲存</button>
+      <div class="mt-4">
+        <button type="button" class="btn btn-primary btn-save-sr" id="btnSaveAll"><i class="fas fa-save me-1"></i>全部儲存</button>
       </div>
       <hr class="my-4">
-      <h6 class="mb-3"><i class="fas fa-user-graduate me-2"></i>主任已指派的學生</h6>
-      <p class="text-muted small mb-2">以下為主任於二輪分發中指派至貴公司（或所屬公司）的學生，可在此查看學生資料。</p>
+      <h6 class="section-title-sr"><i class="fas fa-user-graduate me-2"></i>主任已指派的學生</h6>
+      <p class="section-desc mb-2">以下為主任於二輪分發中指派至貴公司（或所屬公司）的學生，可在此查看學生資料。</p>
       <div id="assignedSection" class="d-none">
         <div class="table-responsive">
           <table class="table table-bordered assigned-table">
@@ -153,9 +203,30 @@
       </div>
       <div id="assignedEmpty" class="text-muted small py-2 d-none">目前尚無主任指派的學生。</div>
     </div>
-    <div id="loading" class="text-center py-5 text-muted">
+    <div id="loading" class="text-center py-5 text-muted" style="font-size: 1.05rem;">
       <div class="spinner-border" role="status"></div>
       <p class="mt-2">載入中…</p>
+    </div>
+  </div>
+
+  <!-- 錄取學生列表 Modal（點擊「已錄取」連結時顯示） -->
+  <div class="modal fade" id="admittedStudentsModal" tabindex="-1" aria-labelledby="admittedStudentsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="admittedStudentsModalLabel">錄取學生</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="關閉"></button>
+        </div>
+        <div class="modal-body">
+          <p id="admittedStudentsModalSubtitle" class="text-muted small mb-2"></p>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover">
+              <thead><tr><th>姓名</th><th>錄取順序</th><th>學號</th><th>班級</th></tr></thead>
+              <tbody id="admittedStudentsModalBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -178,6 +249,58 @@
         var div = document.createElement('div');
         div.textContent = s;
         return div.innerHTML;
+      }
+      function parseSalaryNote(s) {
+        var t = String(s || '').trim();
+        if (!t) return { type: 'unpaid', amount: '', hourlyAmount: '', otherText: '' };
+        if (/無薪|無\s*薪/i.test(t)) return { type: 'unpaid', amount: '', hourlyAmount: '', otherText: '' };
+        var m = t.match(/月薪\s*[：:]?\s*(\d+)/i) || t.match(/月\s*薪\s*(\d+)/i);
+        if (m) return { type: 'monthly', amount: m[1], hourlyAmount: '', otherText: '' };
+        var h = t.match(/時薪\s*[：:]?\s*(\d+)/i) || t.match(/時\s*薪\s*(\d+)/i);
+        if (h) return { type: 'hourly', amount: '', hourlyAmount: h[1], otherText: '' };
+        if (/^其他/i.test(t)) return { type: 'other', amount: '', hourlyAmount: '', otherText: t.replace(/^其他[：:\s]*/i, '').trim() };
+        return { type: 'other', amount: '', hourlyAmount: '', otherText: t };
+      }
+      function buildSalaryNote(block) {
+        var radio = block.querySelector('input[name^="salary_"]:checked');
+        var type = radio ? radio.value : 'unpaid';
+        if (type === 'monthly') {
+          var amt = block.querySelector('.sr-salary-amount[data-type="monthly"]');
+          var v = amt && amt.value ? amt.value.trim() : '';
+          return v ? '月薪 ' + v : '月薪';
+        }
+        if (type === 'hourly') {
+          var ha = block.querySelector('.sr-salary-amount[data-type="hourly"]');
+          var vh = ha && ha.value ? ha.value.trim() : '';
+          return vh ? '時薪 ' + vh : '時薪';
+        }
+        if (type === 'other') {
+          var other = block.querySelector('.sr-salary-other');
+          var vo = other && other.value ? other.value.trim() : '';
+          return vo ? '其他：' + vo : '其他';
+        }
+        return '無薪';
+      }
+      function bindSalaryOptions() {
+        contentCard.querySelectorAll('.company-block').forEach(function(block) {
+          var radios = block.querySelectorAll('input[name^="salary_"]');
+          var amountWraps = block.querySelectorAll('.salary-amount-wrap');
+          var otherWrap = block.querySelector('.salary-other-wrap');
+          function updateVisibility() {
+            var r = block.querySelector('input[name^="salary_"]:checked');
+            var t = r ? r.value : '';
+            amountWraps.forEach(function(w) {
+              var forType = w.getAttribute('data-for');
+              w.style.display = (t === forType) ? 'inline-flex' : 'none';
+            });
+            if (otherWrap) otherWrap.style.display = (t === 'other') ? 'block' : 'none';
+          }
+          radios.forEach(function(radio) {
+            radio.removeEventListener('change', updateVisibility);
+            radio.addEventListener('change', updateVisibility);
+          });
+          updateVisibility();
+        });
       }
 
       function statusLabel(status) {
@@ -205,11 +328,17 @@
               html += '<div class="text-muted small">尚無職缺</div>';
             } else {
               c.jobs.forEach(function(j) {
+                var companyId = c.company_id || '';
+                var jobId = j.job_id || '';
+                var filled = parseInt(j.filled, 10) || 0;
+                var filledHtml = filled > 0
+                  ? '<a href="#" class="stat-pill filled admitted-link" data-company-id="' + companyId + '" data-job-id="' + jobId + '" data-company-name="' + escapeHtml(c.company_name || '') + '" data-job-title="' + escapeHtml(j.job_title || '') + '" title="點擊查看錄取學生"><i class="fas fa-user-check"></i>已錄取 ' + filled + '</a>'
+                  : '<span class="stat-pill filled"><i class="fas fa-user-check"></i>已錄取 ' + filled + '</span>';
                 html += '<div class="job-quota-row">';
                 html += '<span class="job-title">' + escapeHtml(j.job_title || '未指定職缺') + '</span>';
                 html += '<div class="job-stats">';
                 html += '<span class="stat-pill slots"><i class="fas fa-user-tag"></i>名額 ' + j.slots + '</span>';
-                html += '<span class="stat-pill filled"><i class="fas fa-user-check"></i>已錄取 ' + j.filled + '</span>';
+                html += filledHtml;
                 html += '<span class="stat-pill remaining"><i class="fas fa-user-plus"></i>剩餘 ' + j.remaining + '</span>';
                 html += '</div></div>';
               });
@@ -276,21 +405,58 @@
           }
           notOpenMsg.classList.add('d-none');
           contentCard.classList.remove('d-none');
+          var deadlineWrap = document.getElementById('secondRoundDeadlineWrap');
+          var deadlineText = document.getElementById('secondRoundDeadlineText');
+          var deadlineExpiredHint = document.getElementById('secondRoundDeadlineExpiredHint');
+          var deadlineExpired = false;
+          if (deadlineWrap && deadlineText) {
+            var dl = statusData.round2_deadline_display || statusData.round2_deadline;
+            if (dl) {
+              deadlineText.textContent = dl;
+              deadlineWrap.classList.remove('d-none');
+              var deadlineStr = (dl || '').trim().replace(' ', 'T');
+              deadlineExpired = deadlineStr && (new Date(deadlineStr).getTime() < Date.now());
+              if (deadlineExpired) {
+                deadlineWrap.classList.remove('alert-info');
+                deadlineWrap.classList.add('alert-danger');
+                if (deadlineExpiredHint) deadlineExpiredHint.classList.remove('d-none');
+              } else {
+                deadlineWrap.classList.add('alert-info');
+                deadlineWrap.classList.remove('alert-danger');
+                if (deadlineExpiredHint) deadlineExpiredHint.classList.add('d-none');
+              }
+            } else {
+              deadlineWrap.classList.add('d-none');
+            }
+          }
           loadJobSlotsSummary();
           if (!partData.success || !partData.companies || !partData.companies.length) {
-            companyList.innerHTML = '<p class="text-muted">尚無可填寫的公司，或您尚未關聯任何已審核通過的公司。</p>';
+            companyList.innerHTML = '<p class="text-muted" style="font-size:1.05rem;">尚無可填寫的公司，或您尚未關聯任何已審核通過的公司。</p>';
           } else {
           companyList.innerHTML = partData.companies.map(function(c) {
+            var parsed = parseSalaryNote(c.salary_note || '');
+            var salaryRadios = 'salary_' + c.company_id;
             return '<div class="company-block" data-company-id="' + c.company_id + '">'
               + '<h6><i class="fas fa-building me-2"></i>' + (c.company_name || '') + '</h6>'
-              + '<div class="form-check mb-2">'
+              + '<div class="form-check mb-3">'
               + '<input class="form-check-input sr-agree" type="checkbox" id="agree_' + c.company_id + '" ' + (c.agree ? 'checked' : '') + '>'
-              + '<label class="form-check-label" for="agree_' + c.company_id + '">參與二輪媒合</label></div>'
-              + '<div class="mb-2"><label class="form-label small">名額</label><input type="number" class="form-control form-control-sm sr-quota" min="0" value="' + (c.quota || 0) + '" style="max-width:100px"></div>'
-              + '<div class="mb-2"><label class="form-label small">薪資說明（可標示無薪、時薪等）</label><input type="text" class="form-control form-control-sm sr-salary" value="' + (c.salary_note || '').replace(/"/g, '&quot;') + '" placeholder="例：無薪、時薪 200"></div>'
-              + '<div class="mb-3"><label class="form-label" style="font-weight:600; margin-bottom:8px;">二輪職缺名稱（可與第一輪不同）</label><input type="text" class="input-job-title sr-jobtitle form-control" value="' + (c.job_title || '').replace(/"/g, '&quot;') + '" placeholder="請輸入工作項目（例：實習生）"></div>'
+              + '<label class="form-check-label" for="agree_' + c.company_id + '" style="font-size:1rem;">參與二輪媒合</label></div>'
+              + '<div class="mb-3"><label class="form-label-sr">名額</label><input type="number" class="form-control sr-quota" min="0" value="' + (c.quota || 0) + '" style="max-width:120px; font-size:1rem; padding:0.5rem 0.6rem;"></div>'
+              + '<div class="mb-3"><label class="form-label-sr">薪資類型</label><div class="salary-options">'
+              + '<div class="salary-option"><input type="radio" name="' + salaryRadios + '" id="sal_month_' + c.company_id + '" value="monthly" ' + (parsed.type === 'monthly' ? 'checked' : '') + '><label for="sal_month_' + c.company_id + '">月薪</label><span class="salary-amount-wrap" data-for="monthly"><input type="number" class="sr-salary-amount" min="0" placeholder="金額" value="' + (parsed.amount || '') + '" data-type="monthly"></span></div>'
+              + '<div class="salary-option"><input type="radio" name="' + salaryRadios + '" id="sal_hour_' + c.company_id + '" value="hourly" ' + (parsed.type === 'hourly' ? 'checked' : '') + '><label for="sal_hour_' + c.company_id + '">時薪</label><span class="salary-amount-wrap" data-for="hourly"><input type="number" class="sr-salary-amount" min="0" placeholder="元/時" value="' + (parsed.hourlyAmount || '') + '" data-type="hourly"></span></div>'
+              + '<div class="salary-option"><input type="radio" name="' + salaryRadios + '" id="sal_none_' + c.company_id + '" value="unpaid" ' + (parsed.type === 'unpaid' ? 'checked' : '') + '><label for="sal_none_' + c.company_id + '">無薪</label></div>'
+              + '<div class="salary-option"><input type="radio" name="' + salaryRadios + '" id="sal_other_' + c.company_id + '" value="other" ' + (parsed.type === 'other' ? 'checked' : '') + '><label for="sal_other_' + c.company_id + '">其他</label></div></div>'
+              + '<div class="salary-other-wrap" style="display:none;"><input type="text" class="sr-salary-other" placeholder="請輸入薪資說明" value="' + (parsed.otherText || '').replace(/"/g, '&quot;') + '"></div></div>'
+              + '<div class="mb-3"><label class="form-label-sr">二輪職缺名稱（可與第一輪不同）</label><input type="text" class="input-job-title sr-jobtitle form-control" value="' + (c.job_title || '').replace(/"/g, '&quot;') + '" placeholder="請輸入工作項目（例：實習生）"></div>'
               + '</div>';
           }).join('');
+          bindSalaryOptions();
+          }
+          if (deadlineExpired) {
+            if (contentCard) contentCard.querySelectorAll('input, select, textarea').forEach(function(el) { el.disabled = true; });
+            if (btnSaveAll) btnSaveAll.disabled = true;
+            if (alertPlace) showAlert('<i class="fas fa-clock me-1"></i>二面流程已截止，僅供檢視。', 'danger');
           }
           loadAssigned();
         } catch (e) {
@@ -306,7 +472,7 @@
           const companyId = block.dataset.companyId;
           const agree = block.querySelector('.sr-agree').checked ? 1 : 0;
           const quota = parseInt(block.querySelector('.sr-quota').value, 10) || 0;
-          const salary = (block.querySelector('.sr-salary').value || '').trim();
+          const salary = buildSalaryNote(block);
           const jobTitle = (block.querySelector('.sr-jobtitle').value || '').trim();
           const res = await fetch('/admission/api/second_round/vendor/participation', {
             method: 'POST',
@@ -319,6 +485,42 @@
         }
         showAlert('已儲存 ' + ok + ' 筆二輪意願。', 'success');
       }
+
+      document.addEventListener('click', async function(ev) {
+        var link = ev.target && ev.target.closest && ev.target.closest('.admitted-link');
+        if (!link) return;
+        ev.preventDefault();
+        var companyId = link.getAttribute('data-company-id');
+        var jobId = link.getAttribute('data-job-id');
+        var companyName = link.getAttribute('data-company-name') || '';
+        var jobTitle = link.getAttribute('data-job-title') || '';
+        var subtitleEl = document.getElementById('admittedStudentsModalSubtitle');
+        var bodyEl = document.getElementById('admittedStudentsModalBody');
+        var modalEl = document.getElementById('admittedStudentsModal');
+        if (!bodyEl || !modalEl) return;
+        if (subtitleEl) subtitleEl.textContent = (companyName && jobTitle) ? (companyName + ' · ' + jobTitle) : '';
+        bodyEl.innerHTML = '<tr><td colspan="4" class="text-center text-muted">載入中…</td></tr>';
+        var modal = window.bootstrap && window.bootstrap.Modal ? new window.bootstrap.Modal(modalEl) : null;
+        if (modal) modal.show();
+        try {
+          var res = await fetch('/vendor/api/job_admitted_students?company_id=' + encodeURIComponent(companyId) + '&job_id=' + encodeURIComponent(jobId), { credentials: 'same-origin' });
+          var data = await res.json();
+          if (!data.success) {
+            bodyEl.innerHTML = '<tr><td colspan="4" class="text-center text-danger">' + escapeHtml(data.message || '無法載入名單') + '</td></tr>';
+            return;
+          }
+          var students = data.students || [];
+          if (students.length === 0) {
+            bodyEl.innerHTML = '<tr><td colspan="4" class="text-center text-muted">尚無錄取學生</td></tr>';
+            return;
+          }
+          bodyEl.innerHTML = students.map(function(s) {
+            return '<tr><td>' + escapeHtml(s.student_name || '—') + '</td><td>' + escapeHtml(s.rank_display || '—') + '</td><td>' + escapeHtml(s.student_number || '—') + '</td><td>' + escapeHtml(s.class_name || '—') + '</td></tr>';
+          }).join('');
+        } catch (e) {
+          bodyEl.innerHTML = '<tr><td colspan="4" class="text-center text-danger">載入失敗</td></tr>';
+        }
+      });
 
       btnSaveAll.addEventListener('click', saveAll);
       load();

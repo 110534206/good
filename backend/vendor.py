@@ -67,27 +67,35 @@ def _get_vendor_profile(cursor, vendor_id):
 def _get_vendor_companies(cursor, vendor_id):
     """
     獲取廠商對應的公司列表。
-    邏輯：只返回該廠商自己創建過職缺的公司（通過 internship_jobs.created_by_vendor_id 反向查找），
-    這樣可以確保每個廠商只看到自己的公司，而不是同一指導老師下的所有公司。
-    如果該廠商還沒有創建過任何職缺，則返回空列表（需要先由指導老師建立職缺，或通過其他方式建立關聯）。
+    (1) 該廠商自己創建過職缺的公司（created_by_vendor_id = vendor_id）
+    (2) 該廠商的指導老師上傳的公司（上傳者=指導老師、綁定=指導老師），以聯絡信箱=廠商email 或 公司名稱=廠商名稱 連動
     """
-    # 通過該廠商創建的職缺來反向查找公司
-    # 只返回該廠商創建過職缺的公司（created_by_vendor_id = vendor_id）
     cursor.execute("""
         SELECT DISTINCT
             ic.id, ic.company_name, ic.contact_email, ic.advisor_user_id
-        FROM internship_jobs ij
-        JOIN internship_companies ic ON ij.company_id = ic.id
-        WHERE ij.created_by_vendor_id = %s
-          AND ic.status = 'approved'
+        FROM internship_companies ic
+        LEFT JOIN internship_jobs ij ON ij.company_id = ic.id AND ij.created_by_vendor_id = %s
+        LEFT JOIN users uploader ON ic.uploaded_by_user_id = uploader.id
+        WHERE ic.status = 'approved'
+          AND (
+              ij.id IS NOT NULL
+              OR (ic.advisor_user_id = (SELECT teacher_id FROM users WHERE id = %s AND role = 'vendor' LIMIT 1)
+                  AND ic.uploaded_by_user_id = (SELECT teacher_id FROM users WHERE id = %s AND role = 'vendor' LIMIT 1)
+                  AND uploader.role IN ('teacher', 'director')
+                  AND (
+                      (TRIM(COALESCE(ic.contact_email, '')) != ''
+                       AND LOWER(TRIM(ic.contact_email)) = LOWER(TRIM(COALESCE((SELECT email FROM users WHERE id = %s AND role = 'vendor' LIMIT 1), ''))))
+                      OR (LOWER(TRIM(COALESCE(ic.company_name, ''))) = LOWER(TRIM(COALESCE((SELECT name FROM users WHERE id = %s AND role = 'vendor' LIMIT 1), ''))))
+                  ))
+          )
         ORDER BY ic.company_name
-    """, (vendor_id,))
+    """, (vendor_id, vendor_id, vendor_id, vendor_id, vendor_id))
     companies = cursor.fetchall() or []
     
     if companies:
-        print(f"📋 廠商 {vendor_id} 找到 {len(companies)} 家自己創建過職缺的公司")
+        print(f"📋 廠商 {vendor_id} 找到 {len(companies)} 家可管理之公司")
     else:
-        print(f"⚠️ 廠商 {vendor_id} 還沒有創建過任何職缺，公司列表為空")
+        print(f"⚠️ 廠商 {vendor_id} 尚無可管理之公司（可先由指導老師建立或自行上傳）")
     
     return companies
 
@@ -5011,6 +5019,65 @@ def get_vendor_job_slots_summary():
         cursor.close()
         conn.close()
         return jsonify({"success": True, "companies": list(companies_by_id.values())})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# =========================================================
+# 取得某職缺之錄取學生名單（主任排序 Approved，供「已錄取」連結顯示）
+# =========================================================
+@vendor_bp.route("/vendor/api/job_admitted_students", methods=["GET"])
+def get_job_admitted_students():
+    """取得指定公司、職缺之錄取學生名單（manage_director Approved），僅限廠商自己所屬公司。"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    company_id = request.args.get("company_id", type=int)
+    job_id = request.args.get("job_id", type=int)
+    if not company_id or not job_id:
+        return jsonify({"success": False, "message": "請提供 company_id 與 job_id"}), 400
+    try:
+        vendor_id = session.get("user_id")
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        company_ids = _get_vendor_own_company_ids(cursor, vendor_id)
+        if company_id not in company_ids:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "無權查看該公司"}), 403
+        sid = get_flow_semester_id(cursor)
+        if not sid:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": True, "students": []})
+        cursor.execute("""
+            SELECT u.id AS student_id, u.name AS student_name, u.username AS student_number,
+                   c.name AS class_name,
+                   ra.is_reserve, ra.slot_index
+            FROM manage_director md
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            LEFT JOIN resume_applications ra ON ra.application_id = sja.id AND ra.job_id = sja.job_id
+            INNER JOIN users u ON sja.student_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            WHERE md.semester_id = %s AND md.director_decision = 'Approved'
+            AND sja.company_id = %s AND sja.job_id = %s
+            ORDER BY COALESCE(ra.is_reserve, 0) ASC, COALESCE(ra.slot_index, 999) ASC, u.username
+        """, (sid, company_id, job_id))
+        rows = cursor.fetchall() or []
+        reserve_idx = 0
+        regular_idx = 0
+        for r in rows:
+            is_reserve = r.get("is_reserve")
+            slot_index = r.get("slot_index")
+            if is_reserve:
+                reserve_idx += 1
+                r["rank_display"] = "備取%d" % (slot_index if slot_index is not None else reserve_idx)
+            else:
+                regular_idx += 1
+                r["rank_display"] = "正取%d" % (slot_index if slot_index is not None else regular_idx)
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "students": rows})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
