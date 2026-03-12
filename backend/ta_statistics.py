@@ -2159,8 +2159,49 @@ def get_interview_schedules():
                     ra.updated_at DESC
             """
             cursor.execute(query, tuple(company_ids))
+        elif user_role == 'class_teacher':
+            # 班導：只顯示自己帶班班級之學生的廠商面試排程（根據班級列出）
+            cursor.execute("""
+                SELECT class_id FROM classes_teacher
+                WHERE teacher_id = %s AND role = 'classteacher'
+            """, (user_id,))
+            ct_rows = cursor.fetchall()
+            class_ids = [r['class_id'] for r in ct_rows] if ct_rows else []
+            if not class_ids:
+                return jsonify({"success": True, "schedules": []})
+            placeholders = ','.join(['%s'] * len(class_ids))
+            cursor.execute("""
+                SELECT
+                    ra.company_comment AS comment,
+                    ic.company_name,
+                    ic.id AS company_id,
+                    ra.updated_at AS created_at,
+                    ra.interview_time,
+                    ra.interview_timeEnd,
+                    sja.student_id,
+                    u.name AS student_name,
+                    u.class_id,
+                    c.name AS class_name,
+                    ra.application_id,
+                    ra.job_id,
+                    ij.title AS job_title,
+                    ra.apply_status
+                FROM resume_applications ra
+                JOIN student_job_applications sja ON ra.application_id = sja.id
+                LEFT JOIN internship_companies ic ON sja.company_id = ic.id
+                LEFT JOIN users u ON sja.student_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                LEFT JOIN internship_jobs ij ON ra.job_id = ij.id
+                WHERE (ra.interview_status = 'scheduled'
+                       OR (ra.interview_status = 'finished' AND ra.apply_status = 'approved'))
+                AND ra.interview_time IS NOT NULL
+                AND u.class_id IN (""" + placeholders + """)
+                ORDER BY c.name, ra.interview_time,
+                    CASE WHEN ra.apply_status = 'approved' THEN 0 ELSE 1 END,
+                    ra.updated_at DESC
+            """, tuple(class_ids))
         else:
-            # TA、主任、管理員、班導、學生可以看到所有面試排程
+            # TA、主任、管理員、學生：可以看到所有面試排程
             # 直接從 resume_applications 表讀取（與廠商 API 保持一致）
             # 包含已排程的（scheduled）和已完成但已審核通過的（finished + approved）
             cursor.execute("""
@@ -2264,7 +2305,7 @@ def get_interview_schedules():
                     if notes_match:
                         notes = notes_match.group(1).strip()
             
-            parsed_schedules.append({
+            one = {
                 'id': schedule.get('application_id'),  # 使用 application_id 作為 id
                 'date': interview_date,
                 'time_start': time_start,
@@ -2281,7 +2322,10 @@ def get_interview_schedules():
                 'job_title': schedule.get('job_title'),  # 添加 job_title
                 'apply_status': schedule.get('apply_status'),  # 添加審核狀態
                 'created_at': schedule.get('created_at').strftime('%Y-%m-%d %H:%M:%S') if schedule.get('created_at') else None
-            })
+            }
+            if schedule.get('class_name') is not None:
+                one['class_name'] = schedule.get('class_name')
+            parsed_schedules.append(one)
         
         # 如果是學生，只顯示與自己相關的面試排程
         if user_role == 'student':
