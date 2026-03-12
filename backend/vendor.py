@@ -6340,6 +6340,20 @@ def teacher_get_withdraw_apply_list():
         for r in rows:
             if r.get("initiated_by") is None:
                 r["initiated_by"] = "vendor"
+        # 同一學生、同一公司只保留一筆（向廠商提出退實習申請不重複列出）；若有退實習記錄則優先保留該筆
+        seen = {}  # (student_id, company_id) -> index in deduped
+        deduped = []
+        for r in (rows or []):
+            key = (r.get("student_id"), r.get("company_id"))
+            if key not in seen:
+                seen[key] = len(deduped)
+                deduped.append(r)
+            else:
+                idx = seen[key]
+                existing = deduped[idx]
+                if (r.get("record_id") is not None) and (existing.get("record_id") is None):
+                    deduped[idx] = r
+        rows = deduped
         current_semester_code = get_current_semester_code(cursor) or ""
         try:
             current_year = int(str(current_semester_code)[:3]) if (current_semester_code and len(str(current_semester_code)) >= 3) else None

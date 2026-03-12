@@ -1008,7 +1008,7 @@
 
       function loadApplyList() {
         if (!applyListBody) return;
-        fetch('/teacher/api/withdraw_apply_list', { credentials: 'same-origin' })
+        fetch('/teacher/api/withdraw_apply_list?_=' + (Date.now ? Date.now() : 0), { credentials: 'same-origin', cache: 'no-store' })
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (!res.success || !Array.isArray(res.data)) {
@@ -1385,7 +1385,16 @@
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (res.success) {
-              window.location.href = '/teacher_remove_intern';
+              if (listCard) listCard.style.display = 'block';
+              if (detailCard) detailCard.style.display = 'none';
+              var ac = document.getElementById('applyCard');
+              if (ac) ac.style.display = 'block';
+              if (typeof history !== 'undefined' && history.replaceState) {
+                history.replaceState(null, '', '/teacher_remove_intern');
+              }
+              loadList();
+              loadApplyList();
+              confirmBtn.disabled = false;
             } else {
               showError(res.message || '確認失敗');
               confirmBtn.disabled = false;
@@ -1420,7 +1429,16 @@
             .then(function (r) { return r.json(); })
             .then(function (res) {
               if (res.success) {
-                window.location.href = '/teacher_remove_intern';
+                if (listCard) listCard.style.display = 'block';
+                if (detailCard) detailCard.style.display = 'none';
+                var ac = document.getElementById('applyCard');
+                if (ac) ac.style.display = 'block';
+                if (typeof history !== 'undefined' && history.replaceState) {
+                  history.replaceState(null, '', '/teacher_remove_intern');
+                }
+                loadList();
+                loadApplyList();
+                rejectBtn.disabled = false;
               } else {
                 showError(res.message || '駁回失敗');
                 rejectBtn.disabled = false;
