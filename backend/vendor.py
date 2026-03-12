@@ -6095,6 +6095,24 @@ def vendor_reject_teacher_withdraw():
             return jsonify({"success": False, "message": "僅能駁回狀態為「退實習審核中」的案件"}), 400
         cursor.execute("UPDATE internship_records SET status = 'rejected', updated_at = NOW() WHERE id = %s", (row["id"],))
         conn.commit()
+        cid = row.get("company_id")
+        if cid:
+            try:
+                cursor.execute("SELECT advisor_user_id FROM internship_companies WHERE id = %s", (cid,))
+                adv = cursor.fetchone()
+                advisor_user_id = adv.get("advisor_user_id") if adv else None
+                if advisor_user_id:
+                    from notification import create_notification
+                    create_notification(
+                        advisor_user_id,
+                        "退實習申請已駁回",
+                        "廠商已駁回您提出的退實習申請。",
+                        category="approval",
+                        link_url="/teacher_remove_intern"
+                    )
+            except Exception as notif_err:
+                traceback.print_exc()
+                print(f"[退實習駁回] 通知指導老師失敗: {notif_err}")
         cursor.close()
         conn.close()
         return jsonify({"success": True, "message": "已駁回案件"})
@@ -6763,6 +6781,20 @@ def teacher_reject_withdraw():
         else:
             cursor.execute("UPDATE internship_records SET status = 'rejected', updated_at = NOW() WHERE id = %s", (row["id"],))
         conn.commit()
+        vid = row.get("vendor_id")
+        if vid:
+            try:
+                from notification import create_notification
+                create_notification(
+                    vid,
+                    "退實習申請已駁回",
+                    "指導老師已駁回您提出的退實習申請，該學生將繼續實習。",
+                    category="approval",
+                    link_url="/vendor_remove_intern"
+                )
+            except Exception as notif_err:
+                traceback.print_exc()
+                print(f"[退實習駁回] 通知廠商失敗: {notif_err}")
         cursor.close()
         conn.close()
         return jsonify({"success": True, "message": "已駁回退實習申請"})
