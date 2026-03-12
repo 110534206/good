@@ -790,11 +790,14 @@
               }
               
               const companyName = schedule.company_name || '未知公司';
-              const groupKey = `${companyName}|${timeKey}`;
+              const className = schedule.class_name || '';
+              // 班導：依班級分組顯示（groupKey 含 class_name）；其他角色僅依公司+時間
+              const groupKey = className ? `${className}|${companyName}|${timeKey}` : `${companyName}|${timeKey}`;
               
               if (!groupedSchedules.has(groupKey)) {
                 groupedSchedules.set(groupKey, {
                   companyName: companyName,
+                  className: className,
                   timeStart: timeStart,
                   timeEnd: timeEnd,
                   timeKey: timeKey,
@@ -811,14 +814,17 @@
               group.schedules.push(schedule);
             });
             
-            // 將分組轉換為數組並排序：已審核通過的排程組放在前面
+            // 將分組轉換為數組並排序：有班級時先依班級名，再依已審核通過的排程組放在前面
             const sortedGroups = Array.from(groupedSchedules.entries()).sort((a, b) => {
               const groupA = a[1];
               const groupB = b[1];
-              // 檢查每個組中是否有已審核通過的排程
+              if (groupA.className || groupB.className) {
+                const cnA = groupA.className || '';
+                const cnB = groupB.className || '';
+                if (cnA !== cnB) return cnA.localeCompare(cnB);
+              }
               const aHasApproved = groupA.schedules.some(s => s.apply_status === 'approved');
               const bHasApproved = groupB.schedules.some(s => s.apply_status === 'approved');
-              // 已審核通過的組優先（降序排序）
               return (bHasApproved ? 1 : 0) - (aHasApproved ? 1 : 0);
             });
             
@@ -833,6 +839,9 @@
               } else if (group.timeStart) {
                 timeDisplay = ` ${group.timeStart.substring(0, 5)}`;
               }
+              
+              // 班導行事曆只列出廠商、職缺，不顯示班級前綴
+              const classPrefix = '';
               
               // 組合學生姓名
               const studentsText = group.students.length > 0 
@@ -866,13 +875,13 @@
               });
               const jobText = Array.from(jobTitlesForDisplay).join('、');
 
-              // 顯示公司名稱、職缺
+              // 只顯示廠商、職缺
               let displayText = group.companyName;
               if (jobText) displayText += ` - ${jobText}`;
               
               interviewBadge.textContent = displayText;
               
-              // 構建完整的提示文字
+              // 構建完整的提示文字（hover 可看學生、時間）
               const fullTitle = studentsText 
                 ? `${group.companyName} - ${studentsText}${timeDisplay}`
                 : `${group.companyName}${timeDisplay}`;
