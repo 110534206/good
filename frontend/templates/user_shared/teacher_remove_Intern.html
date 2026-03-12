@@ -816,6 +816,13 @@
         teacherMeetingNotesEl.addEventListener('input', function () {
           meetingNotesErrorEl.style.display = 'none';
           meetingNotesErrorEl.textContent = '';
+          // 廠商提出案件：填寫訪談紀錄後才啟用確認／駁回按鈕
+          var meetingBlock = document.getElementById('detailMeetingBlock');
+          if (meetingBlock && meetingBlock.style.display !== 'none' && !teacherMeetingNotesEl.readOnly) {
+            var filled = teacherMeetingNotesEl.value.trim().length > 0;
+            confirmBtn.disabled = !filled;
+            if (rejectBtn) rejectBtn.disabled = !filled;
+          }
         });
       }
       function hideMessages() {
@@ -1305,20 +1312,17 @@
             var isConfirmed = (d.status || '') === 'confirmed';
             var isTeacherInitiated = (d.initiated_by || '').toLowerCase() === 'teacher';
             var readOnlyMode = isConfirmed || viewOnly;
-            confirmBtn.disabled = readOnlyMode;
-            if (rejectBtn) {
-              rejectBtn.disabled = readOnlyMode;
-              rejectBtn.style.display = isTeacherInitiated ? 'none' : '';
-              rejectBtn.setAttribute('data-case-id', d.id);
-            }
-            if (detailActions) detailActions.style.display = viewOnly ? 'none' : '';
-            confirmBtn.setAttribute('data-case-id', d.id);
-            confirmBtn.setAttribute('data-initiated-by', d.initiated_by || 'vendor');
             var notesEl = document.getElementById('teacherMeetingNotes');
             var meetingLabel = document.getElementById('detailMeetingLabel');
             var meetingBlock = document.getElementById('detailMeetingBlock');
             if (isTeacherInitiated) {
               if (meetingBlock) meetingBlock.style.display = 'none';
+              confirmBtn.disabled = readOnlyMode;
+              if (rejectBtn) {
+                rejectBtn.disabled = readOnlyMode;
+                rejectBtn.style.display = 'none';
+                rejectBtn.setAttribute('data-case-id', d.id);
+              }
             } else {
               if (meetingBlock) meetingBlock.style.display = '';
               if (notesEl) {
@@ -1327,7 +1331,18 @@
                 notesEl.classList.toggle('meeting-notes-readonly', readOnlyMode);
               }
               if (meetingLabel) meetingLabel.textContent = readOnlyMode ? '以下為已儲存的與學生訪談紀錄（唯讀）。' : '請填寫與該學生的面談紀錄，確認異動時一併儲存。';
+              // 廠商提出：須先填寫訪談紀錄後才可按確認／駁回
+              var notesFilled = ((d.teacher_meeting_notes || '').trim().length > 0);
+              confirmBtn.disabled = readOnlyMode || !notesFilled;
+              if (rejectBtn) {
+                rejectBtn.style.display = '';
+                rejectBtn.setAttribute('data-case-id', d.id);
+                rejectBtn.disabled = readOnlyMode || !notesFilled;
+              }
             }
+            if (detailActions) detailActions.style.display = viewOnly ? 'none' : '';
+            confirmBtn.setAttribute('data-case-id', d.id);
+            confirmBtn.setAttribute('data-initiated-by', d.initiated_by || 'vendor');
           })
           .catch(function () {
             document.getElementById('detailReasonCategory').textContent = '載入失敗';
@@ -1386,8 +1401,15 @@
         rejectBtn.addEventListener('click', function () {
           var id = rejectBtn.getAttribute('data-case-id');
           if (!id) return;
-          if (!window.confirm('確定要駁回此退實習申請？駁回後該申請將不再進行退實習流程。')) return;
           hideMessages();
+          var notesEl = document.getElementById('teacherMeetingNotes');
+          var notes = notesEl ? notesEl.value.trim() : '';
+          var initiatedBy = (confirmBtn.getAttribute('data-initiated-by') || 'vendor').toLowerCase();
+          if (initiatedBy !== 'teacher' && !notes) {
+            showMeetingNotesError('請先填寫與學生訪談紀錄後再進行駁回。');
+            return;
+          }
+          if (!window.confirm('確定要駁回此退實習申請？駁回後該申請將不再進行退實習流程。')) return;
           rejectBtn.disabled = true;
           fetch('/teacher/api/withdraw_reject', {
             method: 'POST',
