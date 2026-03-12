@@ -5106,7 +5106,7 @@ def get_withdraw_intern_list():
         if current_semester_id is not None:
             args.insert(0, current_semester_id)
             status_sql = """
-            SELECT mr.student_id,
+            SELECT mr.student_id, mr.company_id,
                    u.name AS student_name, u.username AS student_number,
                    c.name AS class_name, c.department, c.admission_year,
                    ic.company_name,
@@ -5135,7 +5135,7 @@ def get_withdraw_intern_list():
             """
         else:
             status_sql = """
-            SELECT mr.student_id,
+            SELECT mr.student_id, mr.company_id,
                    u.name AS student_name, u.username AS student_number,
                    c.name AS class_name, c.department, c.admission_year,
                    ic.company_name,
@@ -5154,11 +5154,11 @@ def get_withdraw_intern_list():
         cursor.execute(status_sql, args)
         rows = cursor.fetchall()
         # 合併「僅在 internship_records 有記錄、但 offer 可能缺漏或不同學期」的學生，避免前端沒資料
-        seen_keys = {(r["student_id"], r.get("company_name"), r.get("job_title")) for r in rows}
+        seen_keys = {(r["student_id"], r.get("company_id"), r.get("company_name"), r.get("job_title")) for r in (rows or [])}
         if current_semester_id is not None:
             try:
                 cursor.execute("""
-                    SELECT ir.id AS record_id, ir.student_id,
+                    SELECT ir.id AS record_id, ir.student_id, ir.company_id,
                            u.name AS student_name, u.username AS student_number,
                            c.name AS class_name, c.department, c.admission_year,
                            ic.company_name, ir.job_title,
@@ -5173,13 +5173,42 @@ def get_withdraw_intern_list():
                     ORDER BY ic.company_name, ir.job_title, u.name
                 """, [vendor_id, current_semester_id] + company_ids)
                 for r in cursor.fetchall() or []:
-                    key = (r["student_id"], r.get("company_name"), r.get("job_title"))
+                    key = (r["student_id"], r.get("company_id"), r.get("company_name"), r.get("job_title"))
                     if key not in seen_keys:
                         seen_keys.add(key)
                         r["initiated_by"] = r.get("initiated_by") or "vendor"
                         rows.append(r)
             except Exception:
                 pass
+        # 同一學生、同一公司只保留一筆（本公司目前實習生不重複列出）；優先顯示「退實習審核中」
+        def _withdraw_priority(row):
+            """愈大愈優先顯示：withdrawing > confirmed > rejected > 無 record"""
+            rid = row.get("record_id")
+            st = (row.get("status") or "").strip().lower()
+            if st == "withdrawing":
+                return (3, rid or 0)
+            if st == "confirmed":
+                return (2, rid or 0)
+            if st == "rejected":
+                return (1, rid or 0)
+            return (0, rid or 0)
+
+        seen = {}
+        deduped = []
+        for r in (rows or []):
+            cid = r.get("company_id")
+            key = (r.get("student_id"), cid)
+            if key not in seen:
+                seen[key] = len(deduped)
+                deduped.append(r)
+            else:
+                idx = seen[key]
+                existing = deduped[idx]
+                r_pri = _withdraw_priority(r)
+                e_pri = _withdraw_priority(existing)
+                if r_pri > e_pri:
+                    deduped[idx] = r
+        rows = deduped
         # 為每筆補上班級顯示（科系＋年級＋班序，供廠商頁顯示）
         current_semester_code = get_current_semester_code(cursor) or ""
         try:
