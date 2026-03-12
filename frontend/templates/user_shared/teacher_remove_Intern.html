@@ -678,12 +678,22 @@
       </div>
     </div>
 
-    <!-- 詳情：解約報告、廠商原因、日誌、確認異動 -->
+    <!-- 詳情：與表單一致順序為 被退實習生資訊 → 退實習原因（原因類別、具體說明、佐證）→ 訪談紀錄（僅廠商提出時顯示） -->
     <div id="detailCard" class="card" style="display: none;">
       <h2><i class="bi bi-file-text" style="margin-right: 8px; color: #0454a3;"></i>退實習案件詳情</h2>
 
       <div class="detail-block">
-        <h3>解約報告</h3>
+        <h3>被退實習生資訊</h3>
+        <p class="label">學生姓名</p>
+        <p class="value" id="detailStudentName">—</p>
+        <p class="label" style="margin-top: 8px;">學號</p>
+        <p class="value" id="detailStudentNumber">—</p>
+        <p class="label" style="margin-top: 8px;">實習單位／職缺</p>
+        <p class="value" id="detailCompanyJob">—</p>
+      </div>
+
+      <div class="detail-block">
+        <h3>填寫退實習原因</h3>
         <p class="label">原因類別</p>
         <p class="value" id="detailReasonCategory">—</p>
         <p class="label" style="margin-top: 12px;">具體說明</p>
@@ -693,7 +703,7 @@
       <div class="detail-block attachment-card" id="detailAttachmentsBlock" style="display: none;">
         <div class="attachment-block-header">
           <div class="attachment-header-left">
-            <h3 class="attachment-title">廠商佐證 (圖片/檔案)</h3>
+            <h3 class="attachment-title" id="detailAttachmentsTitle">廠商佐證 (圖片/檔案)</h3>
             <label class="attachment-select-all-wrap">
               <input type="checkbox" id="attachmentSelectAll" aria-label="全選">
               <span>全選</span>
@@ -710,16 +720,6 @@
           <button type="button" class="preview-close" id="previewCloseBtn" aria-label="關閉預覽">×</button>
           <img id="previewImg" src="" alt="佐證圖片預覽">
         </div>
-      </div>
-
-      <div class="detail-block">
-        <h3>實習生資訊</h3>
-        <p class="label">學生姓名</p>
-        <p class="value" id="detailStudentName">—</p>
-        <p class="label" style="margin-top: 8px;">學號</p>
-        <p class="value" id="detailStudentNumber">—</p>
-        <p class="label" style="margin-top: 8px;">實習單位／職缺</p>
-        <p class="value" id="detailCompanyJob">—</p>
       </div>
 
       <div class="detail-block" id="detailMeetingBlock">
@@ -1048,16 +1048,23 @@
           if (!detail) { alert('請填寫具體說明'); return; }
           if (!applyModalStudentId || !applyModalCompanyId) return;
           applyModalSubmit.disabled = true;
+          var formData = new FormData();
+          formData.append('student_id', applyModalStudentId);
+          formData.append('company_id', applyModalCompanyId);
+          formData.append('reason_category', category);
+          formData.append('reason_detail', detail);
+          var imgInput = document.getElementById('applyEvidenceImage');
+          var fileInput = document.getElementById('applyEvidenceFile');
+          if (imgInput && imgInput.files) {
+            for (var i = 0; i < imgInput.files.length; i++) formData.append('evidence_image', imgInput.files[i]);
+          }
+          if (fileInput && fileInput.files) {
+            for (var j = 0; j < fileInput.files.length; j++) formData.append('evidence_file', fileInput.files[j]);
+          }
           fetch('/teacher/api/withdraw_apply', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({
-              student_id: applyModalStudentId,
-              company_id: applyModalCompanyId,
-              reason_category: category,
-              reason_detail: detail
-            })
+            body: formData
           })
             .then(function (r) { return r.json(); })
             .then(function (res) {
@@ -1102,9 +1109,13 @@
             document.getElementById('detailStudentNumber').textContent = d.student_number || '—';
             document.getElementById('detailCompanyJob').textContent = (d.company_name || '') + (d.job_title ? '／' + d.job_title : '') || '—';
 
+            var isTeacherInitiated = (d.initiated_by || '').toLowerCase() === 'teacher';
             var attBlock = document.getElementById('detailAttachmentsBlock');
             var attList = document.getElementById('detailAttachmentsList');
-            if (d.attachments && d.attachments.length && attBlock && attList) {
+            var attTitle = document.getElementById('detailAttachmentsTitle');
+            if (attTitle) attTitle.textContent = isTeacherInitiated ? '指導老師佐證 (圖片/檔案)' : '廠商佐證 (圖片/檔案)';
+            if (attBlock) attBlock.style.display = 'block';
+            if (d.attachments && d.attachments.length && attList) {
               var images = [];
               var fileRows = [];
               d.attachments.forEach(function (a) {
@@ -1175,7 +1186,10 @@
               if (previewBackdrop) {
                 previewBackdrop.onclick = function (ev) { if (ev.target === previewBackdrop) { previewBackdrop.classList.remove('show'); previewBackdrop.setAttribute('aria-hidden', 'true'); } };
               }
-            } else if (attBlock) attBlock.style.display = 'none';
+            } else {
+              if (attList) attList.innerHTML = isTeacherInitiated ? '<li class="text-muted">目前無佐證圖片或檔案</li>' : '';
+              if (attBlock && !isTeacherInitiated) attBlock.style.display = 'none';
+            }
 
             // 一鍵下載：綁定一次即可，每次點擊依目前列表下載
             var downloadAllBtn = document.getElementById('downloadAllAttachmentsBtn');
@@ -1216,18 +1230,26 @@
             }
 
             var isConfirmed = (d.status || '') === 'confirmed';
+            var isTeacherInitiated = (d.initiated_by || '').toLowerCase() === 'teacher';
             var readOnlyMode = isConfirmed || viewOnly;
             confirmBtn.disabled = readOnlyMode;
             if (detailActions) detailActions.style.display = viewOnly ? 'none' : '';
             confirmBtn.setAttribute('data-case-id', d.id);
+            confirmBtn.setAttribute('data-initiated-by', d.initiated_by || 'vendor');
             var notesEl = document.getElementById('teacherMeetingNotes');
             var meetingLabel = document.getElementById('detailMeetingLabel');
-            if (notesEl) {
-              notesEl.value = d.teacher_meeting_notes || '';
-              notesEl.readOnly = readOnlyMode;
-              notesEl.classList.toggle('meeting-notes-readonly', readOnlyMode);
+            var meetingBlock = document.getElementById('detailMeetingBlock');
+            if (isTeacherInitiated) {
+              if (meetingBlock) meetingBlock.style.display = 'none';
+            } else {
+              if (meetingBlock) meetingBlock.style.display = '';
+              if (notesEl) {
+                notesEl.value = d.teacher_meeting_notes || '';
+                notesEl.readOnly = readOnlyMode;
+                notesEl.classList.toggle('meeting-notes-readonly', readOnlyMode);
+              }
+              if (meetingLabel) meetingLabel.textContent = readOnlyMode ? '以下為已儲存的與學生訪談紀錄（唯讀）。' : '請填寫與該學生的面談紀錄，確認異動時一併儲存。';
             }
-            if (meetingLabel) meetingLabel.textContent = readOnlyMode ? '以下為已儲存的與學生訪談紀錄（唯讀）。' : '請填寫與該學生的面談紀錄，確認異動時一併儲存。';
           })
           .catch(function () {
             document.getElementById('detailReasonCategory').textContent = '載入失敗';
@@ -1253,9 +1275,10 @@
         var id = confirmBtn.getAttribute('data-case-id');
         if (!id) return;
         hideMessages();
+        var initiatedBy = (confirmBtn.getAttribute('data-initiated-by') || 'vendor').toLowerCase();
         var notesEl = document.getElementById('teacherMeetingNotes');
         var notes = notesEl ? notesEl.value.trim() : '';
-        if (!notes) {
+        if (initiatedBy !== 'teacher' && !notes) {
           showMeetingNotesError('請填寫與學生訪談紀錄');
           return;
         }

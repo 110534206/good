@@ -810,24 +810,24 @@
       </div>
       <div class="history-detail-body">
         <div class="history-detail-block">
-          <h4>解約報告</h4>
-          <p class="label">原因類別</p>
-          <p class="value" id="historyDetailReasonCategory">—</p>
-          <p class="label" style="margin-top: 10px;">具體說明</p>
-          <p class="value" id="historyDetailReasonDetail">—</p>
-        </div>
-        <div class="history-detail-block" id="historyDetailAttachmentsBlock" style="display: none;">
-          <h4>廠商佐證 (圖片/檔案)</h4>
-          <ul id="historyDetailAttachmentsList" class="history-attachment-list"></ul>
-        </div>
-        <div class="history-detail-block">
-          <h4>實習生資訊</h4>
+          <h4>被退實習生資訊</h4>
           <p class="label">學生姓名</p>
           <p class="value" id="historyDetailStudentName">—</p>
           <p class="label" style="margin-top: 8px;">學號</p>
           <p class="value" id="historyDetailStudentNumber">—</p>
           <p class="label" style="margin-top: 8px;">實習單位／職缺</p>
           <p class="value" id="historyDetailCompanyJob">—</p>
+        </div>
+        <div class="history-detail-block">
+          <h4>填寫退實習原因</h4>
+          <p class="label">原因類別</p>
+          <p class="value" id="historyDetailReasonCategory">—</p>
+          <p class="label" style="margin-top: 10px;">具體說明</p>
+          <p class="value" id="historyDetailReasonDetail">—</p>
+        </div>
+        <div class="history-detail-block" id="historyDetailAttachmentsBlock" style="display: none;">
+          <h4 id="historyDetailAttachmentsTitle">佐證 (圖片/檔案)</h4>
+          <ul id="historyDetailAttachmentsList" class="history-attachment-list"></ul>
         </div>
         <div class="history-detail-block" id="historyDetailMeetingBlock" style="display: none;">
           <h4>與學生訪談紀錄（指導老師填寫）</h4>
@@ -1135,6 +1135,9 @@
               document.getElementById('historyDetailMeetingNotes').textContent = d.teacher_meeting_notes || '—';
               if (d.teacher_meeting_notes && meetingBlock) meetingBlock.style.display = 'block';
 
+              var isTeacherInitiated = (d.initiated_by || '').toLowerCase() === 'teacher';
+              var attTitle = document.getElementById('historyDetailAttachmentsTitle');
+              if (attTitle) attTitle.textContent = isTeacherInitiated ? '指導老師佐證 (圖片/檔案)' : '廠商佐證 (圖片/檔案)';
               if (attBlock && attList) {
                 attBlock.style.display = 'block';
                 if (d.attachments && d.attachments.length) {
