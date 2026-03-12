@@ -1499,33 +1499,18 @@ def get_all_students():
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         
-        # 獲取所有已在媒合結果中的學生 ID（只統計正取學生，與 director_matching_results 邏輯一致）
-        # 檢查邏輯：
-        # 1. 從 resume_applications 表讀取廠商的媒合排序資料
-        # 2. 只統計正取學生（is_reserve = 0 或 is_reserve IS NULL 且 slot_index IS NOT NULL）
-        # 3. 排除 director_decision = 'Rejected' 的記錄
-        # 這樣可以確保與 manage_director.html 頁面顯示的媒合結果一致
+        # 已錄取 = 主任排序有 Approved/Pending 且該筆志願未被廠商設為未錄取；與主任畫面一致（含 sp.semester_id 為 NULL，如尤思婷）
         cursor.execute("""
-            SELECT DISTINCT sja.student_id
-            FROM resume_applications ra
-            INNER JOIN student_job_applications sja ON ra.application_id = sja.id
-            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id 
-                AND sja.company_id = sp.company_id 
+            SELECT DISTINCT md.student_id
+            FROM manage_director md
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
                 AND sja.job_id = sp.job_id
-                AND sp.semester_id = %s
-            LEFT JOIN manage_director md ON ra.application_id = md.preference_id
-            LEFT JOIN internship_companies ic ON sja.company_id = ic.id
-            WHERE ra.apply_status = 'approved'  -- 廠商必須已通過履歷審核
-            AND (ra.is_reserve IS NOT NULL OR ra.slot_index IS NOT NULL)  -- 必須已完成媒合排序
-            AND (md.director_decision IS NULL OR md.director_decision != 'Rejected')  -- 排除已被主任移除的記錄
-            AND ic.status = 'approved'
-            AND (
-                -- 正取條件：is_reserve = 0 或 (is_reserve IS NULL 且 slot_index IS NOT NULL)
-                (ra.is_reserve = 0) 
-                OR (ra.is_reserve IS NULL AND ra.slot_index IS NOT NULL)
-                OR (md.director_decision = 'Approved' AND md.final_rank IS NOT NULL)
-                OR (md.director_decision = 'Pending' AND md.original_type = 'Regular' AND md.original_rank IS NOT NULL)
-            )
+                AND (sp.semester_id = %s OR sp.semester_id IS NULL)
+            LEFT JOIN resume_applications ra ON ra.application_id = md.preference_id AND ra.job_id = sja.job_id
+            WHERE md.director_decision IN ('Approved', 'Pending')
+              AND (ra.id IS NULL OR ra.apply_status != 'rejected')
         """, (current_semester_id,))
         matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
         
@@ -2245,8 +2230,23 @@ def director_matching_results():
             active_semester_code = (ar.get('code') or '') if ar else ''
         director_read_only = bool(active_semester_code and len(active_semester_code) >= 4 and active_semester_code[-1] == '2')
 
-        # 檢查本學期是否已產生最終媒合結果（matching_results），供前端控制「送出最終媒合結果」按鈕行為
+        # 檢查本學期是否已產生最終媒合結果（matching_results），供前端控制「送出最終媒合結果」按鈕：送出後永久唯讀，返回頁面也唯讀
         already_confirmed = False
+        try:
+            cursor.execute("""
+                SELECT COLUMN_NAME FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'matching_results' AND COLUMN_NAME = 'semester_id'
+            """)
+            has_mr_semester = cursor.fetchone() is not None
+            cursor.fetchall()
+            if has_mr_semester:
+                cursor.execute("SELECT 1 FROM matching_results WHERE semester_id = %s LIMIT 1", (current_semester_id,))
+                already_confirmed = cursor.fetchone() is not None
+            else:
+                cursor.execute("SELECT 1 FROM matching_results LIMIT 1")
+                already_confirmed = cursor.fetchone() is not None
+        except Exception:
+            pass
 
         # 優先從 resume_applications 讀取廠商的媒合排序資料
         # 如果 manage_director 表有資料，則合併兩者的資料
@@ -2307,6 +2307,7 @@ def director_matching_results():
                 OR md.match_id IS NOT NULL
             )
             AND (ic.status = 'approved' OR ic.status IS NULL)  -- 公司狀態必須是已審核（如果公司不存在則也顯示）
+            AND (ra.id IS NULL OR ra.apply_status != 'rejected')  -- 廠商已設為未錄取(rejected)的學生不顯示在主任畫面，與廠商排序一致
             ORDER BY 
                 CASE COALESCE(md.director_decision, 'Pending')
                     WHEN 'Approved' THEN 1 
@@ -2985,6 +2986,7 @@ def final_matching_results():
             )
             AND (md.director_decision = 'Approved')  -- 只顯示主任已確認的記錄
             AND (ic.status = 'approved' OR ic.status IS NULL)  -- 公司狀態必須是已審核
+            AND (ra.id IS NULL OR ra.apply_status != 'rejected')  -- 廠商已設為未錄取者不顯示
             ORDER BY 
                 COALESCE(sp.company_id, sja.company_id, md.vendor_id), 
                 COALESCE(sp.job_id, sja.job_id, ra.job_id), 
@@ -4153,10 +4155,12 @@ def director_confirm_matching():
     cursor = conn.cursor(dictionary=True)
     
     try:
-        # 獲取當前學期ID和學期代碼
+        # 獲取當前學期ID和學期代碼（訊息用）
         current_semester_id = get_current_semester_id(cursor)
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
+        # 流程學期（媒合所屬學期，與未錄取名單、錄取名單匯出一致，避免 user_id 6 等沒被寫入 matching_results）
+        flow_semester_id = get_flow_semester_id(cursor) or current_semester_id
         
         # 獲取當前學期代碼（如 '1132'）
         current_semester_code = get_current_semester_code(cursor)
@@ -4178,15 +4182,14 @@ def director_confirm_matching():
             if has_mr_semester_id:
                 cursor.execute(
                     "SELECT COUNT(*) AS cnt FROM matching_results WHERE semester_id = %s",
-                    (current_semester_id,),
+                    (flow_semester_id,),
                 )
             else:
-                # 舊資料庫沒有 semester_id 欄位時，只要表內已有資料就視為已送出
                 cursor.execute("SELECT COUNT(*) AS cnt FROM matching_results")
             row_cnt = cursor.fetchone() or {}
             if (row_cnt.get("cnt") or 0) > 0:
                 print(f"ℹ️ {semester_prefix}已有媒合結果，允許重新送出覆蓋。")
-                cursor.execute("DELETE FROM matching_results WHERE semester_id = %s", (current_semester_id,)) if has_mr_semester_id else cursor.execute("DELETE FROM matching_results")
+                cursor.execute("DELETE FROM matching_results WHERE semester_id = %s", (flow_semester_id,)) if has_mr_semester_id else cursor.execute("DELETE FROM matching_results")
         except Exception as check_err:
             # 若檢查發生錯誤，不影響後續流程，但記錄日誌以便追蹤
             print(f"⚠️ 檢查 matching_results 是否已存在時發生錯誤：{check_err}")
@@ -4206,12 +4209,12 @@ def director_confirm_matching():
                 md.updated_at = CURRENT_TIMESTAMP
             WHERE md.director_decision = 'Pending'
               AND (md.original_type IS NULL OR md.original_type = 'Regular')
-        """, (current_semester_id,))
+        """, (flow_semester_id,))
         updated_count = cursor.rowcount
         print(f"✅ 主任確認：已將 {updated_count} 筆 Pending 記錄更新為 Approved")
         
-        # 0.05. 自動處理重複學生：選擇志願序最高的記錄，將其他記錄標記為 Pending
-        _resolve_duplicate_students(cursor, current_semester_id)
+        # 0.05. 自動處理重複學生（以流程學期為準）
+        _resolve_duplicate_students(cursor, flow_semester_id)
         
         # 0.1. 為來自 resume_applications 但還沒有 manage_director 記錄的學生創建記錄
         # 這些學生是廠商已排序但主任還沒有處理的
@@ -4261,7 +4264,7 @@ def director_confirm_matching():
                 AND (SELECT COUNT(*) FROM manage_director md2 
                      WHERE md2.preference_id = ra.application_id 
                      AND md2.student_id = sja.student_id) = 0  -- 確保不會重複插入
-            """, (current_semester_id, current_semester_id))
+            """, (flow_semester_id, flow_semester_id))
         else:
             # 沒有 semester_id 欄位
             cursor.execute("""
@@ -4296,13 +4299,13 @@ def director_confirm_matching():
                 AND (SELECT COUNT(*) FROM manage_director md2 
                      WHERE md2.preference_id = ra.application_id 
                      AND md2.student_id = sja.student_id) = 0  -- 確保不會重複插入
-            """, (current_semester_id,))
+            """, (flow_semester_id,))
         
         inserted_count = cursor.rowcount
         print(f"✅ 主任確認：已為 {inserted_count} 筆來自 resume_applications 的記錄創建 manage_director 記錄")
         
-        # 0.15. 再次自動處理重複學生（插入新記錄後可能產生新的重複）
-        _resolve_duplicate_students(cursor, current_semester_id)
+        # 0.15. 再次自動處理重複學生（以流程學期為準）
+        _resolve_duplicate_students(cursor, flow_semester_id)
         
         # 主任確認：只通知科助（指導老師、班導、學生、廠商由科助確認時一併通知）
         cursor.execute("SELECT id, name FROM users WHERE role = 'ta'")
@@ -4320,7 +4323,8 @@ def director_confirm_matching():
                 link_url=link_url
             )
         
-        # 2. 將已確認的媒合結果寫入 matching_results 表（主任確認時寫入）
+        # 2. 將已確認的媒合結果寫入 matching_results 表（與主任排序畫面一致：含 sp.semester_id 為 NULL 的志願，確保尤思婷等會寫入）
+        #    只寫入「仍為錄取」的學生：排除被廠商設為未錄取(rejected)者
         cursor.execute("""
             SELECT DISTINCT
                 md.student_id,
@@ -4331,16 +4335,45 @@ def director_confirm_matching():
                 COALESCE(ic.advisor_user_id, 0) AS mentor_id
             FROM manage_director md
             INNER JOIN student_job_applications sja ON md.preference_id = sja.id
-            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+            LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
                 AND sja.company_id = sp.company_id
                 AND sja.job_id = sp.job_id
-                AND sp.semester_id = %s
+                AND (sp.semester_id = %s OR sp.semester_id IS NULL)
+            LEFT JOIN resume_applications ra ON ra.application_id = sja.id AND ra.job_id = sja.job_id
             LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
             LEFT JOIN internship_companies ic ON sja.company_id = ic.id
             WHERE md.director_decision = 'Approved'
               AND (md.original_type IS NULL OR md.original_type = 'Regular')
-        """, (current_semester_id, current_semester_id))
+              AND (ra.id IS NULL OR ra.apply_status != 'rejected')
+        """, (flow_semester_id, flow_semester_id))
         match_results = cursor.fetchall() or []
+        
+        # 2.1 從 matching_results 移除該學期「未錄取」的學生（廠商已 reject），修正既有錯誤資料（如 user_id 3）
+        try:
+            cursor.execute("""
+                SELECT COLUMN_NAME FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'matching_results' AND COLUMN_NAME = 'semester_id'
+            """)
+            if cursor.fetchone() is not None:
+                cursor.fetchall()
+                cursor.execute("""
+                    DELETE mr FROM matching_results mr
+                    WHERE mr.semester_id = %s
+                    AND mr.student_id IN (
+                        SELECT DISTINCT md.student_id
+                        FROM manage_director md
+                        INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+                        INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
+                            AND sja.company_id = sp.company_id AND sja.job_id = sp.job_id AND sp.semester_id = %s
+                        INNER JOIN resume_applications ra ON ra.application_id = sja.id AND ra.job_id = sja.job_id
+                        WHERE md.director_decision IN ('Approved', 'Pending')
+                          AND ra.apply_status = 'rejected'
+                    )
+                """, (flow_semester_id, flow_semester_id))
+                if cursor.rowcount:
+                    print(f"✅ 已從 matching_results 移除 {cursor.rowcount} 筆未錄取（廠商 reject）學生")
+        except Exception as cleanup_err:
+            print(f"⚠️ 清理 matching_results 未錄取學生時發生錯誤：{cleanup_err}")
         
         # 檢查 matching_results 表是否具有各欄位（舊資料庫可能缺少 semester_id / job_id 等）
         cursor.execute("""
@@ -4362,7 +4395,7 @@ def director_confirm_matching():
         mr_has_status = "status" in mr_cols
         mr_has_comment = "comment" in mr_cols
         
-        intern_start, intern_end = get_internship_semester_dates(cursor, current_semester_id)
+        intern_start, intern_end = get_internship_semester_dates(cursor, flow_semester_id)
         if not intern_start or not intern_end:
             intern_start = intern_end = datetime.now().strftime('%Y-%m-%d')
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -4372,7 +4405,7 @@ def director_confirm_matching():
             student_id = match_result.get('student_id')
             job_id = match_result.get('job_id')
             company_id = match_result.get('company_id')
-            semester_id = match_result.get('semester_id') or current_semester_id
+            semester_id = match_result.get('semester_id') or flow_semester_id
             if not student_id:
                 continue
             mentor_id = match_result.get('mentor_id') or 0
@@ -5268,27 +5301,34 @@ def director_second_round_unadmitted():
         if not dept_result or not dept_result.get("department"):
             return jsonify({"success": True, "students": [], "semester_id": sid})
         department = dept_result["department"]
-        # 與 get_all_students 相同的「已媒合」名單（正取）
+        # 已錄取：若本學期已有 matching_results 則以其為準；否則與 get_all_students 一致（manage_director Approved/Pending 且該志願未被廠商 reject）
+        # 如此「主任排序正取但被廠商 reject 未寫入 matching_results」的學生在送出後會出現在未錄取名單
         cursor.execute("""
-            SELECT DISTINCT sja.student_id
-            FROM resume_applications ra
-            INNER JOIN student_job_applications sja ON ra.application_id = sja.id
-            INNER JOIN student_preferences sp ON sja.student_id = sp.student_id
-                AND sja.company_id = sp.company_id AND sja.job_id = sp.job_id AND sp.semester_id = %s
-            LEFT JOIN manage_director md ON ra.application_id = md.preference_id
-            LEFT JOIN internship_companies ic ON sja.company_id = ic.id
-            WHERE ra.apply_status = 'approved'
-            AND (ra.is_reserve IS NOT NULL OR ra.slot_index IS NOT NULL)
-            AND (md.director_decision IS NULL OR md.director_decision != 'Rejected')
-            AND ic.status = 'approved'
-            AND (
-                (ra.is_reserve = 0)
-                OR (ra.is_reserve IS NULL AND ra.slot_index IS NOT NULL)
-                OR (md.director_decision = 'Approved' AND md.final_rank IS NOT NULL)
-                OR (md.director_decision = 'Pending' AND md.original_type = 'Regular' AND md.original_rank IS NOT NULL)
-            )
-        """, (sid,))
-        matched_ids = {r["student_id"] for r in (cursor.fetchall() or [])}
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'matching_results' AND COLUMN_NAME = 'semester_id'
+        """)
+        mr_has_semester = cursor.fetchone() is not None
+        cursor.fetchall()
+        use_mr = False
+        if mr_has_semester:
+            cursor.execute("SELECT COUNT(*) AS cnt FROM matching_results WHERE semester_id = %s", (sid,))
+            use_mr = (cursor.fetchone() or {}).get("cnt", 0) > 0
+        if use_mr:
+            cursor.execute("SELECT DISTINCT student_id FROM matching_results WHERE semester_id = %s", (sid,))
+            matched_ids = {r["student_id"] for r in (cursor.fetchall() or [])}
+        else:
+            cursor.execute("""
+                SELECT DISTINCT md.student_id
+                FROM manage_director md
+                INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+                LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
+                    AND sja.company_id = sp.company_id AND sja.job_id = sp.job_id
+                    AND (sp.semester_id = %s OR sp.semester_id IS NULL)
+                LEFT JOIN resume_applications ra ON ra.application_id = md.preference_id AND ra.job_id = sja.job_id
+                WHERE md.director_decision IN ('Approved', 'Pending')
+                  AND (ra.id IS NULL OR ra.apply_status != 'rejected')
+            """, (sid,))
+            matched_ids = {r["student_id"] for r in (cursor.fetchall() or [])}
         # 二輪已指派
         cursor.execute("SELECT DISTINCT student_id FROM second_round_assignments WHERE semester_id = %s", (sid,))
         assigned_second = {r["student_id"] for r in (cursor.fetchall() or [])}
@@ -5982,10 +6022,7 @@ def ta_dashboard_stats():
             except (ValueError, TypeError):
                 pass
 
-        # 已核定／待公告的媒合人數（只計算 Approved，因為主任確認後所有記錄都應該是 Approved）
-        # 以 student_preferences.semester_id 篩選學期（不依賴 manage_director.semester_id，因該欄位可能不存在）
-        # 注意：manage_director.preference_id 引用的是 student_job_applications.id（即 resume_applications.application_id）
-        # 需要通過 student_job_applications 來 JOIN student_preferences，並且只統計當前學期的記錄
+        # 已核定媒合人數（Approved 且該志願未被廠商 reject，與未錄取名單邏輯一致）
         if student_id_prefix:
             cursor.execute("""
                 SELECT COUNT(DISTINCT md.student_id) AS cnt
@@ -5995,8 +6032,10 @@ def ta_dashboard_stats():
                     AND sja.company_id = sp.company_id
                     AND sja.job_id = sp.job_id
                     AND sp.semester_id = %s
+                LEFT JOIN resume_applications ra ON ra.application_id = md.preference_id AND ra.job_id = sja.job_id
                 INNER JOIN users u ON md.student_id = u.id AND u.username LIKE %s
                 WHERE md.director_decision = 'Approved'
+                  AND (ra.id IS NULL OR ra.apply_status != 'rejected')
             """, (current_semester_id, student_id_prefix + "%"))
         else:
             cursor.execute("""
@@ -6007,7 +6046,9 @@ def ta_dashboard_stats():
                     AND sja.company_id = sp.company_id
                     AND sja.job_id = sp.job_id
                     AND sp.semester_id = %s
+                LEFT JOIN resume_applications ra ON ra.application_id = md.preference_id AND ra.job_id = sja.job_id
                 WHERE md.director_decision = 'Approved'
+                  AND (ra.id IS NULL OR ra.apply_status != 'rejected')
             """, (current_semester_id,))
         row = cursor.fetchone()
         matching_approved_count = (row.get("cnt") or 0) if row else 0
@@ -6119,6 +6160,277 @@ def simplify_job_title(job_title):
     # 移除所有括號（半形和全形），因為調用處會加上括號
     simplified = simplified.replace('(', '').replace(')', '').replace('（', '').replace('）', '').strip()
     return simplified if simplified else job_title
+
+# =========================================================
+# API: 匯出錄取名單 Excel（以主任排序為準，一位學生一家公司）
+# =========================================================
+@admission_bp.route("/api/export_admitted_list_excel", methods=["GET"])
+def export_admitted_list_excel():
+    """
+    主任匯出「錄取名單」Excel：以 matching_results 為單一資料來源，與資料庫媒合結果一致。
+    一位學生一筆（一家公司），匯出格式與科助錄取名單相同（4 欄網格）。
+    """
+    if 'user_id' not in session or session.get('role') != 'director':
+        return jsonify({"success": False, "message": "未授權"}), 403
+
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        flow_semester_id = get_flow_semester_id(cursor)
+        if not flow_semester_id:
+            return jsonify({"success": False, "message": "無法取得學期"}), 500
+
+        # 檢查 matching_results 是否有 semester_id 欄位
+        cursor.execute("""
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'matching_results' AND COLUMN_NAME = 'semester_id'
+        """)
+        has_semester_id = cursor.fetchone() is not None
+        cursor.fetchall()
+
+        # 以 matching_results 為來源，但只匯出「仍為錄取」者：主任 Approved 且未被廠商 reject（與未錄取名單定義一致，排除如馬嫚蔆）
+        # 透過 sja + manage_director + resume_applications 篩掉應在未錄取名單的學生
+        if has_semester_id:
+            cursor.execute("""
+                SELECT
+                    mr.student_id,
+                    mr.company_id,
+                    u.username AS student_number,
+                    u.name AS student_name,
+                    c.name AS class_name,
+                    COALESCE(ic.company_name, '') AS company_name,
+                    COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title, '') AS job_title
+                FROM matching_results mr
+                JOIN student_job_applications sja ON sja.student_id = mr.student_id
+                    AND sja.company_id = mr.company_id
+                    AND (mr.job_id IS NULL OR sja.job_id = mr.job_id)
+                JOIN manage_director md ON md.preference_id = sja.id AND md.director_decision = 'Approved'
+                LEFT JOIN resume_applications ra ON ra.application_id = sja.id AND ra.job_id = sja.job_id
+                JOIN users u ON mr.student_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                LEFT JOIN internship_companies ic ON mr.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON mr.job_id = ij.id
+                WHERE mr.semester_id = %s
+                  AND (ra.id IS NULL OR ra.apply_status != 'rejected')
+                ORDER BY mr.company_id, mr.job_id, mr.student_id
+            """, (flow_semester_id,))
+        else:
+            cursor.execute("""
+                SELECT
+                    mr.student_id,
+                    mr.company_id,
+                    u.username AS student_number,
+                    u.name AS student_name,
+                    c.name AS class_name,
+                    COALESCE(ic.company_name, '') AS company_name,
+                    COALESCE(NULLIF(TRIM(mr.job_title), ''), ij.title, '') AS job_title
+                FROM matching_results mr
+                JOIN student_job_applications sja ON sja.student_id = mr.student_id
+                    AND sja.company_id = mr.company_id
+                    AND (mr.job_id IS NULL OR sja.job_id = mr.job_id)
+                JOIN manage_director md ON md.preference_id = sja.id AND md.director_decision = 'Approved'
+                LEFT JOIN resume_applications ra ON ra.application_id = sja.id AND ra.job_id = sja.job_id
+                JOIN users u ON mr.student_id = u.id
+                LEFT JOIN classes c ON u.class_id = c.id
+                LEFT JOIN internship_companies ic ON mr.company_id = ic.id
+                LEFT JOIN internship_jobs ij ON mr.job_id = ij.id
+                WHERE (ra.id IS NULL OR ra.apply_status != 'rejected')
+                ORDER BY mr.company_id, mr.job_id, mr.student_id
+            """)
+        rows = cursor.fetchall() or []
+        # 同一位學生可能有多筆 sja 對應，只保留一筆（matching_results 一學生一公司）
+        seen = set()
+        one_per_student = []
+        for r in rows:
+            sid = r.get("student_id")
+            if sid is not None and sid not in seen:
+                seen.add(sid)
+                one_per_student.append(r)
+
+        # 補齊「已錄取」但尚未在 matching_results 的學生（與主任排序畫面一致：含 sp.semester_id 為 NULL，確保尤思婷等一定在錄取名單）
+        # 從 manage_director 取 Approved、未 reject，每位學生一筆（依 final_rank、志願序）
+        cursor.execute("""
+            SELECT
+                md.student_id,
+                COALESCE(sp.company_id, sja.company_id, md.vendor_id) AS company_id,
+                u.username AS student_number,
+                u.name AS student_name,
+                c.name AS class_name,
+                COALESCE(ic.company_name, v.name, '') AS company_name,
+                COALESCE(ij.title, '') AS job_title
+            FROM manage_director md
+            INNER JOIN student_job_applications sja ON md.preference_id = sja.id
+            LEFT JOIN student_preferences sp ON sja.student_id = sp.student_id
+                AND sja.company_id = sp.company_id
+                AND sja.job_id = sp.job_id
+                AND (sp.semester_id = %s OR sp.semester_id IS NULL)
+            LEFT JOIN resume_applications ra ON ra.application_id = md.preference_id AND ra.job_id = sja.job_id
+            LEFT JOIN users u ON md.student_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            LEFT JOIN internship_companies ic ON COALESCE(sp.company_id, sja.company_id, md.vendor_id) = ic.id
+            LEFT JOIN internship_jobs ij ON sja.job_id = ij.id
+            LEFT JOIN users v ON md.vendor_id = v.id
+            WHERE md.director_decision = 'Approved'
+              AND (ra.id IS NULL OR ra.apply_status != 'rejected')
+            ORDER BY md.student_id,
+                     COALESCE(md.final_rank, 999) ASC,
+                     COALESCE(sp.preference_order, 999) ASC,
+                     md.match_id ASC
+        """, (flow_semester_id,))
+        fallback_rows = cursor.fetchall() or []
+        for r in fallback_rows:
+            sid = r.get("student_id")
+            if sid is not None and sid not in seen:
+                seen.add(sid)
+                one_per_student.append(r)
+
+        # 依公司分組，格式與科助匯出錄取名單一致（4 欄網格、黃色公司標題、學號+姓名、N人）
+        companies_data = {}
+        for r in one_per_student:
+            company_id = r.get("company_id")
+            company_name = (r.get("company_name") or "").strip() or "未知公司"
+            job_title = (r.get("job_title") or "").strip() or "未指定職缺"
+            if company_id not in companies_data:
+                companies_data[company_id] = {"company_name": company_name, "jobs": {}}
+            if job_title not in companies_data[company_id]["jobs"]:
+                companies_data[company_id]["jobs"][job_title] = []
+            companies_data[company_id]["jobs"][job_title].append({
+                "student_number": r.get("student_number") or "",
+                "student_name": r.get("student_name") or "",
+                "job_title": job_title,
+            })
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "媒合結果"
+        company_header_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+        company_header_font = Font(bold=True, size=12)
+        student_font = Font(size=11)
+        total_font = Font(bold=True, size=11)
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        COLUMNS = 4
+        companies_list = []
+        for company in companies_data.values():
+            company_name = company["company_name"]
+            all_students = []
+            num_jobs = len(company["jobs"])
+            has_multiple_jobs = num_jobs >= 2
+            for job_title, students in company["jobs"].items():
+                for student in students:
+                    student_copy = student.copy()
+                    if has_multiple_jobs and job_title and job_title != "未指定職缺":
+                        student_name = student_copy.get("student_name") or ""
+                        simplified = simplify_job_title(job_title)
+                        simplified = (simplified or "").replace("(", "").replace(")", "").replace("（", "").replace("）", "").strip()
+                        student_copy["student_name"] = f"{student_name}({simplified})"
+                    all_students.append(student_copy)
+            if all_students:
+                companies_list.append({"name": company_name, "students": all_students})
+
+        columns_data = [[], [], [], []]
+        for idx, company in enumerate(companies_list):
+            columns_data[idx % COLUMNS].append(company)
+
+        for col_idx in range(COLUMNS):
+            col_number_start = col_idx * 3 + 1
+            col_letter_start = get_column_letter(col_number_start)
+            col_letter_end = get_column_letter(col_number_start + 1)
+            col_letter_right = get_column_letter(col_number_start + 2)
+            current_row = 1
+            for company in columns_data[col_idx]:
+                company_name = company["name"]
+                students = company["students"]
+                header_cell = ws[f"{col_letter_start}{current_row}"]
+                header_cell.value = company_name
+                header_cell.fill = company_header_fill
+                header_cell.font = company_header_font
+                header_cell.border = thin_border
+                header_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=False)
+                ws.merge_cells(f"{col_letter_start}{current_row}:{col_letter_end}{current_row}")
+                end_cell = ws[f"{col_letter_end}{current_row}"]
+                end_cell.border = thin_border
+                end_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=False)
+                ws[f"{col_letter_right}{current_row}"].value = ""
+                ws[f"{col_letter_right}{current_row}"].border = thin_border
+                current_row += 1
+                for student in students:
+                    student_number = student.get("student_number") or ""
+                    student_name = student.get("student_name") or ""
+                    if student_number:
+                        student_number_clean = "".join(filter(str.isdigit, str(student_number)))
+                        try:
+                            student_number_value = int(student_number_clean) if student_number_clean else ""
+                        except (ValueError, TypeError):
+                            student_number_value = student_number_clean
+                    else:
+                        student_number_value = ""
+                    number_cell = ws[f"{col_letter_start}{current_row}"]
+                    number_cell.value = student_number_value
+                    number_cell.font = student_font
+                    number_cell.border = thin_border
+                    number_cell.alignment = Alignment(horizontal='center', vertical='center')
+                    name_cell = ws[f"{col_letter_end}{current_row}"]
+                    name_cell.value = student_name
+                    name_cell.font = student_font
+                    name_cell.border = thin_border
+                    name_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=False)
+                    ws[f"{col_letter_right}{current_row}"].value = ""
+                    ws[f"{col_letter_right}{current_row}"].border = thin_border
+                    ws[f"{col_letter_right}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
+                    current_row += 1
+                ws[f"{col_letter_start}{current_row}"].value = ""
+                ws[f"{col_letter_start}{current_row}"].border = thin_border
+                ws[f"{col_letter_start}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
+                total_cell = ws[f"{col_letter_end}{current_row}"]
+                total_cell.value = f"{len(students)}人"
+                total_cell.font = total_font
+                total_cell.border = thin_border
+                total_cell.alignment = Alignment(horizontal='center', vertical='center')
+                ws[f"{col_letter_right}{current_row}"].value = ""
+                ws[f"{col_letter_right}{current_row}"].border = thin_border
+                ws[f"{col_letter_right}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
+                current_row += 1
+                ws[f"{col_letter_start}{current_row}"].value = ""
+                ws[f"{col_letter_start}{current_row}"].border = thin_border
+                ws[f"{col_letter_start}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
+                ws[f"{col_letter_end}{current_row}"].value = ""
+                ws[f"{col_letter_end}{current_row}"].border = thin_border
+                ws[f"{col_letter_end}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
+                ws[f"{col_letter_right}{current_row}"].value = ""
+                ws[f"{col_letter_right}{current_row}"].border = thin_border
+                ws[f"{col_letter_right}{current_row}"].alignment = Alignment(horizontal='center', vertical='center')
+                current_row += 1
+        for col in range(1, COLUMNS * 3 + 1):
+            col_letter = get_column_letter(col)
+            if (col - 2) % 3 == 0:
+                ws.column_dimensions[col_letter].width = 20
+            else:
+                ws.column_dimensions[col_letter].width = 12
+        for row in range(1, ws.max_row + 1):
+            ws.row_dimensions[row].height = 20
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        filename = f"錄取名單_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        return send_file(
+            output,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=filename,
+        )
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
 
 # =========================================================
 # API: 匯出媒合結果 Excel（網格格式）
@@ -6725,8 +7037,7 @@ def ta_export_unadmitted_students_excel():
         if not current_semester_id:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
 
-        # 未媒合名單以主任排序頁籤為準：每位學生只能有一個實習單位，已媒合 = 在 manage_director 為 Approved/Pending 的學生
-        # md.preference_id 引用 student_job_applications.id；用 DISTINCT student_id 表示每位學生只計一次
+        # 未媒合名單以主任排序為準；已媒合 = manage_director 為 Approved/Pending 且該志願未被廠商 reject
         cursor.execute("""
             SELECT DISTINCT md.student_id
             FROM manage_director md
@@ -6735,7 +7046,9 @@ def ta_export_unadmitted_students_excel():
                 AND sja.company_id = sp.company_id
                 AND sja.job_id = sp.job_id
                 AND sp.semester_id = %s
+            LEFT JOIN resume_applications ra ON ra.application_id = md.preference_id AND ra.job_id = sja.job_id
             WHERE md.director_decision IN ('Approved', 'Pending')
+              AND (ra.id IS NULL OR ra.apply_status != 'rejected')
         """, (current_semester_id,))
         matched_student_ids = {row['student_id'] for row in cursor.fetchall()}
 

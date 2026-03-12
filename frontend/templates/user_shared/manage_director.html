@@ -1940,9 +1940,12 @@
         <button id="confirmBtn" class="btn-confirm">
           <i class="fas fa-check"></i> 送出最終媒合結果
         </button>
-        <a href="/admission/unadmitted_list" class="btn-unadmitted" id="viewMatchingResultBtn" title="查看未錄取名單>
+        <a href="/admission/unadmitted_list" class="btn-unadmitted" id="viewMatchingResultBtn" title="查看未錄取名單">
           <i class="fas fa-users"></i> 查看未錄取名單
         </a>
+        <button id="viewAdmittedListBtn" class="btn-excel" title="以主任排序為準匯出錄取名單（一位學生一家公司）">
+          <i class="fas fa-file-excel"></i> 查看錄取名單
+        </button>
         <button id="exportExcelBtn" class="btn-excel" style="display: none;" title="送出媒合結果後才可匯出">
           <i class="fas fa-file-excel"></i> 匯出媒合名單
         </button>
@@ -4895,7 +4898,35 @@
       }
     }
 
-    // Excel 匯出功能
+    // 查看錄取名單：匯出 Excel（以主任排序為準，一位學生一家公司）
+    async function exportAdmittedListToExcel() {
+      try {
+        const res = await fetch('/admission/api/export_admitted_list_excel', {
+          method: 'GET',
+          credentials: 'include'
+        });
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ message: '匯出失敗' }));
+          showToast(errorData.message || '匯出失敗', 'error');
+          return;
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `錄取名單_${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        showToast('錄取名單已匯出', 'success');
+      } catch (error) {
+        console.error('匯出錄取名單失敗:', error);
+        showToast('匯出失敗：' + (error.message || '未知錯誤'), 'error');
+      }
+    }
+
+    // Excel 匯出功能（媒合名單網格格式）
     async function exportToExcel() {
       try {
         // 調用後端 API 生成 Excel
@@ -5096,8 +5127,12 @@
       
       // 綁定按鈕事件
       const exportExcelBtn = document.getElementById('exportExcelBtn');
+      const viewAdmittedListBtn = document.getElementById('viewAdmittedListBtn');
       const confirmBtn = document.getElementById('confirmBtn');
       
+      if (viewAdmittedListBtn) {
+        viewAdmittedListBtn.addEventListener('click', exportAdmittedListToExcel);
+      }
       if (exportExcelBtn) {
         exportExcelBtn.addEventListener('click', exportToExcel);
       }
