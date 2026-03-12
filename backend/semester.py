@@ -425,6 +425,46 @@ def get_current():
 # =========================================================
 # API: 實習學期是否已開始（供主任/班導/廠商首頁決定是否顯示「學生實習狀況」「退實習」入口）
 # =========================================================
+@semester_bp.route("/api/deadlines/company_data", methods=["GET"])
+def get_company_data_deadline():
+    """取得廠商上傳公司／職缺資料截止日（internship_flows.company_data_deadline），供 manage_positions、upload_company 顯示提醒。"""
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "未登入"}), 403
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        sid = get_flow_semester_id(cursor)
+        if not sid:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": True, "company_data_deadline": None, "company_data_deadline_display": None})
+        try:
+            cursor.execute(
+                "SELECT company_data_deadline FROM internship_flows WHERE semester_id = %s LIMIT 1",
+                (sid,),
+            )
+            row = cursor.fetchone()
+        except Exception:
+            row = None
+        cursor.close()
+        conn.close()
+        v = row.get("company_data_deadline") if row else None
+        if v and hasattr(v, "strftime"):
+            display = v.strftime("%Y-%m-%d %H:%M")
+        elif v:
+            display = str(v)[:16]
+        else:
+            display = None
+        return jsonify({
+            "success": True,
+            "company_data_deadline": display,
+            "company_data_deadline_display": display,
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @semester_bp.route("/api/internship_semester_started", methods=["GET"])
 def api_internship_semester_started():
     """Return { success: true, started: true|false }. When started, show director/class_teacher/vendor remove_intern cards."""

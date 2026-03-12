@@ -8,32 +8,32 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     :root {
-      --sr-primary: #0055a8;
-      --sr-primary-light: #006acb;
-      --sr-bg: #f7f9fc;
-      --sr-card: #ffffff;
+      --sr-primary: #0454a3;
+      --sr-primary-light: #0369a1;
+      --sr-bg: #f0f4f9;
+      --sr-card-bg: #fff;
       --sr-border: #e2e8f0;
-      --sr-text: #1f2933;
-      --sr-muted: #64748b;
-      --sr-success: #16a34a;
-      --sr-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      --sr-text: #1e293b;
+      --sr-text-muted: #64748b;
       --sr-radius: 12px;
+      --sr-font-body: 1.0625rem;
     }
     * { box-sizing: border-box; }
     body {
-      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      font-family: 'Noto Sans TC', sans-serif;
       background: var(--sr-bg);
       color: var(--sr-text);
       min-height: 100vh;
       margin: 0;
+      font-size: var(--sr-font-body);
     }
     header {
-      background: #0454a3;
+      background: linear-gradient(135deg, var(--sr-primary) 0%, var(--sr-primary-light) 100%);
       border-bottom: none;
       position: sticky;
       top: 0;
       z-index: 10;
-      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
+      box-shadow: 0 4px 12px rgba(4, 84, 163, 0.25);
     }
     .topbar {
       max-width: 1800px;
@@ -45,202 +45,89 @@
       color: #fff;
       position: relative;
     }
-    #menu-btn {
-      width: 30px;
-      height: 22px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      background: none;
-      border: none;
-      padding: 0;
-    }
-    #menu-btn span {
-      display: block;
-      width: 100%;
-      height: 3px;
-      background-color: white;
-      border-radius: 2px;
-      transition: all 0.3s ease;
-    }
-    .topbar h1 {
-      font-size: 1.5rem;
-      margin: 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      color: #fff;
-      flex: 1;
-    }
-    .topbar h1 .header-title {
-      flex: 1;
-      text-align: center;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-    }
+    #menu-btn { width: 30px; height: 22px; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; background: none; border: none; padding: 0; }
+    #menu-btn span { display: block; width: 100%; height: 3px; background-color: white; border-radius: 2px; }
+    .topbar h1 { font-size: 1.5rem; margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #fff; flex: 1; }
+    .topbar h1 .header-title { flex: 1; text-align: center; display: flex; align-items: center; justify-content: center; gap: 12px; }
     #side-menu {
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100vh;
-      width: 320px;
-      max-width: 80vw;
-      background-color: rgba(10, 10, 10, 0.95);
-      backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
-      padding: 2rem 1.5rem;
-      transform: translateX(-100%);
-      transition: transform 0.3s ease-in-out;
-      z-index: 1300;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      color: white;
-      user-select: none;
+      position: fixed; top: 0; left: 0; height: 100vh; width: 320px; max-width: 80vw;
+      background-color: rgba(10, 10, 10, 0.95); backdrop-filter: blur(6px); box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
+      padding: 2rem 1.5rem; transform: translateX(-100%); transition: transform 0.3s ease-in-out; z-index: 1300;
+      display: flex; flex-direction: column; align-items: flex-start; color: white; user-select: none;
     }
     #side-menu.open { transform: translateX(0); }
-    #close-btn {
-      position: absolute;
-      top: 3.2rem;
-      right: 1.6rem;
-      font-size: 1.6rem;
-      font-weight: bold;
-      background: none;
-      border: none;
-      color: #fff;
-      cursor: pointer;
-      line-height: 1;
-      height: 1.6rem;
-      width: 1.6rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-      transform: translateY(-50%);
-    }
-    #side-menu h2 {
-      margin: 0 0 1.5rem 0;
-      font-weight: 700;
-      font-size: 1.6rem;
-      color: #fff;
-      padding: 0;
-      line-height: 2.4rem;
-      height: 2.4rem;
-      display: flex;
-      align-items: center;
-    }
-    #side-menu a {
-      display: block;
-      width: 100%;
-      padding: 0.6rem 0;
-      font-size: 1.1rem;
-      color: #e2e8f0;
-      text-decoration: none;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
-    }
-    #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.18);
-      color: #fff;
-    }
+    #close-btn { position: absolute; top: 3.2rem; right: 1.6rem; font-size: 1.6rem; font-weight: bold; background: none; border: none; color: #fff; cursor: pointer; }
+    #side-menu h2 { margin: 0 0 1.5rem 0; font-weight: 700; font-size: 1.6rem; color: #fff; }
+    #side-menu a { display: block; width: 100%; padding: 0.6rem 0; font-size: 1.1rem; color: #e2e8f0; text-decoration: none; border-radius: 4px; }
+    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.18); color: #fff; }
     .sr-main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
-    .sr-panel {
-      background: var(--sr-card);
-      border-radius: var(--sr-radius);
-      box-shadow: var(--sr-shadow);
-      overflow: hidden;
-      margin-bottom: 1.5rem;
+    .card { border: 1px solid var(--sr-border); border-radius: var(--sr-radius); box-shadow: 0 2px 12px rgba(4, 84, 163, 0.08); background: var(--sr-card-bg); }
+    .quota-summary-wrap {
+      background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+      border: 1px solid #bae6fd;
+      border-left: 4px solid #0369a1;
+      border-radius: 12px;
+      padding: 1.35rem 1.5rem;
+      margin-bottom: 1.25rem;
+      box-shadow: 0 1px 3px rgba(3, 105, 161, 0.08);
     }
+    .quota-summary-wrap .quota-title { color: #0c4a6e; font-weight: 700; font-size: 1.15rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
+    .quota-summary-wrap .company-quota {
+      background: #fff; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 0.85rem;
+      border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .quota-summary-wrap .company-quota:last-child { margin-bottom: 0; }
+    .quota-summary-wrap .company-name {
+      font-weight: 700; color: #1e293b; font-size: 1rem; margin-bottom: 0.6rem; padding-bottom: 0.5rem;
+      border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .quota-summary-wrap .company-name .fa-building { color: #0369a1; }
+    .quota-summary-wrap .job-quota-row {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem;
+      padding: 0.5rem 0; font-size: 1rem;
+    }
+    .quota-summary-wrap .job-quota-row .job-title { font-weight: 500; color: #334155; }
+    .quota-summary-wrap .job-stats { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .quota-summary-wrap .stat-pill {
+      display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.75rem; border-radius: 8px;
+      font-size: 0.95rem; font-weight: 600; white-space: nowrap;
+    }
+    .quota-summary-wrap .stat-pill.slots { background: #e0f2fe; color: #0369a1; }
+    .quota-summary-wrap .stat-pill.filled { background: #fef3c7; color: #92400e; }
+    .quota-summary-wrap .stat-pill.remaining { background: #d1fae5; color: #065f46; }
+    .sr-panel { background: var(--sr-card-bg); border-radius: var(--sr-radius); box-shadow: 0 2px 12px rgba(4, 84, 163, 0.08); overflow: hidden; margin-bottom: 1.5rem; border: 1px solid var(--sr-border); }
     .sr-panel-header {
       background: linear-gradient(135deg, var(--sr-primary) 0%, var(--sr-primary-light) 100%);
-      color: #fff;
-      padding: 0.875rem 1.25rem;
-      font-size: 1rem;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
+      color: #fff; padding: 0.875rem 1.25rem; font-size: 1.05rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;
     }
-    .sr-panel-header i { opacity: 0.95; }
-    .sr-panel-body {
-      padding: 1.25rem;
-      max-height: 380px;
-      overflow-y: auto;
-    }
+    .sr-panel-body { padding: 1.25rem; max-height: 380px; overflow-y: auto; }
     .sr-list-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.65rem 0.85rem;
-      border-bottom: 1px solid var(--sr-border);
-      transition: background 0.15s;
+      display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid var(--sr-border); transition: background 0.15s; font-size: 1rem;
     }
     .sr-list-item:last-child { border-bottom: none; }
     .sr-list-item:hover { background: #f8fafc; }
-    .sr-list-item .badge-count {
-      font-size: 0.8rem;
-      font-weight: 500;
-      color: var(--sr-muted);
-    }
-    .sr-empty { color: var(--sr-muted); padding: 1rem; text-align: center; font-size: 0.95rem; }
+    .sr-empty { color: var(--sr-text-muted); padding: 1rem; text-align: center; font-size: 1rem; }
     .sr-assign-card {
-      background: var(--sr-card);
-      border-radius: var(--sr-radius);
-      box-shadow: var(--sr-shadow);
-      padding: 1.5rem;
-      border: 1px solid var(--sr-border);
+      background: var(--sr-card-bg); border-radius: var(--sr-radius); box-shadow: 0 2px 12px rgba(4, 84, 163, 0.08);
+      padding: 1.5rem; border: 1px solid var(--sr-border); margin-top: 1.5rem;
     }
-    .sr-assign-card .section-title {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--sr-text);
-      margin-bottom: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    .sr-assign-row {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
-      gap: 1rem;
-    }
-    .sr-assign-row .field {
-      display: flex;
-      flex-direction: column;
-      gap: 0.35rem;
-    }
-    .sr-assign-row label { font-size: 0.85rem; color: var(--sr-muted); font-weight: 500; }
-    .sr-assign-row .form-select { min-width: 200px; border-radius: 8px; border-color: var(--sr-border); }
+    .sr-assign-card .section-title { font-size: 1.1rem; font-weight: 600; color: var(--sr-text); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .sr-assign-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem; }
+    .sr-assign-row .field { display: flex; flex-direction: column; gap: 0.35rem; }
+    .sr-assign-row label { font-size: 1rem; color: var(--sr-text-muted); font-weight: 500; }
+    .sr-assign-row .form-select { min-width: 200px; border-radius: 8px; border-color: var(--sr-border); font-size: 1rem; padding: 0.5rem 0.6rem; }
     .btn-assign {
       background: linear-gradient(135deg, var(--sr-primary) 0%, var(--sr-primary-light) 100%);
-      border: none;
-      color: #fff;
-      padding: 0.5rem 1.25rem;
-      border-radius: 8px;
-      font-weight: 500;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      transition: opacity 0.2s, transform 0.05s;
+      border: none; color: #fff; padding: 0.6rem 1.25rem; border-radius: 8px; font-weight: 600; font-size: 1rem;
+      display: inline-flex; align-items: center; gap: 0.4rem;
     }
     .btn-assign:hover { color: #fff; opacity: 0.95; }
-    .btn-assign:active { transform: scale(0.98); }
     .btn-assign:disabled { opacity: 0.7; cursor: not-allowed; }
-    #loading {
-      text-align: center;
-      padding: 4rem 1rem;
-      color: var(--sr-muted);
-    }
+    #loading { text-align: center; padding: 4rem 1rem; color: var(--sr-text-muted); font-size: 1.05rem; }
     #loading .spinner-border { color: var(--sr-primary); }
-    #notOpenMsg {
-      border-radius: var(--sr-radius);
-      border-left: 4px solid #0d6efd;
-    }
+    #notOpenMsg { border-radius: var(--sr-radius); border-left: 4px solid #0d6efd; font-size: 1.05rem; }
+    .page-intro { font-size: 1.05rem; color: var(--sr-text-muted); line-height: 1.55; margin-bottom: 1.25rem; }
   </style>
 </head>
 <body>
@@ -262,6 +149,11 @@
     <div id="alertPlace" class="mb-3"></div>
     <div id="notOpenMsg" class="alert alert-info d-none">二輪媒合尚未開啟，請由科助先開啟二輪媒合並由廠商填寫意願後再進行分發。</div>
     <div id="contentArea" class="d-none">
+      <div id="secondRoundDeadlineWrap" class="alert mb-3 d-none" style="font-size:1rem;" role="status">
+        <i class="fas fa-clock me-2"></i>二面流程截止時間：<strong id="secondRoundDeadlineText"></strong>
+        <span id="secondRoundDeadlineExpiredHint" class="d-none ms-2 fw-bold">（已過期，僅供檢視）</span>
+      </div>
+      <p class="page-intro">可於下方選擇未錄取學生，指派至參與二輪之廠商與對應職缺；右側顯示各廠商名額、已指派人數與開放職缺。</p>
       <div class="row g-4">
         <div class="col-lg-6">
           <div class="sr-panel">
@@ -272,16 +164,14 @@
           </div>
         </div>
         <div class="col-lg-6">
-          <div class="sr-panel">
-            <div class="sr-panel-header"><i class="fas fa-building"></i> 參與二輪廠商（名額／已指派）</div>
-            <div class="sr-panel-body">
-              <div id="companyList"></div>
-            </div>
+          <div class="quota-summary-wrap">
+            <div class="quota-title"><i class="fas fa-building"></i> 參與二輪廠商（名額／已指派／開放職缺）</div>
+            <div id="companyList"></div>
           </div>
         </div>
       </div>
-      <div class="sr-assign-card mt-2">
-        <div class="section-title"><i class="fas fa-link"></i> 指派學生至廠商</div>
+      <div class="sr-assign-card">
+        <div class="section-title"><i class="fas fa-link"></i> 指派學生至廠商與職缺</div>
         <div class="sr-assign-row">
           <div class="field">
             <label for="selStudent">學生</label>
@@ -290,6 +180,12 @@
           <div class="field">
             <label for="selCompany">廠商</label>
             <select id="selCompany" class="form-select form-select-sm"></select>
+          </div>
+          <div class="field">
+            <label for="selJob">職缺</label>
+            <select id="selJob" class="form-select form-select-sm">
+              <option value="">請先選擇廠商</option>
+            </select>
           </div>
           <div class="field">
             <label>&nbsp;</label>
@@ -352,11 +248,35 @@
       const companyList = document.getElementById('companyList');
       const selStudent = document.getElementById('selStudent');
       const selCompany = document.getElementById('selCompany');
+      const selJob = document.getElementById('selJob');
       const btnAssign = document.getElementById('btnAssign');
       const loading = document.getElementById('loading');
 
+      var _companies = [];
+
       function showAlert(msg, type) {
         alertPlace.innerHTML = '<div class="alert alert-' + type + ' alert-dismissible fade show">' + msg + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+      }
+
+      function escapeHtml(s) {
+        if (s == null || s === '') return '';
+        var div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+      }
+
+      function updateJobDropdown() {
+        var companyId = selCompany && selCompany.value ? parseInt(selCompany.value, 10) : 0;
+        selJob.innerHTML = '<option value="">請先選擇廠商</option>';
+        if (!companyId) return;
+        var company = _companies.find(function(c) { return c.company_id === companyId; });
+        if (company && company.jobs && company.jobs.length > 0) {
+          selJob.innerHTML = '<option value="">請選擇職缺</option>' + company.jobs.map(function(j) {
+            return '<option value="' + j.job_id + '">' + escapeHtml(j.job_title || '未指定職缺') + '</option>';
+          }).join('');
+        } else {
+          selJob.innerHTML = '<option value="">（此公司無職缺資料）</option>';
+        }
       }
 
       async function load() {
@@ -382,12 +302,39 @@
           loading.classList.add('d-none');
           notOpenMsg.classList.add('d-none');
           contentArea.classList.remove('d-none');
+          var deadlineWrap = document.getElementById('secondRoundDeadlineWrap');
+          var deadlineText = document.getElementById('secondRoundDeadlineText');
+          var deadlineExpiredHint = document.getElementById('secondRoundDeadlineExpiredHint');
+          var deadlineExpired = false;
+          if (deadlineWrap && deadlineText) {
+            var dl = statusData.round2_deadline_display || statusData.round2_deadline;
+            if (dl) {
+              deadlineText.textContent = dl;
+              deadlineWrap.classList.remove('d-none');
+              var deadlineStr = (dl || '').trim().replace(' ', 'T');
+              deadlineExpired = deadlineStr && (new Date(deadlineStr).getTime() < Date.now());
+              if (deadlineExpired) {
+                deadlineWrap.classList.remove('alert-info');
+                deadlineWrap.classList.add('alert-danger');
+                if (deadlineExpiredHint) deadlineExpiredHint.classList.remove('d-none');
+              } else {
+                deadlineWrap.classList.add('alert-info');
+                deadlineWrap.classList.remove('alert-danger');
+                if (deadlineExpiredHint) deadlineExpiredHint.classList.add('d-none');
+              }
+            } else {
+              deadlineWrap.classList.add('d-none');
+            }
+          }
           var isReadOnly = statusData.director_read_only === true;
-          var assignDisabled = !statusData.is_enabled || isReadOnly;
+          var assignDisabled = !statusData.is_enabled || isReadOnly || deadlineExpired;
           if (btnAssign) btnAssign.disabled = assignDisabled;
           if (selStudent) selStudent.disabled = assignDisabled;
           if (selCompany) selCompany.disabled = assignDisabled;
-          if (isReadOnly && alertPlace) {
+          if (selJob) selJob.disabled = assignDisabled;
+          if (deadlineExpired && alertPlace) {
+            alertPlace.innerHTML = '<div class="alert alert-danger alert-dismissible fade show"><i class="fas fa-clock"></i> 二面流程已截止，僅供檢視。<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
+          } else if (isReadOnly && alertPlace) {
             alertPlace.innerHTML = '<div class="alert alert-info alert-dismissible fade show"><i class="fas fa-eye"></i> 目前為實習學期，僅可檢視二輪名單，無法進行指派。<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>';
           } else if (statusData.is_enabled && alertPlace) alertPlace.innerHTML = '';
           else if (!statusData.is_enabled && alertPlace) {
@@ -396,44 +343,65 @@
 
           const students = (unadmittedData.success && unadmittedData.students) ? unadmittedData.students : [];
           const companies = (companiesData.success && companiesData.companies) ? companiesData.companies : [];
+          _companies = companies;
 
           studentList.innerHTML = students.length ? students.map(function(s) {
-            return '<div class="sr-list-item">' + (s.name || '') + '（' + (s.username || '') + '）</div>';
+            return '<div class="sr-list-item">' + escapeHtml(s.name || '') + '（' + escapeHtml(s.username || '') + '）</div>';
           }).join('') : '<div class="sr-empty">目前無未錄取學生</div>';
 
           companyList.innerHTML = companies.length ? companies.map(function(c) {
-            const left = (c.quota || 0) - (c.assigned_count || 0);
-            return '<div class="sr-list-item"><span>' + (c.company_name || '') + '</span><span class="badge-count">' + (c.assigned_count || 0) + ' / ' + (c.quota || 0) + (left > 0 ? '（剩 ' + left + '）' : '') + '</span></div>';
+            var left = (c.quota || 0) - (c.assigned_count || 0);
+            var openTitle = (c.open_job_title || '').trim() || '—';
+            return '<div class="company-quota">'
+              + '<div class="company-name"><i class="fas fa-building"></i>' + escapeHtml(c.company_name || '未命名公司') + '</div>'
+              + '<div class="job-quota-row">'
+              + '<span class="job-title">' + escapeHtml(openTitle) + '</span>'
+              + '<div class="job-stats">'
+              + '<span class="stat-pill slots"><i class="fas fa-user-tag"></i>名額 ' + (c.quota || 0) + '</span>'
+              + '<span class="stat-pill filled"><i class="fas fa-user-check"></i>已指派 ' + (c.assigned_count || 0) + '</span>'
+              + '<span class="stat-pill remaining"><i class="fas fa-user-plus"></i>剩餘 ' + left + '</span>'
+              + '</div></div></div>';
           }).join('') : '<div class="sr-empty">尚無廠商參與二輪或名額為 0</div>';
 
           selStudent.innerHTML = '<option value="">請選擇學生</option>' + students.map(function(s) {
-            return '<option value="' + s.id + '">' + (s.name || '') + '（' + (s.username || '') + '）</option>';
+            return '<option value="' + s.id + '">' + escapeHtml(s.name || '') + '（' + escapeHtml(s.username || '') + '）</option>';
           }).join('');
           selCompany.innerHTML = '<option value="">請選擇廠商</option>' + companies.filter(function(c) {
             return ((c.quota || 0) - (c.assigned_count || 0)) > 0;
           }).map(function(c) {
-            return '<option value="' + c.company_id + '">' + (c.company_name || '') + '（剩 ' + ((c.quota || 0) - (c.assigned_count || 0)) + '）</option>';
+            return '<option value="' + c.company_id + '">' + escapeHtml(c.company_name || '') + '（剩 ' + ((c.quota || 0) - (c.assigned_count || 0)) + '）</option>';
           }).join('');
+          updateJobDropdown();
         } catch (e) {
           loading.classList.add('d-none');
           showAlert('載入失敗：' + (e.message || '連線錯誤'), 'danger');
         }
       }
 
+      if (selCompany) selCompany.addEventListener('change', updateJobDropdown);
+
       btnAssign.addEventListener('click', async function() {
         const studentId = selStudent.value;
         const companyId = selCompany.value;
+        const jobId = selJob && selJob.value ? selJob.value : null;
         if (!studentId || !companyId) {
           showAlert('請選擇學生與廠商', 'warning');
           return;
         }
+        var company = _companies.find(function(c) { return String(c.company_id) === String(companyId); });
+        if (company && company.jobs && company.jobs.length > 0 && !jobId) {
+          showAlert('請選擇職缺', 'warning');
+          return;
+        }
         btnAssign.disabled = true;
         try {
+          const payload = { student_id: studentId, company_id: companyId };
+          if (jobId) payload.job_id = parseInt(jobId, 10);
           const res = await fetch('/admission/api/second_round/director/assign', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ student_id: studentId, company_id: companyId })
+            body: JSON.stringify(payload)
           });
           const data = await res.json();
           if (data.success) {

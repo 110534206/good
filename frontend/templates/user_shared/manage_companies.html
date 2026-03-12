@@ -575,11 +575,15 @@
               <h5 class="table-section-title"><i class="bi bi-calendar-event"></i>時間管理 <span id="deadlineSemesterDisplay" class="text-muted fw-normal">（載入中...）</span></h5>
               <div class="deadline-intro">
                 <i class="bi bi-info-circle"></i>
-                設定本學期履歷／志願序繳交截止與審核截止時間，儲存後系統將依此判斷是否開放填寫與審核。時間屆至時系統會自動通知：履歷／志願序截止將同步通知班導與學生；審核截止將個別通知指導老師與廠商，無需手動發送提醒。
+                設定本學期流程期限（對應 internship_flows 記錄），儲存後系統將依此判斷是否開放填寫與審核。廠商上傳公司／職缺資料截止日、履歷／志願序繳交截止與審核截止時間；二輪媒合開始／截止為選填（科助開啟二輪時亦可自動帶入）。
               </div>
               <form id="deadlineForm" class="deadline-form">
                 <div class="deadline-section-title"><i class="bi bi-clock-history"></i>繳交與填寫截止</div>
                 <div class="deadline-grid">
+                  <div class="deadline-item">
+                    <label class="form-label" for="input-company-data-deadline"><i class="bi bi-building-add"></i>廠商上傳公司／職缺資料截止時間</label>
+                    <input type="datetime-local" class="form-control" id="input-company-data-deadline" name="company_data_deadline">
+                  </div>
                   <div class="deadline-item">
                     <label class="form-label" for="input-resume-deadline"><i class="bi bi-file-earmark-person"></i>履歷繳交截止時間</label>
                     <input type="datetime-local" class="form-control" id="input-resume-deadline" name="resume_deadline">
@@ -598,6 +602,17 @@
                   <div class="deadline-item">
                     <label class="form-label" for="input-vendor-deadline"><i class="bi bi-building"></i>廠商審核截止時間</label>
                     <input type="datetime-local" class="form-control" id="input-vendor-deadline" name="vendor_deadline">
+                  </div>
+                </div>
+                <div class="deadline-section-title"><i class="bi bi-arrow-repeat"></i>二輪媒合（選填）</div>
+                <div class="deadline-grid">
+                  <div class="deadline-item">
+                    <label class="form-label" for="input-round2-start"><i class="bi bi-calendar-event"></i>二輪開始日</label>
+                    <input type="datetime-local" class="form-control" id="input-round2-start" name="round2_start_date">
+                  </div>
+                  <div class="deadline-item">
+                    <label class="form-label" for="input-round2-deadline"><i class="bi bi-calendar-x"></i>二輪截止日</label>
+                    <input type="datetime-local" class="form-control" id="input-round2-deadline" name="round2_deadline">
                   </div>
                 </div>
                 <button type="button" id="btnSaveDeadlines" class="btn btn-primary btn-save-deadlines"><i class="bi bi-check-lg"></i>儲存本學期期限</button>
@@ -969,10 +984,14 @@
         }
         semesterDisplay.textContent = data.semester_code ? `（${data.semester_code}）` : '（尚未設定當前學期）';
         const flow = data.flow || {};
-        document.getElementById('input-resume-deadline').value = flow.resume_deadline || '';
-        document.getElementById('input-preference-deadline').value = flow.preference_deadline || '';
-        document.getElementById('input-advisor-deadline').value = flow.advisor_deadline || '';
-        document.getElementById('input-vendor-deadline').value = flow.vendor_deadline || '';
+        const el = (id) => document.getElementById(id);
+        if (el('input-company-data-deadline')) el('input-company-data-deadline').value = flow.company_data_deadline || '';
+        el('input-resume-deadline').value = flow.resume_deadline || '';
+        el('input-preference-deadline').value = flow.preference_deadline || '';
+        el('input-advisor-deadline').value = flow.advisor_deadline || '';
+        el('input-vendor-deadline').value = flow.vendor_deadline || '';
+        if (el('input-round2-start')) el('input-round2-start').value = flow.round2_start_date || '';
+        if (el('input-round2-deadline')) el('input-round2-deadline').value = flow.round2_deadline || '';
       } catch (e) {
         console.error('loadDeadlines', e);
         semesterDisplay.textContent = '（載入失敗）';
@@ -984,11 +1003,15 @@
       btn.disabled = true;
       btn.textContent = '儲存中...';
       try {
+        const g = (id) => (document.getElementById(id) && document.getElementById(id).value) || null;
         const payload = {
-          resume_deadline: document.getElementById('input-resume-deadline').value || null,
-          preference_deadline: document.getElementById('input-preference-deadline').value || null,
-          advisor_deadline: document.getElementById('input-advisor-deadline').value || null,
-          vendor_deadline: document.getElementById('input-vendor-deadline').value || null
+          company_data_deadline: g('input-company-data-deadline'),
+          resume_deadline: g('input-resume-deadline'),
+          preference_deadline: g('input-preference-deadline'),
+          advisor_deadline: g('input-advisor-deadline'),
+          vendor_deadline: g('input-vendor-deadline'),
+          round2_start_date: g('input-round2-start'),
+          round2_deadline: g('input-round2-deadline')
         };
         const res = await fetch('/ta/statistics/api/internship_flows/current', {
           method: 'PUT',

@@ -196,7 +196,7 @@
       text-align: center;
     }
 
-    /* 側邊選單樣式 */
+    /* 側邊選單樣式（與 vendor_home 一致） */
     #side-menu {
       position: fixed;
       top: 0;
@@ -206,20 +206,38 @@
       max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
-      z-index: 1300;
+      z-index: 1100;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      color: #fff;
+      color: white;
       user-select: none;
     }
 
     #side-menu.open {
       transform: translateX(0);
+    }
+
+    #close-btn {
+      position: absolute;
+      top: 2rem;
+      right: 1.6rem;
+      font-size: 2.8rem;
+      background: none;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      line-height: 2.4rem;
+      height: 2.5rem;
+      width: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
     }
 
     #side-menu h2 {
@@ -234,41 +252,20 @@
       align-items: center;
     }
 
-    #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.0rem;
-      font-weight: bold;
-      background: none;
-      border: none;
-      color: #fff;
-      cursor: pointer;
-      line-height: 2.4rem;
-      height: 2.4rem;
-      width: 2.4rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-      padding: 0;
-      margin: 0;
-    }
-
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.6rem 0;
+      padding: 0.5rem 0;
       font-size: 1.1rem;
-      color: #e2e8f0;
+      color: #ddd;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.18);
-      color: #fff;
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
     }
 
     /* 調整 body 和 container 的 margin-top，避免被頂部欄遮擋 */
@@ -295,6 +292,10 @@
   </div>
 
   <div class="container my-5">
+    <div id="companyDataDeadlineWrap" class="alert mb-4 d-none" role="status" style="font-size:1rem;">
+      公司／職缺資料截止日期：<strong id="companyDataDeadlineText"></strong>
+      <span id="companyDataDeadlineExpiredHint" class="d-none ms-2 fw-bold">（已過期，僅供檢視）</span>
+    </div>
     <!-- 表單區 -->
     <form id="uploadForm">
       <!-- I. 基本單位資訊 -->
@@ -499,13 +500,24 @@
     </div>
   </div>
 
-  <!-- 側邊選單 -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+  <!-- 側邊選單（廠商與 vendor_home 一致；其他角色維持原選單） -->
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="{% if user_role == 'vendor' %}廠商功能選單{% else %}功能選單{% endif %}">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
     {% if user_role == 'vendor' %}
     <a href="/vendor_home">首頁</a>
-    {% elif user_role == 'director' %}
+    <a href="/profile">個人資料</a>
+    <a href="/upload_company">建立實習機會</a>
+    <a href="/vendor_review_resume">學生履歷審核</a>
+    <a href="/manage_positions">職位需求管理</a>
+    <a href="/manage_positions/new">新增職缺</a>
+    <a href="/confirm_matching">媒合結果</a>
+    <a href="/admission/second_round/vendor" id="secondRoundMenuLink" style="display: none;">二輪媒合意願</a>
+    <a href="/publish_announcements">發布公告</a>
+    <a href="/notifications">通知</a>
+    <a href="/logout">登出</a>
+    {% else %}
+    {% if user_role == 'director' %}
     <a href="/director_home">首頁</a>
     {% elif user_role == 'ta' %}
     <a href="/ta_home">首頁</a>
@@ -523,6 +535,7 @@
     <a href="/review_experience">審核實習心得</a>
     <a href="/teacher_remove_intern">退實習案件管理</a>
     <a href="/logout">登出</a>
+    {% endif %}
   </nav>
 
   <script>
@@ -615,6 +628,39 @@
       addJobRow(); // 初始添加一個職缺
       document.getElementById("addJobBtn").addEventListener("click", addJobRow);
       loadUploadedCompanies();
+      (async () => {
+        const wrap = document.getElementById('companyDataDeadlineWrap');
+        const textEl = document.getElementById('companyDataDeadlineText');
+        const expiredHint = document.getElementById('companyDataDeadlineExpiredHint');
+        if (!wrap || !textEl) return;
+        try {
+          const res = await fetch('/semester/api/deadlines/company_data', { credentials: 'include' });
+          const data = await res.json();
+          if (data.success && data.company_data_deadline_display) {
+            textEl.textContent = data.company_data_deadline_display;
+            wrap.classList.remove('d-none');
+            const deadlineStr = (data.company_data_deadline_display || '').trim().replace(' ', 'T');
+            const expired = deadlineStr && (new Date(deadlineStr).getTime() < Date.now());
+            if (expired && expiredHint) {
+              expiredHint.classList.remove('d-none');
+              wrap.classList.remove('alert-info');
+              wrap.classList.add('alert-danger');
+              const form = document.getElementById('uploadForm');
+              const addJobBtn = document.getElementById('addJobBtn');
+              const submitBtn = document.getElementById('submitBtn');
+              if (form) {
+                form.querySelectorAll('input, select, textarea').forEach(el => { el.disabled = true; });
+              }
+              if (addJobBtn) addJobBtn.disabled = true;
+              if (submitBtn) submitBtn.disabled = true;
+            } else {
+              if (expiredHint) expiredHint.classList.add('d-none');
+              wrap.classList.add('alert-info');
+              wrap.classList.remove('alert-danger');
+            }
+          }
+        } catch (e) {}
+      })();
 
       // 側邊選單控制
       document.getElementById('menu-btn').addEventListener('click', () => {
@@ -636,6 +682,20 @@
           sideMenu.setAttribute('aria-hidden', 'true');
         }
       });
+
+      // 廠商：二輪媒合側選單連結與 vendor_home 一致，依 API 顯示
+      {% if user_role == 'vendor' %}
+      fetch('/admission/api/second_round/status', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var show = data.success && data.is_enabled && (data.has_any_vacancy !== false);
+          if (show) {
+            var link = document.getElementById('secondRoundMenuLink');
+            if (link) link.style.display = 'block';
+          }
+        })
+        .catch(function() {});
+      {% endif %}
 
     });
 
@@ -771,9 +831,12 @@
           const displayTime = r.upload_time || formatDateTime(r.submitted_at);
           const filename = r.filename || 'N/A';
           const isFromAdvisor = !!r.is_from_advisor;
-          const companyNameCell = isFromAdvisor
-            ? `${r.company_name || '-'} <span class="badge bg-info text-white ms-1">指導老師建立</span>`
-            : (r.company_name || '-');
+          const isFromVendor = !!r.is_from_vendor;
+          let companyNameCell = r.company_name || '-';
+          if (isFromVendor)
+            companyNameCell += ' <span class="badge bg-secondary text-white ms-1">廠商新建</span>';
+          else if (isFromAdvisor)
+            companyNameCell += ' <span class="badge bg-info text-white ms-1">指導老師建立</span>';
 
           return `
           <tr>
@@ -790,7 +853,7 @@
             </td>
             <td>
               <button class="btn btn-sm btn-outline-primary" onclick="downloadCompanyFile(${r.id}, '${escapeHtml(r.company_name || '')}')">下載</button>
-              ${isFromAdvisor ? '' : `<button class="btn btn-sm btn-outline-danger" onclick="deleteCompany(${r.id})">刪除</button>`}
+              ${(isFromAdvisor || isFromVendor) ? '' : `<button class="btn btn-sm btn-outline-danger" onclick="deleteCompany(${r.id})">刪除</button>`}
             </td>
           </tr>
         `;

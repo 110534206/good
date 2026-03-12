@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session, render_template, redirect, send_file
 from config import get_db
-from datetime import datetime
+from datetime import datetime, timedelta
 from semester import get_current_semester_code, get_current_semester_id, get_flow_semester_id, get_flow_semester_code, get_internship_semester_dates
 from notification import create_notification
 from openpyxl import Workbook
@@ -4956,6 +4956,25 @@ def second_round_status():
             "semester_id": current_semester_id,
             "director_read_only": director_read_only
         }
+        sid = flow_semester_id or current_semester_id
+        if sid:
+            try:
+                cursor.execute(
+                    "SELECT round2_start_date, round2_deadline FROM internship_flows WHERE semester_id = %s LIMIT 1",
+                    (sid,),
+                )
+                flow_row = cursor.fetchone()
+                if flow_row:
+                    for key in ("round2_start_date", "round2_deadline"):
+                        v = flow_row.get(key)
+                        if v and hasattr(v, "strftime"):
+                            payload[key] = v.strftime("%Y-%m-%d %H:%M")
+                            payload[key + "_display"] = v.strftime("%Y-%m-%d %H:%M")
+                        elif v:
+                            payload[key] = str(v)[:16]
+                            payload[key + "_display"] = str(v)[:16]
+            except Exception:
+                pass
         # 廠商：職缺已滿則首頁不顯示二輪媒合（主任排序後尚有職缺才顯示）
         if session.get("role") == "vendor":
             vendor_id = session.get("user_id")
@@ -5320,7 +5339,7 @@ def director_second_round_companies():
         if not sid:
             return jsonify({"success": False, "message": "無法取得當前學期"}), 500
         cursor.execute("""
-            SELECT srp.company_id, srp.quota, ic.company_name
+            SELECT srp.company_id, srp.quota, srp.job_title AS open_job_title, ic.company_name
             FROM second_round_participation srp
             JOIN internship_companies ic ON ic.id = srp.company_id AND ic.status = 'approved'
             WHERE srp.semester_id = %s AND srp.agree = 1 AND srp.quota > 0
@@ -5336,6 +5355,16 @@ def director_second_round_companies():
             [sid] + company_ids,
         )
         count_map = {r["company_id"]: r["assigned_count"] for r in (cursor.fetchall() or [])}
+        cursor.execute(
+            "SELECT id AS job_id, company_id, title AS job_title FROM internship_jobs WHERE company_id IN (" + ph + ") AND is_active = 1 ORDER BY company_id, id",
+            company_ids,
+        )
+        jobs_by_company = {}
+        for j in (cursor.fetchall() or []):
+            cid = j["company_id"]
+            if cid not in jobs_by_company:
+                jobs_by_company[cid] = []
+            jobs_by_company[cid].append({"job_id": j["job_id"], "job_title": j.get("job_title") or ""})
         companies = []
         for r in rows:
             cid = r["company_id"]
@@ -5344,6 +5373,8 @@ def director_second_round_companies():
                 "company_name": r.get("company_name") or "",
                 "quota": r.get("quota") or 0,
                 "assigned_count": count_map.get(cid, 0),
+                "open_job_title": (r.get("open_job_title") or "").strip(),
+                "jobs": jobs_by_company.get(cid, []),
             })
         return jsonify({"success": True, "companies": companies, "semester_id": sid})
     except Exception as e:
@@ -5366,11 +5397,13 @@ def director_second_round_assign():
     data = request.get_json() or {}
     student_id = data.get("student_id")
     company_id = data.get("company_id")
+    job_id = data.get("job_id")
     if student_id is None or company_id is None:
         return jsonify({"success": False, "message": "缺少 student_id 或 company_id"}), 400
     try:
         student_id = int(student_id)
         company_id = int(company_id)
+        job_id = int(job_id) if job_id is not None else None
     except (TypeError, ValueError):
         return jsonify({"success": False, "message": "參數格式錯誤"}), 400
     conn = get_db()
@@ -5412,15 +5445,80 @@ def director_second_round_assign():
         assigned = (cursor.fetchone() or {}).get("n") or 0
         if assigned >= (row.get("quota") or 0):
             return jsonify({"success": False, "message": "該公司二輪名額已滿"}), 400
+        final_job_id = None
+        if job_id is not None:
+            cursor.execute("SELECT id, company_id FROM internship_jobs WHERE id = %s AND is_active = 1", (job_id,))
+            job_row = cursor.fetchone()
+            if not job_row or job_row.get("company_id") != company_id:
+                return jsonify({"success": False, "message": "所選職缺不屬於該公司或無效"}), 400
+            final_job_id = job_id
         cursor.execute(
-            "INSERT INTO second_round_assignments (semester_id, student_id, company_id, job_id, status, assigned_by, assigned_at) VALUES (%s, %s, %s, NULL, 'pending', %s, NOW())",
-            (sid, student_id, company_id, director_id),
+            "INSERT INTO second_round_assignments (semester_id, student_id, company_id, job_id, status, assigned_by, assigned_at) VALUES (%s, %s, %s, %s, 'pending', %s, NOW())",
+            (sid, student_id, company_id, final_job_id, director_id),
         )
         conn.commit()
         return jsonify({"success": True, "message": "已指派"})
     except Exception as e:
         traceback.print_exc()
         conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
+# API: 科助匯出二面流程名單 Excel（TA/admin）
+# =========================================================
+@admission_bp.route("/api/second_round/export_excel", methods=["GET"])
+def export_second_round_excel():
+    """匯出二輪媒合指派名單為 Excel，僅科助/管理員。"""
+    if "user_id" not in session or session.get("role") not in ("ta", "admin"):
+        return jsonify({"success": False, "message": "未授權"}), 403
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        sid = get_flow_semester_id(cursor)
+        if not sid:
+            return jsonify({"success": False, "message": "無法取得流程學期"}), 500
+        cursor.execute("""
+            SELECT sra.student_id, sra.company_id, sra.job_id, sra.status, sra.assigned_at,
+                   u.name AS student_name, u.username AS student_number,
+                   ic.company_name, ij.title AS job_title
+            FROM second_round_assignments sra
+            LEFT JOIN users u ON u.id = sra.student_id
+            LEFT JOIN internship_companies ic ON ic.id = sra.company_id
+            LEFT JOIN internship_jobs ij ON ij.id = sra.job_id
+            WHERE sra.semester_id = %s
+            ORDER BY ic.company_name, ij.title, u.username
+        """, (sid,))
+        rows = cursor.fetchall() or []
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "二面名單"
+        headers = ["學號", "姓名", "公司", "職缺", "狀態", "指派時間"]
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=h)
+            cell.font = Font(bold=True)
+        for i, r in enumerate(rows, 2):
+            ws.cell(row=i, column=1, value=r.get("student_number") or "")
+            ws.cell(row=i, column=2, value=r.get("student_name") or "")
+            ws.cell(row=i, column=3, value=r.get("company_name") or "")
+            ws.cell(row=i, column=4, value=r.get("job_title") or "")
+            ws.cell(row=i, column=5, value=r.get("status") or "")
+            at = r.get("assigned_at")
+            ws.cell(row=i, column=6, value=at.strftime("%Y-%m-%d %H:%M") if at and hasattr(at, "strftime") else str(at or ""))
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(
+            buf,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name="二面名單.xlsx",
+        )
+    except Exception as e:
+        traceback.print_exc()
         return jsonify({"success": False, "message": str(e)}), 500
     finally:
         cursor.close()
@@ -5546,6 +5644,45 @@ def ta_toggle_second_interview():
                 "message": "二面流程已關閉",
                 "is_enabled": False
             })
+        
+        # 開啟時：寫入二面截止日 = 科助公告一面錄取名單的一周內（以 matching_results 最新 matched_at + 7 天）
+        try:
+            cursor.execute(
+                "SELECT MAX(matched_at) AS latest FROM matching_results WHERE semester_id = %s",
+                (sid,),
+            )
+            row = cursor.fetchone()
+            latest_matched = row.get("latest") if row else None
+            if latest_matched:
+                if hasattr(latest_matched, "date"):
+                    deadline_dt = latest_matched + timedelta(days=7)
+                else:
+                    deadline_dt = datetime.now() + timedelta(days=7)
+            else:
+                deadline_dt = datetime.now() + timedelta(days=7)
+            start_dt = datetime.now()
+            deadline_str = deadline_dt.strftime("%Y-%m-%d %H:%M:%S")
+            start_str = start_dt.strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute("SELECT id FROM internship_flows WHERE semester_id = %s LIMIT 1", (sid,))
+            flow_row = cursor.fetchone()
+            if flow_row:
+                try:
+                    cursor.execute(
+                        "UPDATE internship_flows SET round2_start_date = %s, round2_deadline = %s, updated_at = NOW() WHERE semester_id = %s",
+                        (start_str, deadline_str, sid),
+                    )
+                except Exception:
+                    pass  # 若表無 round2 欄位則略過
+            else:
+                try:
+                    cursor.execute(
+                        "INSERT INTO internship_flows (semester_id, round2_start_date, round2_deadline, updated_at) VALUES (%s, %s, %s, NOW())",
+                        (sid, start_str, deadline_str),
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            pass
         
         # 如果開啟，發送通知
         semester_prefix = f"{current_semester_code}學期" if current_semester_code else "本學期"

@@ -550,15 +550,15 @@
       max-width: 80vw;
       background-color: rgba(10, 10, 10, 0.95);
       backdrop-filter: blur(6px);
-      box-shadow: 3px 0 12px rgba(0, 0, 0, 0.6);
+      box-shadow: 3px 0 12px rgb(0 0 0 / 0.7);
       padding: 2rem 1.5rem;
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
-      z-index: 1300;
+      z-index: 1100;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      color: #fff;
+      color: white;
       user-select: none;
     }
 
@@ -599,17 +599,17 @@
     #side-menu a {
       display: block;
       width: 100%;
-      padding: 0.6rem 0;
+      padding: 0.5rem 0;
       font-size: 1.1rem;
-      color: #e2e8f0;
+      color: #ddd;
       text-decoration: none;
       border-radius: 4px;
       transition: background-color 0.2s ease;
     }
 
     #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.18);
-      color: #fff;
+      background-color: rgba(255, 255, 255, 0.15);
+      color: white;
     }
 
     @media (max-width: 768px) {
@@ -645,6 +645,10 @@
 
   <main class="management-container">
 
+    <div id="companyDataDeadlineWrap" class="empty-hint" style="background: #e0f2fe; color: #0369a1; border-color: #bae6fd; display: none;" role="status">
+      公司／職缺資料截止日期：<strong id="companyDataDeadlineText"></strong>
+      <span id="companyDataDeadlineExpiredHint" style="display: none; margin-left: 0.5rem; font-weight: 700;">（已過期，僅供檢視）</span>
+    </div>
     <p id="companyHint" class="empty-hint">目前尚未有已審核通過的公司資料可管理。您可先至<a href="/upload_company">建立實習機會</a>上傳公司資料。</p>
 
     <section class="panel" aria-label="職缺列表">
@@ -676,15 +680,17 @@
     </section>
   </main>
 
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="廠商功能選單">
     <button id="close-btn" aria-label="關閉功能選單">×</button>
     <h2>功能選單</h2>
     <a href="/vendor_home">首頁</a>
     <a href="/profile">個人資料</a>
+    <a href="/upload_company">建立實習機會</a>
     <a href="/vendor_review_resume">學生履歷審核</a>
     <a href="/manage_positions">職位需求管理</a>
     <a href="/manage_positions/new">新增職缺</a>
     <a href="/confirm_matching">媒合結果</a>
+    <a href="/admission/second_round/vendor" id="secondRoundMenuLink" style="display: none;">二輪媒合意願</a>
     <a href="/publish_announcements">發布公告</a>
     <a href="/notifications">通知</a>
     <a href="/logout">登出</a>
@@ -699,7 +705,8 @@
       const state = {
         companies: [],
         jobs: [],
-        vendorCompanyName: null // 從 profile API 獲取的廠商公司名稱
+        vendorCompanyName: null,
+        deadlineExpired: false
       };
 
       const els = {
@@ -744,11 +751,9 @@
 
       function updateCompaniesControls() {
         const hasCompanies = state.companies.length > 0;
-        // 檢查是否有公司且該公司有對接的指導老師（advisor_user_id 不為 null）
         const hasAdvisor = hasCompanies && state.companies.some(c => c.advisor_user_id != null);
-        
         if (els.createBtn) {
-          els.createBtn.disabled = !hasCompanies;
+          els.createBtn.disabled = state.deadlineExpired || !hasCompanies;
         }
         if (els.companyHint) {
           // 如果沒有公司，或公司沒有對接的指導老師，則顯示提示
@@ -838,11 +843,11 @@
               </td>
               <td>
                 <div style="display:flex; align-items:center; gap:12px; flex-wrap: wrap;">
-                  ${job.is_created_by_vendor === false ? `
-                    <span style="color:var(--color-muted); font-size:0.85rem;">由指導老師建立</span>
-                  ` : ''}
+                  ${state.deadlineExpired ? '<span style="color:var(--color-muted);">僅供檢視</span>' : `
+                  ${job.is_created_by_vendor === false ? '<span style="color:var(--color-muted); font-size:0.85rem;">由指導老師建立</span>' : ''}
                   <button class="btn-edit" data-action="edit" data-id="${job.id}">修改</button>
                   <button class="btn-delete" data-action="delete" data-id="${job.id}">刪除</button>
+                  `}
                 </div>
               </td>
             </tr>
@@ -855,6 +860,36 @@
       async function loadProfile() {
         // 不再需要從 profile API 獲取公司名稱，改為從職缺 API 返回的 companies 列表中獲取
         // 這樣可以確保公司名稱與職缺資料中的 company_name 一致
+      }
+
+      async function loadCompanyDataDeadline() {
+        const wrap = document.getElementById('companyDataDeadlineWrap');
+        const textEl = document.getElementById('companyDataDeadlineText');
+        const expiredHint = document.getElementById('companyDataDeadlineExpiredHint');
+        if (!wrap || !textEl) return;
+        try {
+          const res = await fetch('/semester/api/deadlines/company_data', { credentials: 'include' });
+          const data = await res.json();
+          if (data.success && data.company_data_deadline_display) {
+            textEl.textContent = data.company_data_deadline_display;
+            wrap.style.display = 'block';
+            const deadlineStr = (data.company_data_deadline_display || '').trim().replace(' ', 'T');
+            const expired = deadlineStr && (new Date(deadlineStr).getTime() < Date.now());
+            if (expired) {
+              state.deadlineExpired = true;
+              wrap.style.background = '#fee2e2';
+              wrap.style.color = '#991b1b';
+              wrap.style.borderColor = '#fecaca';
+              if (expiredHint) expiredHint.style.display = 'inline';
+            } else {
+              state.deadlineExpired = false;
+              wrap.style.background = '#e0f2fe';
+              wrap.style.color = '#0369a1';
+              wrap.style.borderColor = '#bae6fd';
+              if (expiredHint) expiredHint.style.display = 'none';
+            }
+          }
+        } catch (e) {}
       }
 
       async function loadPositions() {
@@ -968,8 +1003,19 @@
       async function init() {
         initMenu();
         bindEvents();
-        // 直接載入職缺資料（後端已經根據權限過濾了職缺）
+        await loadCompanyDataDeadline();
         await loadPositions();
+        // 二輪媒合：與 vendor_home 一致，僅在已開啟且尚有職缺時顯示側選單連結
+        fetch('/admission/api/second_round/status', { credentials: 'include' })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var show = data.success && data.is_enabled && (data.has_any_vacancy !== false);
+            if (show) {
+              var link = document.getElementById('secondRoundMenuLink');
+              if (link) link.style.display = 'block';
+            }
+          })
+          .catch(function() {});
       }
 
       document.addEventListener('DOMContentLoaded', init);

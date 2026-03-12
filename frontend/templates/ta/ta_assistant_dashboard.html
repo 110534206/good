@@ -523,6 +523,8 @@
           <div id="secondRoundStatusWrap" style="margin-top: 12px; padding: 10px; background: #fff; border-radius: 6px; border: 1px solid var(--border-light);">
             <span id="secondRoundStatusText">二輪媒合：載入中…</span>
             <button type="button" id="btnToggleSecondRound" class="btn btn-sm btn-primary ms-2" style="display: none;">開啟二輪媒合</button>
+            <span id="secondRoundDeadlineText" class="ms-2" style="color: var(--text-muted); font-size: 0.9rem;"></span>
+            <a id="btnExportSecondRound" href="/admission/api/second_round/export_excel" class="btn btn-sm btn-secondary ms-2" style="display: none;" download>匯出二面名單 Excel</a>
           </div>
         </div>
       </div>
@@ -634,6 +636,15 @@
         btn.dataset.enable = isEnabled ? '0' : '1';
         btn.disabled = !allowToggle;
         btn.title = allowToggle ? '' : '目前為實習學期(1132)，二輪開關僅能於流程學期(1131)操作';
+        const deadlineEl = document.getElementById('secondRoundDeadlineText');
+        if (deadlineEl) {
+          const dl = data.round2_deadline_display || data.round2_deadline;
+          deadlineEl.textContent = dl ? '截止時間：' + dl : '';
+        }
+        const exportBtn = document.getElementById('btnExportSecondRound');
+        if (exportBtn) {
+          exportBtn.style.display = isEnabled ? 'inline-block' : 'none';
+        }
       } catch (e) {
         statusText.textContent = '二輪媒合：載入失敗';
         btn.style.display = 'none';
