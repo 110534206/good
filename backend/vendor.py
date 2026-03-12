@@ -6000,6 +6000,42 @@ def vendor_confirm_teacher_withdraw():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
+@vendor_bp.route("/vendor/api/withdraw_reject_teacher_case", methods=["POST"])
+def vendor_reject_teacher_withdraw():
+    """廠商：駁回「指導老師提出之退實習申請」案件（僅限老師提出且狀態為退實習審核中）。"""
+    if "user_id" not in session or session.get("role") != "vendor":
+        return jsonify({"success": False, "message": "未授權"}), 403
+    data = request.get_json() or {}
+    case_id = data.get("id") or data.get("case_id")
+    if not case_id:
+        return jsonify({"success": False, "message": "缺少案件 id"}), 400
+    vendor_id = session.get("user_id")
+    try:
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        row = _vendor_can_access_teacher_withdraw_case(cursor, case_id, vendor_id)
+        if not row:
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "無權限或案件不存在"}), 404
+        if (row.get("initiated_by") or "").strip().lower() != "teacher":
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "僅限指導老師提出之退實習案件可由此駁回"}), 400
+        if (row.get("status") or "").strip().lower() != "withdrawing":
+            cursor.close()
+            conn.close()
+            return jsonify({"success": False, "message": "僅能駁回狀態為「退實習審核中」的案件"}), 400
+        cursor.execute("UPDATE internship_records SET status = 'rejected', updated_at = NOW() WHERE id = %s", (row["id"],))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"success": True, "message": "已駁回案件"})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @vendor_bp.route("/teacher/api/withdraw_cases", methods=["GET"])
 def teacher_get_withdraw_cases():
     """指導老師：取得待確認的退實習案件列表（僅自己擔任指導老師的公司）。
@@ -6036,7 +6072,7 @@ def teacher_get_withdraw_cases():
                 JOIN users u ON u.id = ir.student_id
                 LEFT JOIN classes c ON c.id = u.class_id
                 WHERE ic.advisor_user_id = %s
-                  AND (ir.status = 'withdrawing' OR ir.status = 'confirmed')
+                  AND (ir.status = 'withdrawing' OR ir.status = 'confirmed' OR ir.status = 'rejected')
                   AND (%s IS NULL OR ir.semester_id = %s)
                   AND (ir.initiated_by IS NULL OR ir.initiated_by != 'teacher')
                 ORDER BY ir.created_at DESC
@@ -6064,7 +6100,7 @@ def teacher_get_withdraw_cases():
                     JOIN users u ON u.id = ir.student_id
                     LEFT JOIN classes c ON c.id = u.class_id
                     WHERE ic.advisor_user_id = %s
-                      AND (ir.status = 'withdrawing' OR ir.status = 'confirmed')
+                      AND (ir.status = 'withdrawing' OR ir.status = 'confirmed' OR ir.status = 'rejected')
                       AND (%s IS NULL OR ir.semester_id = %s)
                     ORDER BY ir.created_at DESC
                 """, (teacher_id, current_semester_id, current_semester_id))
@@ -6094,7 +6130,7 @@ def teacher_get_withdraw_cases():
                     JOIN users u ON u.id = ir.student_id
                     LEFT JOIN classes c ON c.id = u.class_id
                     WHERE ic.advisor_user_id = %s
-                      AND (ir.status = 'withdrawing' OR ir.status = 'confirmed')
+                      AND (ir.status = 'withdrawing' OR ir.status = 'confirmed' OR ir.status = 'rejected')
                       AND (%s IS NULL OR ir.semester_id = %s)
                       AND (ir.initiated_by IS NULL OR ir.initiated_by != 'teacher')
                     ORDER BY ir.created_at DESC

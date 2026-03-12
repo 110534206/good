@@ -197,6 +197,7 @@
     .badge { display: inline-block; padding: 5px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 500; }
     .badge-withdrawing { background: #fecaca; color: #b91c1c; }
     .badge-confirmed { background: #dc2626; color: #fff; }
+    .badge-rejected { background: #e2e8f0; color: #475569; }
     .detail-block {
       background: #f8fafc; border-radius: 12px; padding: 18px 20px; margin-bottom: 20px;
       border: 1px solid #e2e8f0;
@@ -617,7 +618,7 @@
 
     <!-- 列表：待確認的退實習案件（指導老師可依班級、姓名／學號篩選） -->
     <div id="listCard" class="card">
-      <h2><i class="bi bi-list-ul" style="margin-right: 8px; color: #0454a3;"></i>待確認的退實習案件</h2>
+      <h2><i class="bi bi-list-ul" style="margin-right: 8px; color: #0454a3;"></i>廠商的退實習案件</h2>
       <div class="search-wrap">
         <label for="teacherClassFilter">班級</label>
         <select id="teacherClassFilter" aria-label="篩選班級">
@@ -871,12 +872,14 @@
         }
         listEmpty.style.display = 'none';
         caseListBody.innerHTML = rows.map(function (row) {
-          var statusClass = (row.status || '') === 'confirmed' ? 'badge-confirmed' : 'badge-withdrawing';
-          var statusText = (row.status || '') === 'confirmed' ? '已確認' : '待確認';
+          var status = (row.status || '').toLowerCase();
+          var statusClass = status === 'confirmed' ? 'badge-confirmed' : (status === 'rejected' ? 'badge-rejected' : 'badge-withdrawing');
+          var statusText = status === 'confirmed' ? '已確認' : (status === 'rejected' ? '已駁回' : '待確認');
           var viewUrl = '/teacher_remove_intern?id=' + row.id;
           var viewOnlyUrl = viewUrl + '&view=1';
-          var isConfirmed = (row.status || '') === 'confirmed';
-          var actionBtn = isConfirmed
+          var isConfirmed = status === 'confirmed';
+          var isRejected = status === 'rejected';
+          var actionBtn = (isConfirmed || isRejected)
             ? '<a class="btn-view" href="' + viewOnlyUrl + '"><i class="bi bi-eye"></i> 查看</a>'
             : '<a class="btn-confirm-case" href="' + viewUrl + '"><i class="bi bi-check-circle"></i> 確認案件</a>';
           var classDisplay = row.class_display || row.class_name || '—';
