@@ -813,7 +813,7 @@
               <div class="row g-2">
                 <div class="col-md-6">
                   <select id="ai-edit-style" class="form-select">
-                    <option value="polish">任務：履歷美化</option>
+                    <option value="light_polish">任務：履歷美化（輕度潤飾）</option>
                     <option value="concise">任務：文案精簡</option>
                     <option value="keyword_focus">任務：關鍵字導向</option>
                   </select>
@@ -4646,6 +4646,29 @@
       }
     });
 
+    // 針對單行文字建立「字元層級」差異標示（僅標出修改處）
+    function buildLineDiffHtml(origLine, newLine) {
+      const origChars = Array.from(origLine || '');
+      const newChars = Array.from(newLine || '');
+      const len = newChars.length;
+      let html = '';
+
+      for (let i = 0; i < len; i++) {
+        const chNew = newChars[i];
+        const chOld = origChars[i] || '';
+        const escaped = escapeHtml(chNew);
+
+        if (chNew === chOld) {
+          html += escaped;
+        } else {
+          // 只有實際有差異的字元才上色
+          html += `<span class="bg-warning-subtle">${escaped}</span>`;
+        }
+      }
+
+      return html;
+    }
+
     // AI 修改履歷函數
     async function reviseResumeInTab() {
       const resumeInputEl = document.getElementById('ai-resume-input');
@@ -4760,9 +4783,35 @@
         if (!cleanedText) {
           cleanedText = fullText.trim();
         }
-        
+
         if (revisedResumeDiv) {
-          revisedResumeDiv.innerText = cleanedText;
+          // 逐行比較，僅對有差異的字元加上背景色，未修改的字維持原樣
+          try {
+            const originalText = resumeInput || '';
+            const origLines = originalText.split(/\r?\n/);
+            const newLines = cleanedText.split(/\r?\n/);
+            const maxLines = newLines.length;
+            let html = '';
+
+            for (let i = 0; i < maxLines; i++) {
+              const origLineRaw = origLines[i] || '';
+              const newLineRaw = newLines[i] || '';
+
+              if (!newLineRaw) {
+                html += '<div></div>';
+                continue;
+              }
+
+              const lineHtml = buildLineDiffHtml(origLineRaw, newLineRaw);
+              html += `<div>${lineHtml}</div>`;
+            }
+
+            revisedResumeDiv.innerHTML = html || escapeHtml(cleanedText);
+          } catch (diffErr) {
+            console.warn('產生差異標示時發生錯誤，改用純文字顯示：', diffErr);
+            revisedResumeDiv.innerText = cleanedText;
+          }
+
           // 讓捲軸回到最上方，使用者一開始就看到開頭
           revisedResumeDiv.scrollTop = 0;
         }
@@ -4784,7 +4833,26 @@
       const revisedResumeDiv = document.getElementById('ai-revised-resume');
       const placeholderText = 'AI 修改後的內容將顯示在這裡...';
       
-      let revisedText = revisedResumeDiv.textContent || revisedResumeDiv.innerText || '';
+      if (!revisedResumeDiv) {
+        alert('❌ 找不到 AI 修改後的內容區塊。');
+        return;
+      }
+
+      // 依照每一個 <div> 作為一段，組回純文字，保持分段結構
+      const lineBlocks = Array.from(revisedResumeDiv.childNodes)
+        .filter(node => node.nodeType === Node.ELEMENT_NODE && node.tagName === 'DIV');
+
+      let revisedText = '';
+      if (lineBlocks.length > 0) {
+        revisedText = lineBlocks
+          .map(div => div.innerText.replace(/\s+$/g, '')) // 去掉每段尾端多餘空白
+          .join('\n');
+      } else {
+        // 後備方案：如果沒有分行 <div>，就用整體文字
+        revisedText = revisedResumeDiv.textContent || revisedResumeDiv.innerText || '';
+      }
+      // 將連續多個換行壓成單一換行，避免出現空白行
+      revisedText = revisedText.replace(/\n{2,}/g, '\n');
       
       if (revisedText.trim() === placeholderText || revisedText.trim() === '') {
         alert('❌ 請先使用 AI 美化自傳，然後再導入！');

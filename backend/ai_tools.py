@@ -204,10 +204,23 @@ def revise_resume():
                 )
         
         elif edit_style == 'concise':
-            # --- 選項 2: 文案精簡 (一步驟) ---
+            # --- 選項 2: 文案精簡 (保持段落、縮短篇幅) ---
             keyword_instruction = "此外，若以下有提供目標類別／關鍵字，請在精簡時特別保留或強化與之相關的表述。" if user_keywords else ""
             print(f"偵測任務: 文案精簡, 語氣: {tone_style}" + (f", 關鍵字: {user_keywords}" if user_keywords else ""))
-            final_prompt = f"[任務] 將以下 [原始文本] 改寫得**極度精簡、清楚明瞭且成就導向**。[規則] 1. **{tone_prompt}** 2. **每句話必須以行動動詞開頭**。 3. 刪除所有贅字、口語化和非成就型描述。 4. 保留並強化核心資訊。 5. **絕對禁止**包含任何解釋性文字、前綴說明、後綴註解或評論。 6. **只輸出修改後的文本內容**，不要有任何「這是為您改寫的...」、「以下是...」等說明文字。 7. 直接從修改後的文本開始輸出，不要有任何前綴。{keyword_instruction} {REVISE_OUTPUT_FORMAT_RULE}[原始文本] {user_resume_text}"
+            final_prompt = (
+                "[任務] 在保留原本文本主要內容與段落結構的前提下，將以下 [原始文本] 改寫得更精簡、清楚且成就導向。"
+                "[規則] "
+                f"1. {tone_prompt} "
+                "2. 盡量維持原本的段落分段方式，只需要適度合併或刪減句子，不要改成一條一條的條列句。 "
+                "3. 刪除冗長重複、口語化與與主題無關的描述，保留關鍵經歷、成果與能力。 "
+                "4. 可重新組織句子讓語意更清楚，但不要完全重寫成另一篇文章。 "
+                "5. 目標是將總字數大約縮短到原來的 50%～70%，但不得犧牲重要資訊。 "
+                "6. 絕對禁止包含任何解釋性文字、前綴說明、後綴註解或評論。 "
+                "7. 只輸出修改後的文本內容，不要有「這是為您改寫的...」、「以下是...」等說明文字，直接從修改後文本開始。"
+                f"{keyword_instruction} "
+                f"{REVISE_OUTPUT_FORMAT_RULE}"
+                f"[原始文本] {user_resume_text}"
+            )
             if user_keywords:
                 final_prompt += f"{keyword_guidance}"
             final_prompt += " [修改後的文本]"
