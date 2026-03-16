@@ -27,7 +27,7 @@
     }
 
     .container {
-      max-width: 1000px;
+      max-width: 1200px;
       margin: 2rem auto;
       background: white;
       padding: 2rem;
@@ -781,11 +781,31 @@
           <div class="p-4">
             <h5 class="mb-3">AI 履歷修改服務</h5>
             
-            <div class="mb-3">
-              <label class="form-label fw-semibold">輸入您的履歷草稿：</label>
-              <textarea id="ai-resume-input" class="form-control" rows="8" 
-                placeholder="系統將自動載入您已上傳履歷中的自傳內容，您也可以手動編輯..." 
-                style="resize: vertical; font-size: 1rem; line-height: 1.6;"></textarea>
+            <div class="row g-3 mb-3 align-items-stretch">
+              <div class="col-lg-6 d-flex flex-column">
+                <label class="form-label fw-semibold">修改前的履歷：</label>
+                <textarea id="ai-resume-input" class="form-control"
+                  placeholder="系統將自動載入您已上傳履歷中的自傳內容，您也可以手動編輯..."
+                  style="resize: none; font-size: 1rem; line-height: 1.6; min-height: 340px; max-height: 340px; overflow-y: auto;"></textarea>
+              </div>
+              <div class="col-lg-6 d-flex flex-column">
+                <label class="form-label fw-semibold">修改後的履歷：</label>
+                <div class="position-relative flex-grow-1">
+                  <div id="ai-loading-spinner"
+                    class="position-absolute top-50 start-50 translate-middle text-center"
+                    style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                      <span class="visually-hidden">載入中...</span>
+                    </div>
+                    <p class="mt-2 text-muted">AI 正在處理中，請稍候...</p>
+                  </div>
+                  <div id="ai-revised-resume" class="form-control"
+                    contenteditable="false"
+                    style="min-height: 340px; max-height: 340px; white-space: pre-wrap; background-color: #f8f9fa; line-height: 1.7; font-size: 1rem; text-align: left; overflow-y: auto;">
+                    AI 修改後的內容將顯示在這裡...
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="mb-3">
@@ -848,20 +868,6 @@
               <button type="button" class="btn btn-primary btn-lg" onclick="reviseResumeInTab()">
                 ⚡ 使用 AI 修改履歷
               </button>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label fw-semibold">修改後的履歷：</label>
-              <div id="ai-loading-spinner" class="text-center py-4" style="display: none;">
-                <div class="spinner-border text-primary" role="status">
-                  <span class="visually-hidden">載入中...</span>
-                </div>
-                <p class="mt-2 text-muted">AI 正在處理中，請稍候...</p>
-              </div>
-              <div id="ai-revised-resume" class="form-control" 
-                style="min-height: 150px; white-space: pre-wrap; background-color: #f8f9fa; line-height: 1.7; font-size: 1rem;">
-                AI 修改後的內容將顯示在這裡...
-              </div>
             </div>
 
             <div class="d-grid gap-2">
@@ -4641,8 +4647,9 @@
 
     // AI 修改履歷函數
     async function reviseResumeInTab() {
-      const resumeInput = document.getElementById('ai-resume-input').value;
+      const resumeInputEl = document.getElementById('ai-resume-input');
       const revisedResumeDiv = document.getElementById('ai-revised-resume');
+      const resumeInput = resumeInputEl ? resumeInputEl.value : '';
       const loadingSpinner = document.getElementById('ai-loading-spinner');
       const editStyle = document.getElementById('ai-edit-style').value;
       const toneStyle = document.getElementById('ai-tone-style').value;
@@ -4664,12 +4671,24 @@
       if (keywords) console.log('📌 送出關鍵字:', keywords);
 
       // 如果輸入框為空，後端會自動從資料庫讀取自傳
+      // 按下按鈕後：左邊「修改前」設為唯讀，右邊「修改後」開放編輯
+      if (resumeInputEl) {
+        resumeInputEl.readOnly = true;
+      }
+      if (revisedResumeDiv) {
+        revisedResumeDiv.setAttribute('contenteditable', 'true');
+        // 編輯模式時，背景改成和左邊 textarea 一樣的白色
+        revisedResumeDiv.style.backgroundColor = '#ffffff';
+      }
+
       if (resumeInput.trim() === "") {
         console.log("ℹ️ 輸入框為空，後端將自動從資料庫讀取自傳內容");
       }
 
-      revisedResumeDiv.innerHTML = "";
-      revisedResumeDiv.style.color = '';
+      if (revisedResumeDiv) {
+        revisedResumeDiv.innerText = "";
+        revisedResumeDiv.style.color = '';
+      }
       loadingSpinner.style.display = 'block';
 
       try {
@@ -4702,7 +4721,9 @@
           if (value) {
             const chunk = decoder.decode(value, { stream: true });
             fullText += chunk;
-            revisedResumeDiv.innerHTML = fullText;
+            if (revisedResumeDiv) {
+              revisedResumeDiv.innerText = fullText;
+            }
           }
         }
         fullText += decoder.decode();
@@ -4739,13 +4760,19 @@
           cleanedText = fullText.trim();
         }
         
-        revisedResumeDiv.innerHTML = cleanedText;
+        if (revisedResumeDiv) {
+          revisedResumeDiv.innerText = cleanedText;
+          // 讓捲軸回到最上方，使用者一開始就看到開頭
+          revisedResumeDiv.scrollTop = 0;
+        }
         console.log('✅ AI 修改完成');
 
       } catch (error) {
         console.error('連線或讀取串流錯誤:', error);
-        revisedResumeDiv.innerHTML = `AI 服務連線失敗：無法連線到後端伺服器。請檢查伺服器狀態並稍後再試。`;
-        revisedResumeDiv.style.color = 'red';
+        if (revisedResumeDiv) {
+          revisedResumeDiv.innerText = `AI 服務連線失敗：無法連線到後端伺服器。請檢查伺服器狀態並稍後再試。`;
+          revisedResumeDiv.style.color = 'red';
+        }
       } finally {
         loadingSpinner.style.display = 'none';
       }
