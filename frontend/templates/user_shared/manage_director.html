@@ -1283,7 +1283,7 @@
      box-sizing: border-box;
      }
 
-    /* 主任排序結果內容寬度與廠商排序結果一致：與廠商欄同為 flex、全寬、無 padding/gap */
+    /* 系統自動排序結果內容寬度與廠商排序結果一致：與廠商欄同為 flex、全寬、無 padding/gap */
     .split-view-col .col-body.companies-container {
       display: flex;
       flex-direction: column;
@@ -1384,6 +1384,53 @@
       color: var(--color-text);
       font-size: 1.1rem;
       font-weight: 600;
+    }
+
+    /* 所有學生名單標題列：標題 + 齒輪圖示 */
+    #studentListPanelHeader {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    #studentListPanelHeader .student-list-gear {
+      font-size: 0.85rem;
+      color: var(--color-muted, #64748b);
+      opacity: 0.65;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: opacity 0.2s, color 0.2s;
+    }
+    #studentListPanelHeader .student-list-gear:hover {
+      opacity: 1;
+      color: var(--color-text, #334155);
+    }
+    #studentListOptionsRow {
+      width: 100%;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--color-border, #e2e8f0);
+      display: none;
+    }
+    #studentListOptionsRow.visible {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #studentListOptionsRow label {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--color-text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #studentListOptionsRow input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
     }
 
     .dual-page-left .panel-body,
@@ -1838,7 +1885,7 @@
       overflow-wrap: break-word;
       white-space: normal;
     }
-    /* 廠商／主任排序結果：多個職缺時以橫線分隔，兩側樣式一致（用相鄰選取器確保橫線顯示） */
+    /* 廠商／系統自動排序結果：多個職缺時以橫線分隔，兩側樣式一致（用相鄰選取器確保橫線顯示） */
     .split-view-col .job-match-panel .company-content .job-section {
       border-bottom: 1px solid var(--color-border);
     }
@@ -1967,7 +2014,16 @@
       <div class="dual-page-left">
         <div class="panel" id="unmatchedStudentsPanel" style="display: block;">
           <div class="panel-header">
-            <i class="fas fa-users"></i> 所有學生名單
+            <div id="studentListPanelHeader">
+              <span><i class="fas fa-users"></i> 所有學生名單</span>
+              <span class="student-list-gear" id="studentListGear" title="顯示選項"><i class="fas fa-cog"></i></span>
+            </div>
+            <div id="studentListOptionsRow">
+              <label>
+                <input type="checkbox" id="allowManualAdjustSwitch">
+                <span>啟用手動調整</span>
+              </label>
+            </div>
           </div>
           <div class="panel-body">
             <div id="unmatchedStudentsContainer">
@@ -1997,7 +2053,7 @@
                 <i class="fas fa-store"></i> 廠商排序結果
               </button>
               <button type="button" class="split-view-tab active" id="tabDirector" onclick="setMatchingTab('director')">
-                <i class="fas fa-user-edit"></i> 主任排序結果
+                <i class="fas fa-user-edit"></i> 系統自動排序結果
               </button>
             </div>
             <div id="companyNavigation" class="company-navigation-inline split-view-header-nav" style="display: none;">
@@ -2029,7 +2085,7 @@
                 </div>
                 <div class="split-view-col director-col">
                   <div class="col-title">
-                    <i class="fas fa-user-edit"></i> 主任排序結果
+                    <i class="fas fa-user-edit"></i>系統自動排序結果
                   </div>
                   <div id="directorContainer" class="col-body">
                     <!-- 主任調整後（可編輯） -->
@@ -2076,6 +2132,7 @@
     let expandedJobId = null;     // 當前展開的職缺 ID，一次只能展開一個
     let jobSlotsMap = {};  // 儲存每個職缺的名額設定 {companyId_jobId: slots}，從職缺資料自動帶入
     let unmatchedStudents = [];  // 所有學生列表
+    let allowManualAdjust = true;  // 是否允許手動調整（由「所有學生名單」標題旁齒輪內的開關控制）
     let currentPage = 1;  // 當前頁碼
     let studentsPerPage = 20;  // 每頁顯示的學生數量
     let directorPage = 1;  // 主任／廠商對照分頁
@@ -2262,7 +2319,7 @@
         });
 
         if (data.success) {
-          allCompaniesData = data.companies || [];  // 主任排序結果（已過濾重複學生）
+          allCompaniesData = data.companies || [];  // 系統自動排序結果（已過濾重複學生）
           vendorOriginalCompaniesData = data.vendor_companies || data.companies || [];  // 廠商原始排序（不過濾，保持原樣）
           directorReadOnly = data.director_read_only === true;  // 實習學期時僅可檢視
           directorAlreadyConfirmed = data.already_confirmed === true;  // 是否已由主任送出最終媒合結果
@@ -2852,7 +2909,7 @@
           
           // 如果學生已在媒合結果中（正取），或實習學期唯讀，添加 matched class／禁用拖放
           const matchedClass = isMatched ? 'matched' : '';
-          const noDrag = isMatched || directorReadOnly;
+          const noDrag = isMatched || directorReadOnly || !allowManualAdjust;
           const draggableAttr = noDrag ? 'draggable="false"' : 'draggable="true"';
           const dragStartHandler = noDrag ? '' : 'ondragstart="handleDragStart(event)"';
           const dragEndHandler = noDrag ? '' : 'ondragend="handleDragEnd(event)"';
@@ -3298,7 +3355,7 @@
                       </div>
                     </div>
                   </div>
-                  ${directorReadOnly ? '' : `<div class="student-actions">
+                  ${(directorReadOnly || !allowManualAdjust) ? '' : `<div class="student-actions">
                     <button class="btn btn-sm" onclick="movePosition('${String(student.id || student.match_id || '')}', ${job.job_id}, 'up')" 
                             style="background: #f3f4f6; color: #374151; padding: 4px 8px; margin-right: 4px;"
                             title="向上移動">
@@ -3325,14 +3382,15 @@
             if (student) {
               return renderRegularCard(student, slotIndex);
             } else {
-              // 該位置沒有學生，渲染空位（實習學期唯讀時不提供點擊／拖放）
-              const slotAttrs = directorReadOnly
+              // 該位置沒有學生，渲染空位（實習學期唯讀或未啟用手動調整時不提供點擊／拖放）
+              const noManual = directorReadOnly || !allowManualAdjust;
+              const slotAttrs = noManual
                 ? `data-company-id="${company.company_id}" data-job-id="${job.job_id}" data-type="regular" data-slot-index="${slotIndex}"`
                 : `data-company-id="${company.company_id}" data-job-id="${job.job_id}" data-type="regular" data-slot-index="${slotIndex}" onclick="selectStudentForSlot(${company.company_id}, ${job.job_id}, ${slotIndex})" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"`;
               return `
                 <div class="empty-slot" ${slotAttrs}>
                   <i class="fas fa-plus-circle"></i>
-                  <div>正取 ${slotIndex}${directorReadOnly ? '' : '（點擊或拖放學生至此）'}</div>
+                  <div>正取 ${slotIndex}${noManual ? '' : '（點擊或拖放學生至此）'}</div>
                 </div>
               `;
             }
@@ -3352,7 +3410,7 @@
                     </div>
                     <div class="student-details"></div>
                   </div>
-                  ${directorReadOnly ? '' : `<div class="student-actions">
+                  ${(directorReadOnly || !allowManualAdjust) ? '' : `<div class="student-actions">
                     <button class="btn btn-danger" onclick="removeStudent('${String(student.id || student.match_id || '')}', '${escapeHtml(student.student_name)}')">
                       <i class="fas fa-times"></i> 移除
                     </button>
@@ -3366,7 +3424,7 @@
           const isJobExpanded = expandedJobId === job.job_id;
           const jobSectionClass = isJobExpanded ? 'job-section-expanded' : 'job-section-collapsed';
 
-          const jobDropAttrs = directorReadOnly ? '' : ' ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"';
+          const jobDropAttrs = (directorReadOnly || !allowManualAdjust) ? '' : ' ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"';
           return `
             <div class="job-section ${jobSectionClass}" 
                  data-company-id="${company.company_id}"
@@ -3384,7 +3442,7 @@
               <div class="regular-list"
                    data-company-id="${company.company_id}"
                    data-job-id="${job.job_id}"
-                   data-type="regular"${directorReadOnly ? '' : ' ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"'}>
+                   data-type="regular"${(directorReadOnly || !allowManualAdjust) ? '' : ' ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"'}>
                 <div class="list-label">正取名單</div>
                 ${regularSlotsHtml}
                 ${invalidRetainedHtml}
@@ -3419,19 +3477,14 @@
         // 單公司模式：公司卡片一律展開，收合僅在職缺層級
         const companyCardId = `company-card-${company.company_id}`;
         const collapsedClass = '';
-        
+        const noManualHere = directorReadOnly || !allowManualAdjust;
+        const cardDropAttrs = noManualHere ? '' : ' ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"';
         return `
           <div class="company-card ${collapsedClass}" 
                id="${companyCardId}"
-               data-company-id="${company.company_id}"
-               ondrop="handleDrop(event)"
-               ondragover="handleDragOver(event)"
-               ondragleave="handleDragLeave(event)">
+               data-company-id="${company.company_id}"${cardDropAttrs}>
             <div class="company-header" 
-                 data-company-id="${company.company_id}"
-                 ondrop="handleDrop(event)"
-                 ondragover="handleDragOver(event)"
-                 ondragleave="handleDragLeave(event)">
+                 data-company-id="${company.company_id}"${cardDropAttrs}>
               <span>${escapeHtml(company.company_name || '')}</span>
             </div>
             <div class="company-content">
@@ -3649,7 +3702,7 @@
               </div>
             </div>
             <div class="student-actions">
-              ${!directorReadOnly ? `${type === 'regular' ? `
+              ${!(directorReadOnly || !allowManualAdjust) ? `${type === 'regular' ? `
                 <button class="btn btn-sm" onclick="movePosition('${String(student.id || student.match_id || '')}', ${job.job_id}, 'up')" 
                         style="background: #f3f4f6; color: #374151; padding: 4px 8px; margin-right: 4px;"
                         title="向上移動">
@@ -3677,6 +3730,10 @@
 
     // 移除學生
     async function removeStudent(historyId, studentName) {
+      if (directorReadOnly || !allowManualAdjust) {
+        showToast('目前未啟用手動調整', 'info');
+        return;
+      }
       if (!confirm(`確定要移除「${studentName}」嗎？`)) {
         return;
       }
@@ -3788,8 +3845,12 @@
 
     // 調整正取名單中學生的位置
     async function movePosition(historyId, jobId, direction) {
+      if (directorReadOnly || !allowManualAdjust) {
+        showToast('目前未啟用手動調整', 'info');
+        return;
+      }
       console.log('🔍 movePosition 被調用:', { historyId, jobId, direction });
-      
+
       // 找到該職缺的所有正取學生
       let regulars = [];
       let currentStudent = null;
@@ -3913,6 +3974,10 @@
 
     // 從備取名單提升為正取
     async function promoteToRegular(historyId, jobId) {
+      if (directorReadOnly || !allowManualAdjust) {
+        showToast('目前未啟用手動調整', 'info');
+        return;
+      }
       // 找到該職缺的正取數量，下一個位置就是新的正取位置
       let nextSlotIndex = 1;
       allCompaniesData.forEach(company => {
@@ -3950,6 +4015,10 @@
 
     // 選擇學生填入空位（可以從未錄取學生或備取名單中選擇）
     async function selectStudentForSlot(companyId, jobId, slotIndex) {
+      if (directorReadOnly || !allowManualAdjust) {
+        showToast('目前未啟用手動調整', 'info');
+        return;
+      }
       // 找到該職缺的正取名單和備取名單
       let regulars = [];
       let reserves = [];
@@ -4653,7 +4722,8 @@
     async function handleDrop(event) {
       event.preventDefault();
       event.stopPropagation();
-      
+      if (directorReadOnly || !allowManualAdjust) return;
+
       const target = event.currentTarget;
       
       // 如果拖放到公司標題或公司卡片，阻止點擊事件觸發並自動展開卡片
@@ -5015,8 +5085,29 @@
       }
     }
 
+    // 所有學生名單標題旁齒輪：點擊顯示/隱藏選項列（開關）
+    function initStudentListOptions() {
+      const gear = document.getElementById('studentListGear');
+      const optionsRow = document.getElementById('studentListOptionsRow');
+      const allowSwitch = document.getElementById('allowManualAdjustSwitch');
+      if (gear && optionsRow) {
+        gear.addEventListener('click', () => {
+          optionsRow.classList.toggle('visible');
+        });
+      }
+      if (allowSwitch && optionsRow) {
+        allowSwitch.checked = allowManualAdjust;
+        allowSwitch.addEventListener('change', () => {
+          allowManualAdjust = !!allowSwitch.checked;
+          renderUnmatchedStudents();  // 更新左側學生是否可拖曳
+          renderCompanies();         // 更新右側是否可放置、點擊填入
+        });
+      }
+    }
+
     // 頁面載入時執行
     document.addEventListener('DOMContentLoaded', () => {
+      initStudentListOptions();
       loadMatchingResults();
       
       // 監聽廠商媒合排序更新通知（使用 BroadcastChannel 實現跨頁面通訊）
