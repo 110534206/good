@@ -5349,6 +5349,7 @@
 
             const diffRows = [];
 
+            // 只列出「與 Excel 必修有關」的差異：不一樣、Excel 才有。成績單上其他科目不視為錯誤，不列入表格。
             matchResults.forEach(item => {
                 const score = Math.round(item.similarity * 100);
 
@@ -5384,25 +5385,8 @@
                             </td>
                         </tr>
                     `);
-                } else if (item.action === 'add') {
-                    diffRows.push(`
-                        <tr>
-                            <td class="text-center"><span class="badge bg-primary">AI 多抓的</span></td>
-                            <td>
-                                <div><strong>${escapeHtml(item.ocrCourse.name)}</strong></div>
-                                <div class="small text-muted">Excel 裡沒有這門課</div>
-                            </td>
-                            <td class="small">
-                                <div>Excel：<span class="text-muted">-</span></div>
-                                <div>AI：<strong class="text-primary">${escapeHtml(item.ocrCourse.credits || '-')}</strong></div>
-                            </td>
-                            <td class="small">
-                                <div>Excel：<span class="text-muted">-</span></div>
-                                <div>AI：<strong class="text-primary">${escapeHtml(item.ocrCourse.grade || '-')}</strong></div>
-                            </td>
-                        </tr>
-                    `);
                 }
+                // 不列出「AI 多抓的」：成績單上有、Excel 必修表沒有的科目不視為錯誤，只比對 Excel 裡的必修即可
             });
 
             missingImportedCourses.forEach(item => {
@@ -5429,42 +5413,36 @@
             const addCount = matchResults.filter(item => item.action === 'add').length;
             const sameCount = matchResults.filter(item => item.action === 'same').length;
             const missingCount = missingImportedCourses.length;
-            const applicableDiffCount = updateCount + addCount;
-            const totalDiffCount = applicableDiffCount + missingCount;
+            const applicableDiffCount = updateCount + missingCount;
+            const totalDiffCount = applicableDiffCount;
 
             const previewHtml = `
                 <div class="text-start">
                     <div class="row g-2 mb-3 text-center">
-                        <div class="col-6 col-md-3">
+                        <div class="col-4">
                             <div class="border rounded p-2 bg-light">
                                 <div class="small text-muted">相符</div>
                                 <div class="fw-bold text-success">${sameCount}</div>
-                                <div class="small text-muted">筆（與 Excel 一致）</div>
+                                <div class="small text-muted">筆（Excel 必修・成績單有且一致）</div>
                             </div>
                         </div>
-                        <div class="col-6 col-md-3">
+                        <div class="col-4">
                             <div class="border rounded p-2 bg-light">
                                 <div class="small text-muted">不一樣</div>
                                 <div class="fw-bold text-warning">${updateCount}</div>
-                                <div class="small text-muted">筆</div>
+                                <div class="small text-muted">筆（學分/成績可手動改或套用）</div>
                             </div>
                         </div>
-                        <div class="col-6 col-md-3">
-                            <div class="border rounded p-2 bg-light">
-                                <div class="small text-muted">AI 多抓的</div>
-                                <div class="fw-bold text-primary">${addCount}</div>
-                                <div class="small text-muted">筆</div>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-3">
+                        <div class="col-4">
                             <div class="border rounded p-2 bg-light">
                                 <div class="small text-muted">Excel 才有</div>
                                 <div class="fw-bold text-secondary">${missingCount}</div>
-                                <div class="small text-muted">筆</div>
+                                <div class="small text-muted">筆（AI 未辨識到，可手動補）</div>
                             </div>
                         </div>
                     </div>
-                    <p class="small text-muted mb-2">以<strong>Excel「已修習必修科目」</strong>為正確答案；AI 只辨識成績單上<strong>第一學年到第三學年的必修</strong>並比對。有不一樣的地方可以在下面課程表手動改，或按「套用」一次更新。</p>
+                    ${addCount > 0 ? `<p class="small text-muted mb-2">成績單上另有 <strong>${addCount}</strong> 門課未在 Excel 必修表中，<strong>不納入比對</strong>，僅比對 Excel 裡的必修學分與成績。</p>` : ''}
+                    <p class="small text-muted mb-2">以<strong>Excel「已修習必修科目」</strong>為準；只比對這些必修在成績單上的<strong>學分、成績</strong>。有不一樣的地方可在下面課程表手動改，或按「套用」更新。</p>
                     ${totalDiffCount > 0 ? `
                         <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
                             <table class="table table-sm table-bordered align-middle">
@@ -5482,17 +5460,17 @@
                             </table>
                         </div>
                         <div class="small text-muted mt-2">
-                            說明：<strong>Excel</strong>＝正確資料；<strong>不一樣</strong>＝AI 和 Excel 不同，可手動改或按套用；<strong>Excel 才有</strong>＝只有 Excel 有、AI 沒認到，不會被刪掉。
+                            說明：<strong>不一樣</strong>＝該必修在成績單上的學分/成績與 Excel 不同，可手動改或按套用；<strong>Excel 才有</strong>＝Excel 有這門必修但 AI 沒從成績單辨識到，可手動補，不會被刪掉。
                         </div>
                     ` : `
                         <div class="alert alert-success mb-2">
-                            <i class="bi bi-check-circle"></i> AI 辨識結果和 Excel 完全一樣，沒有需要修正的。
+                            <i class="bi bi-check-circle"></i> Excel 必修在成績單上的學分、成績與 Excel 一致，沒有需要修正的。
                         </div>
                     `}
                     <div class="form-check mt-2">
                         <input class="form-check-input" type="checkbox" id="onlyUpdateCheck" checked>
                         <label class="form-check-label small" for="onlyUpdateCheck">
-                            只修正「不一樣」的（以 Excel 為準），<strong>不新增</strong> AI 多抓的課
+                            只套用「不一樣」的成績修正（以成績單為準），不新增其他科目
                         </label>
                     </div>
                 </div>
@@ -5555,7 +5533,7 @@
                 applyFilterAndSearch();
                 saveFormData(); 
 
-                Swal.fire('比對完成', `已套用：修正 ${updatedCount} 筆（未新增任何 AI 多抓的科目）。Excel 才有 ${missingCount} 筆僅供參考，可隨時在課程表手動改。`, 'success');
+                Swal.fire('比對完成', `已套用：修正 ${updatedCount} 筆。Excel 才有 ${missingCount} 筆僅供參考，可隨時在課程表手動改。`, 'success');
                 
                 // Highlight updated rows
                 // 🟢 [修正] 明確指定要捲動到的課程表格 (courseTableBody 的父表格)
