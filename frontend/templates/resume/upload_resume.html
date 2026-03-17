@@ -524,11 +524,11 @@
                       <button type="button" class="btn btn-outline-warning btn-sm" id="upload-excel-btn">
                         ⇪ 匯入Excel資料
                       </button>
+                       <button type="button" class="btn btn-sm ms-2" id="before-after-btn" style="background-color: #6f42c1; color: #fff; border-color: #6f42c1;" title="查看最後一次套用 AI 比對的修改前後對照">
+                        📋 修改紀錄
+                      </button>
                       <button type="button" class="btn btn-outline-success btn-sm" id="save-template-btn">
                         儲存
-                      </button>
-                      <button type="button" class="btn btn-sm ms-2" id="before-after-btn" style="background-color: #6f42c1; color: #fff; border-color: #6f42c1;" title="查看最後一次套用 AI 比對的修改前後對照">
-                        📋 修改前後
                       </button>
                       <input type="file" id="excel-file-input" accept=".xlsx,.xls" style="display:none;">
                     </div>
@@ -5444,6 +5444,17 @@
                 .filter(item => !matchedImportedIndices.has(item.index));
 
             const diffRows = [];
+            const getNumericGrade = (grade) => {
+                const raw = String(grade ?? '').trim();
+                if (!raw) return NaN;
+                const cleaned = raw.replace(/[^0-9.]/g, '');
+                const num = Number.parseFloat(cleaned);
+                return Number.isFinite(num) ? num : NaN;
+            };
+            const gradeTextClass = (grade) => {
+                const n = getNumericGrade(grade);
+                return (!Number.isNaN(n) && n < 60) ? 'text-danger fw-bold' : '';
+            };
 
             matchResults.forEach(item => {
                 const score = Math.round(item.similarity * 100);
@@ -5470,14 +5481,10 @@
                                 <div class="small text-muted">OCR：${escapeHtml(item.ocrCourse.name)} (${score}%)</div>
                                 <div class="mt-1">${diffBadges}</div>
                             </td>
-                            <td class="small">
-                                <div>Excel：<span class="text-muted">${escapeHtml(importedCredits)}</span></div>
-                                <div>AI：<strong class="text-primary">${escapeHtml(ocrCredits)}</strong></div>
-                            </td>
-                            <td class="small">
-                                <div>Excel：<span class="text-muted">${escapeHtml(importedGrade)}</span></div>
-                                <div>AI：<strong class="text-primary">${escapeHtml(ocrGrade)}</strong></div>
-                            </td>
+                            <td class="small text-muted">${escapeHtml(importedCredits)}</td>
+                            <td class="small"><strong class="text-primary">${escapeHtml(ocrCredits)}</strong></td>
+                            <td class="small"><span class="${gradeTextClass(importedGrade)}">${escapeHtml(importedGrade)}</span></td>
+                            <td class="small"><strong class="text-primary ${gradeTextClass(ocrGrade)}">${escapeHtml(ocrGrade)}</strong></td>
                         </tr>
                     `);
                 } else if (item.action === 'add') {
@@ -5488,14 +5495,10 @@
                                 <div><strong>${escapeHtml(item.ocrCourse.name)}</strong></div>
                                 <div class="small text-muted">Excel 裡沒有這門課</div>
                             </td>
-                            <td class="small">
-                                <div>Excel：<span class="text-muted">-</span></div>
-                                <div>AI：<strong class="text-primary">${escapeHtml(item.ocrCourse.credits || '-')}</strong></div>
-                            </td>
-                            <td class="small">
-                                <div>Excel：<span class="text-muted">-</span></div>
-                                <div>AI：<strong class="text-primary">${escapeHtml(item.ocrCourse.grade || '-')}</strong></div>
-                            </td>
+                            <td class="small text-muted">-</td>
+                            <td class="small"><strong class="text-primary">${escapeHtml(item.ocrCourse.credits || '-')}</strong></td>
+                            <td class="small text-muted">-</td>
+                            <td class="small"><strong class="text-primary ${gradeTextClass(item.ocrCourse.grade || '-')}">${escapeHtml(item.ocrCourse.grade || '-')}</strong></td>
                         </tr>
                     `);
                 }
@@ -5509,14 +5512,10 @@
                             <div><strong>${escapeHtml(item.course.name)}</strong></div>
                             <div class="small text-muted">AI 沒辨識到這門課</div>
                         </td>
-                        <td class="small">
-                            <div>Excel：<strong>${escapeHtml(item.course.credits || '-')}</strong></div>
-                            <div>AI：<span class="text-muted">-</span></div>
-                        </td>
-                        <td class="small">
-                            <div>Excel：<strong>${escapeHtml(item.course.grade || '-')}</strong></div>
-                            <div>AI：<span class="text-muted">-</span></div>
-                        </td>
+                        <td class="small"><strong>${escapeHtml(item.course.credits || '-')}</strong></td>
+                        <td class="small text-muted">-</td>
+                        <td class="small"><span class="${gradeTextClass(item.course.grade || '-')}"><strong>${escapeHtml(item.course.grade || '-')}</strong></span></td>
+                        <td class="small text-muted">-</td>
                     </tr>
                 `);
             });
@@ -5568,8 +5567,10 @@
                                     <tr>
                                         <th width="15%">狀態</th>
                                         <th>課程</th>
-                                        <th width="18%">學分</th>
-                                        <th width="18%">成績</th>
+                                        <th width="12%">學分（修改前）</th>
+                                        <th width="12%">學分（修改後）</th>
+                                        <th width="12%">成績（修改前）</th>
+                                        <th width="12%">成績（修改後）</th>
                                     </tr>
                                 </thead>
                                 <tbody>
