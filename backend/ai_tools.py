@@ -927,6 +927,272 @@ def update_autobiography():
 # 📷 OCR 與文件識別工具函數
 # ==========================================================
 
+# 本系「必修科目」完整參考清單（標準課名 + 應修學分，供 OCR 歸併；學分與 Excel 範本不一致時以 Excel 為準）
+DEPARTMENT_CORE_REFERENCE_COURSES = [
+    {"name": "系統分析與設計", "credits": "3"},
+    {"name": "資訊科技", "credits": "2"},
+    {"name": "資訊科技進階", "credits": "2"},
+    {"name": "計算機網路", "credits": "2"},
+    {"name": "JAVA程式語言", "credits": "3"},
+    {"name": "會計概論", "credits": "3"},
+    {"name": "會計學", "credits": "3"},
+    {"name": "資料庫伺服器管理與實作", "credits": "2"},
+    {"name": "資料庫管理實務(SQL)", "credits": "2"},
+    {"name": "管理學", "credits": "2"},
+    {"name": "作業系統", "credits": "2"},
+    {"name": "行銷管理", "credits": "2"},
+    {"name": "資料結構", "credits": "2"},
+    {"name": "商品攝影與後製", "credits": "2"},
+    {"name": "微積分", "credits": "3"},
+    {"name": "微電影製作", "credits": "2"},
+    {"name": "經濟學", "credits": "2"},
+    {"name": "數位整合行銷", "credits": "2"},
+    {"name": "中英文輸入", "credits": "2"},
+    {"name": "行銷企劃書撰寫", "credits": "2"},
+    {"name": "程式設計", "credits": "3"},
+    {"name": "創意機器人", "credits": "2"},
+    {"name": "行動網頁程式開發", "credits": "2"},
+    {"name": "數位化資料處理", "credits": "2"},
+    {"name": "辦公室自動化", "credits": "2"},
+    {"name": "硬體裝修", "credits": "2"},
+    {"name": "網頁設計", "credits": "2"},
+    {"name": "商業套裝軟體", "credits": "2"},
+    {"name": "電腦繪圖與動畫", "credits": "2"},
+    {"name": "統計學", "credits": "3"},
+]
+
+
+def _reference_course_names_set():
+    return {row["name"] for row in DEPARTMENT_CORE_REFERENCE_COURSES}
+
+
+def _reference_credits_by_name():
+    return {row["name"]: str(row["credits"]).strip() for row in DEPARTMENT_CORE_REFERENCE_COURSES}
+
+
+def _format_core_reference_for_prompt():
+    lines = []
+    for row in DEPARTMENT_CORE_REFERENCE_COURSES:
+        lines.append(f"- 「{row['name']}」（應修學分：{row['credits']}）")
+    return "\n".join(lines)
+
+
+def build_transcript_json_prompt():
+    """組裝含固定課程清單的 JSON 模式提示詞。"""
+    ref_block = _format_core_reference_for_prompt()
+    allowed_names = "、".join([f'「{r["name"]}」' for r in DEPARTMENT_CORE_REFERENCE_COURSES])
+
+    return f"""
+你是成績單 OCR 助手。請只閱讀圖片內容，輸出**一段合法 JSON**（不要 Markdown、不要程式碼區塊、不要註解、不要多餘說明）。
+
+【本系參考：專業核心科目與應修學分清單（僅用於「課名相似時」歸併成標準字串）】
+以下課名若與圖上科目**明顯為同一門**（略稱、空格、全半形、括號寫法等），請將 `name` 設為清單中的**完整標準課名**（須與清單字元完全一致），以利與 Excel 比對。
+**圖上所有其他必修科目**（不在清單內者）也必須逐列輸出：`name` 請填圖上可讀之**完整科目名稱**（與成績單一致或極接近），**絕對不可省略、不可因不在清單就丟棄**。
+{ref_block}
+可歸併時的標準課名僅能是：{allowed_names}。
+
+JSON 物件鍵名必須完全一致：
+{{
+  "confidence": <0-100 的整數，代表本次整體辨識信心>,
+  "transcript_has_credits_column": <boolean，圖片上是否「有」學分相關欄位或表頭>,
+  "transcript_has_grade_column": <boolean，圖片上是否「有」成績／等第／分數欄位或表頭>,
+  "courses": [
+    {{
+      "name": "<必填；與 Excel／學校成績單比對用。能對應清單則用清單全名；否則用圖上該列科目完整名稱>",
+      "transcript_label": <字串；圖上該列實際顯示的科目文字，盡量與圖片一致；若與 name 相同可填相同字串或 null>,
+      "credits": <字串；若圖上有學分列且該格可讀則填圖上數字（可含「2/2」等形式）。若圖上無學分列或該格空白，且 name 為清單中某一門，則可填該課**清單應修學分**。否則 null>,
+      "grade": <字串；僅能從圖上成績欄讀取。若無成績欄或看不清則 null>
+    }}
+  ]
+}}
+
+規則（務必遵守）：
+1. 只收錄「必修」科目；若表上有必修／選修標示，非必修一律不要輸出。
+2. 只收錄第一學年～第三學年（依圖上學期／學年欄位判斷）；第四學年（含）以後不要輸出；無法判斷學年的列不要輸出。
+3. **課名**：`name` 禁止自創與圖片無關的課程；除清單歸併外，應忠實反映圖上科目（含行銷、作業系統、攝影等任何出現在圖上的必修課）。
+4. **成績**：`grade` 只允許來自圖片，禁止臆測。
+5. 禁止補全圖上沒有的文字；看不清的欄位用 null。
+6. 若整張圖不是成績單或過於模糊：courses 輸出 []，confidence 請給 0～30。
+7. 若成績單根本沒有「學分」欄，transcript_has_credits_column 必為 false；此時若 name 恰為清單課名，可把 `credits` 填清單應修學分；若 name 非清單課且圖上無學分，則 credits 為 null。
+8. 若成績單根本沒有「成績／等第」欄，transcript_has_grade_column 必為 false，且每筆 grade 必為 null。
+9. courses 內每筆都必須同時包含鍵 name、transcript_label、credits、grade（值可為 null），不要省略鍵。
+""".strip()
+
+
+def _transcript_courses_to_markdown(courses):
+    """將結構化課程列表轉成前端既有 Markdown 表格。"""
+    lines = [
+        "| 科目名稱 | 學分 | 成績 |",
+        "| --- | --- | --- |",
+    ]
+    for c in courses:
+        name = str(c.get("name", "")).replace("|", "\\|").strip()
+        cr = c.get("credits")
+        gr = c.get("grade")
+        cr_disp = "" if cr is None or cr == "" else str(cr).replace("|", "\\|")
+        gr_disp = "" if gr is None or gr == "" else str(gr).replace("|", "\\|")
+        lines.append(f"| {name} | {cr_disp} | {gr_disp} |")
+    return "\n".join(lines)
+
+
+def _normalize_transcript_json_payload(parsed):
+    """
+    將模型 JSON 轉成前端比對用課程列表，並附帶「是否要比對學分／成績」旗標。
+    僅在圖上確實有該欄位且該列有值時才 compare_* = True。
+    支援：name + transcript_label；舊版 canonical_name（在清單內時優先作為標準名）。
+    """
+    if not isinstance(parsed, dict):
+        return [], {}
+
+    raw_list = parsed.get("courses")
+    if not isinstance(raw_list, list):
+        return [], {}
+
+    allowed = _reference_course_names_set()
+    ref_credits = _reference_credits_by_name()
+
+    thc = parsed.get("transcript_has_credits_column")
+    thg = parsed.get("transcript_has_grade_column")
+    if not isinstance(thc, bool):
+        thc = any(
+            (c.get("credits") is not None and str(c.get("credits", "")).strip() != "")
+            for c in raw_list
+            if isinstance(c, dict)
+        )
+    if not isinstance(thg, bool):
+        thg = any(
+            (c.get("grade") is not None and str(c.get("grade", "")).strip() != "")
+            for c in raw_list
+            if isinstance(c, dict)
+        )
+
+    out = []
+    for c in raw_list:
+        if not isinstance(c, dict):
+            continue
+
+        legacy_canonical = (c.get("canonical_name") or "").strip()
+        primary_name = (c.get("name") or "").strip()
+        label_raw = c.get("transcript_label")
+        label = "" if label_raw is None else str(label_raw).strip()
+
+        # 舊版 JSON 可能只有 canonical_name：在清單內則採用，否則當作圖上課名
+        if legacy_canonical in allowed:
+            resolved_name = legacy_canonical
+        elif primary_name:
+            resolved_name = primary_name
+        elif legacy_canonical:
+            resolved_name = legacy_canonical
+        elif label:
+            resolved_name = label
+        else:
+            continue
+
+        # 供前端顯示「圖上 → 標準」：圖上原文與比對用 name 不同時保留
+        ocr_raw = (label if (label and label != resolved_name) else "") or ""
+
+        cred_raw = c.get("credits", None)
+        grade_raw = c.get("grade", None)
+        cred_str = None if cred_raw is None else str(cred_raw).strip()
+        grade_str = None if grade_raw is None else str(grade_raw).strip()
+        if cred_str == "":
+            cred_str = None
+        if grade_str == "":
+            grade_str = None
+
+        # 圖上無學分列時：僅當課名為清單標準名時，補清單應修學分（供顯示；不比對學分）
+        if not thc and cred_str is None and resolved_name in ref_credits:
+            cred_str = ref_credits.get(resolved_name)
+
+        compare_credits = bool(thc) and cred_str is not None
+        compare_grade = bool(thg) and grade_str is not None
+
+        out.append({
+            "name": resolved_name,
+            "credits": cred_str if cred_str is not None else "",
+            "grade": grade_str if grade_str is not None else "",
+            "ocr_raw_name": ocr_raw,
+            "compare_credits": compare_credits,
+            "compare_grade": compare_grade,
+            "transcript_has_credits_column": bool(thc),
+            "transcript_has_grade_column": bool(thg),
+        })
+
+    meta = {
+        "transcript_has_credits_column": bool(thc),
+        "transcript_has_grade_column": bool(thg),
+        "reference_course_count": len(DEPARTMENT_CORE_REFERENCE_COURSES),
+    }
+    return out, meta
+
+
+def _gemini_try_transcript_json(model_instance, img_data, mimetype):
+    """請模型以 application/json 回傳；失敗回傳 None。"""
+    try:
+        generation_config = {"temperature": 0.05, "response_mime_type": "application/json"}
+        response = model_instance.generate_content(
+            [
+                {"mime_type": mimetype or "image/jpeg", "data": img_data},
+                build_transcript_json_prompt(),
+            ],
+            generation_config=generation_config,
+        )
+        if not response or not getattr(response, "text", None):
+            return None
+        raw = response.text.strip()
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return None
+        return parsed
+    except Exception as e:
+        print(f"⚠️ JSON 模式辨識失敗: {e}")
+        return None
+
+
+def _gemini_try_transcript_markdown(model_instance, img_data, mimetype):
+    """舊版 Markdown 表格輸出（備援）。"""
+    ref_block = _format_core_reference_for_prompt()
+    prompt = f"""
+請嚴格辨識圖片中的文字，並將「課程名稱」、「學分」、「成績」整理成 Markdown 表格。
+
+【本系參考：專業核心科目與應修學分清單（僅用於課名相似時歸併）】
+圖上科目若與清單中某一門**明顯為同一門**（例如「JAVA 程式」→「JAVA程式語言」），表格「科目名稱」欄請用**清單完整標準課名**。
+**其餘所有出現在圖上的第一～三學年必修科目**（即使不在清單內）也必須輸出，科目名稱欄請填**圖上完整課名**（與成績單一致），不可省略。
+學分請優先使用圖上數字（可含「2/2」）；若圖上無學分列且該列已歸併為清單課名，可填清單應修學分。成績僅能來自圖片。
+{ref_block}
+
+【重要規則】
+1. **只抓必修**：僅辨識並輸出「必修」科目。請忽略：選修、通識、體育、國防、勞作、軍訓、語文（若標示為選修）、以及其他非必修欄位。若成績單有「必修/選修」欄位，只保留標示為「必修」的列。
+2. **只抓第一學年到第三學年**：僅辨識成績單上「第一學年」、「第二學年」、「第三學年」所對應學期的科目（例如 1101、1102、1111、1112、1121、1122 等，依成績單實際學期標示）。排除第四學年（含）以後、以及無法判斷學年的列。
+3. **絕對不可無中生有**：只能輸出圖片上真正存在的文字，禁止預測或補全沒看到的課程。
+4. **科目名稱**：每一列必修課都要輸出；能歸併清單者用標準名，否則用圖上課名全文。
+5. **格式統一**：表格欄位請固定為 `| 科目名稱 | 學分 | 成績 |`。
+6. **排除雜訊**：請忽略學校名稱、個人資料、蓋章、頁碼、排名、總學分、平均成績、操行成績、備註欄位等所有非課程本身的內容。
+7. **清晰度與可信度判斷**：
+   - 如果圖片模糊、無法辨識文字或根本不是成績單，請輸出：「[無法辨識] 請重新拍攝更清晰的圖片上傳。」
+   - **請在輸出的最後一行（單獨一行）評估本次辨識的準確率（信心度），格式為：「信心度：[0-100]」**
+"""
+    response = model_instance.generate_content(
+        [
+            {"mime_type": mimetype or "image/jpeg", "data": img_data},
+            prompt,
+        ]
+    )
+    if not response or not response.text:
+        return None, None
+
+    gemini_text = response.text.strip()
+    gemini_conf = 95.0
+    confidence_match = re.search(r"信心度：\s*(\d+)", gemini_text.split("\n")[-1])
+    if confidence_match:
+        try:
+            gemini_conf = float(confidence_match.group(1))
+            gemini_text = "\n".join(gemini_text.split("\n")[:-1]).strip()
+        except ValueError:
+            pass
+    return gemini_text, gemini_conf
+
+
 def perform_ocr_on_file(file_storage):
     """
     對上傳的檔案 (Image/PDF) 進行 OCR 或文字識別。
@@ -952,89 +1218,82 @@ def perform_ocr_on_file(file_storage):
             "message": "伺服器未安裝 PDF 解析套件，無法處理 PDF 檔案。"
         }
 
-    # 2. 圖片處理：優先使用 Google Gemini AI
+    # 2. 圖片處理：優先使用 Google Gemini AI（先 JSON 結構化，失敗再 Markdown 備援）
     gemini_text = ""
     gemini_conf = None
     use_gemini = False
-    
+    structured_courses = None
+    transcript_meta = None
+
     local_api_key = os.getenv('GEMINI_API_KEY')
-    
+
     if local_api_key:
         try:
             file_storage.stream.seek(0)
             img_data = file_storage.read()
             file_storage.stream.seek(0)
-            
+
             genai.configure(api_key=local_api_key)
-            
+
             candidate_models = [
                 'gemini-2.5-flash',
                 'gemini-1.5-flash',
                 'gemini-1.5-pro',
-                'gemini-2.0-flash-exp'
+                'gemini-2.0-flash-exp',
             ]
-            
+            mimetype = file_storage.mimetype or 'image/jpeg'
+
             for model_name in candidate_models:
                 try:
                     print(f"OCR 嘗試使用模型: {model_name}")
                     model_instance = genai.GenerativeModel(model_name)
-                    
-                    prompt = """
-請嚴格辨識圖片中的文字，並將「課程名稱」、「學分」、「成績」整理成 Markdown 表格。
 
-【重要規則】
-1. **只抓必修**：僅辨識並輸出「必修」科目。請忽略：選修、通識、體育、國防、勞作、軍訓、語文（若標示為選修）、以及其他非必修欄位。若成績單有「必修/選修」欄位，只保留標示為「必修」的列。
-2. **只抓第一學年到第三學年**：僅辨識成績單上「第一學年」、「第二學年」、「第三學年」所對應學期的科目（例如 1101、1102、1111、1112、1121、1122 等，依成績單實際學期標示）。排除第四學年（含）以後、以及無法判斷學年的列。
-3. **絕對不可無中生有**：只能輸出圖片上真正存在的文字，禁止預測或補全沒看到的課程。
-4. **精確提取**：科目名稱、學分、成績必須與圖片內容完全一致。
-5. **格式統一**：表格欄位請固定為 `| 科目名稱 | 學分 | 成績 |`。
-6. **排除雜訊**：請忽略學校名稱、個人資料、蓋章、頁碼、排名、總學分、平均成績、操行成績、備註欄位等所有非課程本身的內容。
-7. **清晰度與可信度判斷**：
-   - 如果圖片模糊、無法辨識文字或根本不是成績單，請輸出：「[無法辨識] 請重新拍攝更清晰的圖片上傳。」
-   - **請在輸出的最後一行（單獨一行）評估本次辨識的準確率（信心度），格式為：「信心度：[0-100]」**
-"""
-                    
-                    response = model_instance.generate_content([
-                        {'mime_type': file_storage.mimetype or 'image/jpeg', 'data': img_data},
-                        prompt
-                    ])
-                    
-                    if response and response.text:
-                        gemini_text = response.text.strip()
-                        gemini_conf = 95.0 # 預設值，若無法提取則使用此值
-                        
-                        # 嘗試提取最後一行的信心度
-                        confidence_match = re.search(r'信心度：\s*(\d+)', gemini_text.split('\n')[-1])
-                        if confidence_match:
-                            try:
-                                gemini_conf = float(confidence_match.group(1))
-                                # 移除信心度這行，避免顯示在前端的 Markdown 中
-                                gemini_text = '\n'.join(gemini_text.split('\n')[:-1]).strip()
-                            except ValueError:
-                                pass
-                        
+                    parsed = _gemini_try_transcript_json(model_instance, img_data, mimetype)
+                    if parsed is not None:
+                        structured_courses, transcript_meta = _normalize_transcript_json_payload(parsed)
+                        try:
+                            conf_raw = parsed.get('confidence', 85)
+                            gemini_conf = float(conf_raw) if conf_raw is not None else 85.0
+                        except (TypeError, ValueError):
+                            gemini_conf = 85.0
+                        gemini_text = _transcript_courses_to_markdown(structured_courses)
                         use_gemini = True
-                        print(f"✅ 使用 Gemini AI ({model_name}) 完成圖片辨識")
+                        print(f"✅ 使用 Gemini AI ({model_name}) JSON 模式完成圖片辨識，courses={len(structured_courses)}")
+                        break
+
+                    md_text, md_conf = _gemini_try_transcript_markdown(model_instance, img_data, mimetype)
+                    if md_text:
+                        gemini_text = md_text
+                        gemini_conf = md_conf
+                        structured_courses = None
+                        transcript_meta = None
+                        use_gemini = True
+                        print(f"✅ 使用 Gemini AI ({model_name}) Markdown 備援完成圖片辨識")
                         break
                 except Exception as inner_e:
                     print(f"⚠️ 模型 {model_name} 嘗試失敗: {inner_e}")
                     continue
-            
+
             if not use_gemini:
                 print("❌ 所有 Gemini 模型皆嘗試失敗")
 
         except Exception as e:
             print(f"⚠️ Gemini OCR 系統性錯誤: {e}")
             file_storage.stream.seek(0)
-            
+
     if use_gemini and gemini_text:
-        return {
+        payload = {
             "success": True,
             "filename": filename,
             "size_kb": size_kb,
             "text": gemini_text,
-            "confidence": gemini_conf
+            "confidence": gemini_conf,
         }
+        if structured_courses is not None:
+            payload["courses"] = structured_courses
+        if transcript_meta:
+            payload["transcript_meta"] = transcript_meta
+        return payload
 
     # 3. 圖片處理：AI 辨識失敗
     return {

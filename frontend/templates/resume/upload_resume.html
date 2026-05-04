@@ -1227,8 +1227,53 @@
     // 新增: LocalStorage Key
     const AUTO_SAVE_KEY = 'resumeFormData';
 
+    /** 課名鍵：與 OCR 比對邏輯一致（去空白、全形空白） */
+    function normalizeCourseNameKeyForTable(name) {
+      return String(name || '').replace(/[\s\u3000]+/g, '').trim().toLowerCase();
+    }
+
+    /** 將當前課程表輸入同步回 allCoursesData（分頁時僅當頁有 DOM，需靠 data-course-index） */
+    function syncCourseTableInputsToAllCoursesData() {
+      const rows = document.querySelectorAll('#courseTableBody tr');
+      rows.forEach(tr => {
+        if (tr.querySelector('td[colspan]')) return;
+        const nameInput = tr.querySelector('input[name="course_name[]"]');
+        const creditsInput = tr.querySelector('input[name="course_credits[]"]');
+        const gradeInput = tr.querySelector('input[name="course_grade[]"]');
+        if (!nameInput || !creditsInput) return;
+        const isNotTaken = tr.dataset.isNotTaken === 'true';
+        const idxRaw = tr.dataset.courseIndex;
+        const idx = idxRaw !== undefined && idxRaw !== '' ? parseInt(idxRaw, 10) : NaN;
+        if (!Number.isNaN(idx) && idx >= 0 && idx < allCoursesData.length) {
+          allCoursesData[idx].name = nameInput.value.trim();
+          allCoursesData[idx].credits = creditsInput.value.trim();
+          allCoursesData[idx].grade = gradeInput ? gradeInput.value.trim() : (allCoursesData[idx].grade || '');
+          allCoursesData[idx].isNotTaken = isNotTaken;
+          return;
+        }
+        const courseName = nameInput.value.trim();
+        if (!courseName) return;
+        const k = normalizeCourseNameKeyForTable(courseName);
+        let j = allCoursesData.findIndex(c => normalizeCourseNameKeyForTable(c.name) === k);
+        if (j < 0) j = allCoursesData.findIndex(c => c.name === courseName);
+        if (j > -1) {
+          allCoursesData[j].name = courseName;
+          allCoursesData[j].credits = creditsInput.value.trim();
+          allCoursesData[j].grade = gradeInput ? gradeInput.value.trim() : '';
+          allCoursesData[j].isNotTaken = isNotTaken;
+        } else if (courseName) {
+          allCoursesData.push({
+            name: courseName,
+            credits: creditsInput.value.trim(),
+            grade: gradeInput ? gradeInput.value.trim() : '',
+            isNotTaken
+          });
+        }
+      });
+    }
+
     // 🧩 建立課程列 (學分數欄位已為 type="text" 以容納 "3/3" 等分數)
-    function createCourseRow(course) {
+    function createCourseRow(course, globalIndex = -1) {
       // 課程資料備份，用於「未修課」時恢復原始學分
       const creditsDisplay = course.credits || "";
       // 預設為已修課（isNotTaken = false），只有明確標記為未修課時才為 true
@@ -1247,12 +1292,20 @@
       tr.dataset.originalCredits = creditsDisplay;
       // 儲存未修課狀態
       tr.dataset.isNotTaken = isNotTaken;
+      if (globalIndex >= 0) {
+        tr.dataset.courseIndex = String(globalIndex);
+      }
 
       const diffBadgeHtml = course.diffStatus === 'updated'
         ? '<span class="badge bg-warning text-dark course-diff-badge">不一樣</span>'
         : (course.diffStatus === 'added'
           ? '<span class="badge bg-success course-diff-badge">AI 新增</span>'
           : '');
+
+      const hasGrade = String(course.grade || '').trim() !== '';
+      const statusCellHtml = hasGrade
+        ? `<td><button type="button" class="btn ${buttonClass} btn-sm toggle-not-taken">${buttonText}</button></td>`
+        : `<td class="text-muted course-status-empty" aria-label="狀態"></td>`;
 
       tr.innerHTML = `
       <td>
@@ -1263,19 +1316,42 @@
       </td>
       <td><input type="text" name="course_credits[]" class="form-control form-control-sm course-credits-input" value="${displayCredits}" placeholder="學分"></td>
       <td><input type="text" name="course_grade[]" class="form-control form-control-sm course-grade-input" value="${course.grade || ""}" placeholder="輸入成績"></td>
-      <td><button type="button" class="btn ${buttonClass} btn-sm toggle-not-taken">${buttonText}</button></td>
+      ${statusCellHtml}
       `;
 
       // 添加事件监听器，当成绩输入改变时同步到 allCoursesData
       const gradeInput = tr.querySelector('input[name="course_grade[]"]');
       if (gradeInput) {
         gradeInput.addEventListener('input', () => {
-          const courseName = tr.querySelector('input[name="course_name[]"]').value;
-          const index = allCoursesData.findIndex(c => c.name === courseName);
-          if (index > -1) {
-            allCoursesData[index].grade = gradeInput.value.trim();
-            saveFormData();
+          const idxAttr = tr.dataset.courseIndex;
+          const g = gradeInput.value.trim();
+          const syncGradeToData = () => {
+            if (idxAttr !== undefined && idxAttr !== '' && allCoursesData[+idxAttr]) {
+              allCoursesData[+idxAttr].grade = g;
+              return;
+            }
+            const courseName = tr.querySelector('input[name="course_name[]"]').value;
+            const index = allCoursesData.findIndex(c => c.name === courseName);
+            if (index > -1) allCoursesData[index].grade = g;
+          };
+          syncGradeToData();
+
+          const statusTd = tr.cells[3];
+          if (statusTd) {
+            if (g && statusTd.classList.contains('course-status-empty')) {
+              const nt = tr.dataset.isNotTaken === 'true';
+              const bc = nt ? 'btn-warning' : 'btn-success';
+              const bt = nt ? '未修課' : '已修課';
+              statusTd.classList.remove('course-status-empty', 'text-muted');
+              statusTd.removeAttribute('aria-label');
+              statusTd.innerHTML = `<button type="button" class="btn ${bc} btn-sm toggle-not-taken">${bt}</button>`;
+            } else if (!g && statusTd.querySelector('.toggle-not-taken')) {
+              statusTd.innerHTML = '';
+              statusTd.classList.add('course-status-empty', 'text-muted');
+              statusTd.setAttribute('aria-label', '狀態');
+            }
           }
+          saveFormData();
         });
       }
 
@@ -1310,7 +1386,12 @@
       }
 
       courses.forEach(course => {
-        tbody.appendChild(createCourseRow(course));
+        let gi = allCoursesData.indexOf(course);
+        if (gi < 0) {
+          const key = normalizeCourseNameKeyForTable(course.name);
+          gi = allCoursesData.findIndex(c => normalizeCourseNameKeyForTable(c.name) === key);
+        }
+        tbody.appendChild(createCourseRow(course, gi));
       });
       // 重新渲染後，儲存當前課程狀態 (包括未修課標記)
       saveFormData();
@@ -1452,35 +1533,7 @@
 
     // 🧩 儲存為個人模板
     async function savePersonalTemplate() {
-      // 先從表格中同步最新的狀態到 allCoursesData
-      const courseRows = document.querySelectorAll('#courseTableBody tr');
-      courseRows.forEach(row => {
-        const nameInput = row.querySelector('input[name="course_name[]"]');
-        const creditsInput = row.querySelector('input[name="course_credits[]"]');
-        const gradeInput = row.querySelector('input[name="course_grade[]"]');
-        const isNotTaken = row.dataset.isNotTaken === 'true';
-
-        if (nameInput) {
-          const courseName = nameInput.value.trim();
-          const index = allCoursesData.findIndex(c => c.name === courseName);
-          
-          if (index > -1) {
-            // 更新現有課程的狀態
-            allCoursesData[index].name = courseName;
-            allCoursesData[index].credits = creditsInput ? creditsInput.value.trim() : allCoursesData[index].credits;
-            allCoursesData[index].grade = gradeInput ? gradeInput.value.trim() : allCoursesData[index].grade;
-            allCoursesData[index].isNotTaken = isNotTaken;
-          } else if (courseName) {
-            // 如果是新課程，添加到 allCoursesData
-            allCoursesData.push({
-              name: courseName,
-              credits: creditsInput ? creditsInput.value.trim() : '',
-              grade: gradeInput ? gradeInput.value.trim() : '',
-              isNotTaken: isNotTaken
-            });
-          }
-        }
-      });
+      syncCourseTableInputsToAllCoursesData();
 
       // 使用 allCoursesData 確保儲存所有課程，無論篩選狀態
       const courses = allCoursesData.map(course => ({
@@ -1524,6 +1577,7 @@
     document.getElementById("courseTableBody").addEventListener("click", e => {
       if (e.target.classList.contains("toggle-not-taken")) {
         const tr = e.target.closest("tr");
+        if (!tr || !tr.querySelector('.toggle-not-taken')) return;
         const creditsInput = tr.querySelector(".course-credits-input");
         let isNotTaken = tr.dataset.isNotTaken === 'true';
 
@@ -1544,8 +1598,12 @@
         }
 
         // **重要：** 同步更新 allCoursesData 中的狀態
-        const courseName = tr.querySelector('input[name="course_name[]"]').value;
-        const index = allCoursesData.findIndex(c => c.name === courseName);
+        const idxAttr = tr.dataset.courseIndex;
+        let index = (idxAttr !== undefined && idxAttr !== '') ? parseInt(idxAttr, 10) : NaN;
+        if (Number.isNaN(index) || index < 0 || index >= allCoursesData.length) {
+          const courseName = tr.querySelector('input[name="course_name[]"]').value;
+          index = allCoursesData.findIndex(c => c.name === courseName);
+        }
         if (index > -1) {
           allCoursesData[index].isNotTaken = !isNotTaken;
         }
@@ -4342,36 +4400,8 @@
       });
 
       // 收集動態的課程資料並添加到 FormData
-      // ⚠️ 重要：先從當前頁面的表格中同步最新狀態到 allCoursesData
-      const courseRows = document.querySelectorAll("#courseTableBody tr");
-      courseRows.forEach(row => {
-        const nameInput = row.querySelector('input[name="course_name[]"]');
-        const creditsInput = row.querySelector('input[name="course_credits[]"]');
-        const gradeInput = row.querySelector('input[name="course_grade[]"]');
-        const isNotTaken = row.dataset.isNotTaken === 'true';
-
-        if (nameInput && creditsInput) {
-          const courseName = nameInput.value.trim();
-          if (courseName) {
-            const index = allCoursesData.findIndex(c => c.name === courseName);
-            if (index > -1) {
-              // 更新現有課程的狀態
-              allCoursesData[index].name = courseName;
-              allCoursesData[index].credits = creditsInput.value.trim();
-              allCoursesData[index].grade = gradeInput ? gradeInput.value.trim() : '';
-              allCoursesData[index].isNotTaken = isNotTaken;
-            } else {
-              // 如果是新課程，添加到 allCoursesData
-              allCoursesData.push({
-                name: courseName,
-                credits: creditsInput.value.trim(),
-                grade: gradeInput ? gradeInput.value.trim() : '',
-                isNotTaken: isNotTaken
-              });
-            }
-          }
-        }
-      });
+      // ⚠️ 重要：先從課程表（含分頁列）同步到 allCoursesData
+      syncCourseTableInputsToAllCoursesData();
 
       // 未上傳新成績單時，帶入既有成績單路徑（供後端保留 ProofImage）
       const transcriptInput = document.getElementById('transcript_file');
@@ -4999,15 +5029,17 @@
                         else if (col.includes('成績') || col.includes('分數')) gradeIdx = idx;
                     });
                     
-                    if (nameIdx !== -1 && gradeIdx !== -1) {
+                    // 至少要有科目欄；成績欄可有可無（無則不比對成績）
+                    if (nameIdx !== -1 && (gradeIdx !== -1 || creditIdx !== -1)) {
                         headerFound = true;
                     }
                 } else {
                     // 處理資料行
-                    if (rawCols.length > Math.max(nameIdx, gradeIdx)) {
+                    const maxIdx = Math.max(nameIdx, gradeIdx, creditIdx);
+                    if (rawCols.length > maxIdx) {
                         const name = rawCols[nameIdx];
                         let credits = creditIdx !== -1 ? rawCols[creditIdx] : '';
-                        let grade = rawCols[gradeIdx];
+                        let grade = gradeIdx !== -1 ? rawCols[gradeIdx] : '';
                         
                         // 簡單清理數據
                         // 🟢 [修正] 如果學分或成績包含米字號 (*)，則視為 0 學分
@@ -5016,12 +5048,22 @@
                         } else if (credits) {
                             credits = credits.replace(/[^\d.]/g, ''); // 只留數字和小數點
                         }
-                        
-                        if (name && grade) {
+
+                        const hasGradeCol = gradeIdx !== -1;
+                        const hasCredCol = creditIdx !== -1;
+                        const gradeVal = hasGradeCol ? String(grade || '').trim() : '';
+                        const credVal = hasCredCol ? String(credits || '').trim() : '';
+                        const compare_grade = hasGradeCol && !!gradeVal;
+                        const compare_credits = hasCredCol && !!credVal;
+
+                        // 有科目名即可列為一筆；若表上有成績欄但該列空白則不納入（避免雜訊列）
+                        if (name && (!hasGradeCol || gradeVal)) {
                             courses.push({
                                 name: name,
-                                credits: credits,
-                                grade: grade,
+                                credits: credVal,
+                                grade: gradeVal,
+                                compare_grade,
+                                compare_credits,
                                 isNotTaken: false
                             });
                         }
@@ -5029,6 +5071,24 @@
                 }
             }
             return courses;
+        }
+
+        /** 後端 JSON 模式回傳的課程正規化（含 compare_*） */
+        function normalizeOcrCoursesFromApi(apiCourses) {
+            if (!Array.isArray(apiCourses)) return [];
+            return apiCourses.map(c => ({
+                name: String(c.name || '').trim(),
+                credits: c.credits != null ? String(c.credits).trim() : '',
+                grade: c.grade != null ? String(c.grade).trim() : '',
+                ocr_raw_name: c.ocr_raw_name != null ? String(c.ocr_raw_name).trim() : '',
+                compare_grade: typeof c.compare_grade === 'boolean'
+                    ? c.compare_grade
+                    : !!String(c.grade != null ? c.grade : '').trim(),
+                compare_credits: typeof c.compare_credits === 'boolean'
+                    ? c.compare_credits
+                    : !!String(c.credits != null ? c.credits : '').trim(),
+                isNotTaken: !!c.isNotTaken
+            }));
         }
 
         // 🟢 [升級版] 匯入 OCR 課程資料 (含智慧比對預覽 - 讓老師心服口服)
@@ -5296,8 +5356,10 @@
                             paginateTable(table, 10);
                         });
 
-                        // 🟢 [新增] 嘗試解析並顯示匯入按鈕
-                        const parsedCourses = parseMarkdownTableToCourses(msg);
+                        // 🟢 [新增] 嘗試解析並顯示匯入按鈕（優先使用後端 JSON courses，避免 Markdown 欄位錯位）
+                        const parsedCourses = (Array.isArray(data.courses) && data.courses.length > 0)
+                            ? normalizeOcrCoursesFromApi(data.courses)
+                            : parseMarkdownTableToCourses(msg);
                         if (parsedCourses.length > 0) {
                             const importBtn = document.createElement('button');
                             importBtn.id = 'btn-import-ocr-courses';
@@ -5361,16 +5423,38 @@
             return normalized || raw;
         }
 
+        /** 成績單比對用：成績正規化（數字、等第、尾綴「分」、常見同義） */
+        function normalizeGradeToken(value) {
+            let s = String(value ?? '').trim().replace(/\s+/g, '');
+            if (!s) return '';
+            s = s.replace(/分$/i, '');
+            const letterToScore = { '優': '95', '甲': '85', '乙': '75', '丙': '65', '丁': '55' };
+            if (letterToScore[s]) return letterToScore[s];
+            if (/^(通過|合格)$/i.test(s)) return 'pass';
+            const num = parseFloat(s.replace(/[^\d.-]/g, ''));
+            if (!Number.isNaN(num) && s.replace(/[^\d.-]/g, '') !== '') return String(num);
+            return s.toLowerCase();
+        }
+
+        function gradesEqualForTranscript(importedGrade, ocrGrade) {
+            const a = normalizeGradeToken(importedGrade);
+            const b = normalizeGradeToken(ocrGrade);
+            if (!a && !b) return true;
+            if (a === b) return true;
+            const n1 = parseFloat(a), n2 = parseFloat(b);
+            if (!Number.isNaN(n1) && !Number.isNaN(n2) && n1 === n2) return true;
+            return false;
+        }
+
+        /** 課名比對鍵：去空白、全形空白後比對，降低誤配 */
+        /** AI 成績單比對（v2）：不比對學分，僅看成績是否一致 */
         function creditsAndGradeEqual(importedCourse, ocrCourse) {
-            const importedGrade = normalizeCompareText(importedCourse ? importedCourse.grade : '');
-            const ocrGrade = normalizeCompareText(ocrCourse.grade);
-            const importedCredits = normalizeCompareCredits(importedCourse ? importedCourse.credits : '');
-            const ocrCredits = normalizeCompareCredits(ocrCourse.credits);
-            const g1 = parseFloat(importedGrade), g2 = parseFloat(ocrGrade);
-            const gradeEq = importedGrade === ocrGrade || (!isNaN(g1) && !isNaN(g2) && g1 === g2);
-            const c1 = parseFloat(importedCredits), c2 = parseFloat(ocrCredits);
-            const credEq = importedCredits === ocrCredits || (!isNaN(c1) && !isNaN(c2) && c1 === c2);
-            return gradeEq && credEq;
+            const compareGrade = ocrCourse.compare_grade !== false;
+            if (!compareGrade) return true;
+            return gradesEqualForTranscript(
+                importedCourse ? importedCourse.grade : '',
+                ocrCourse ? ocrCourse.grade : ''
+            );
         }
 
         function escapeHtml(value) {
@@ -5394,38 +5478,81 @@
                 return;
             }
 
-            const SIMILARITY_THRESHOLD = 0.6;
+            // 先將畫面上「已修習專業核心科目」表格輸入同步到 allCoursesData（含分頁：依列 data-course-index），再依科目名與 OCR 比對成績
+            syncCourseTableInputsToAllCoursesData();
+
+            // 相似度門檻：僅用於「非完全同名」的列；完全同名先配對，可減少相似課互搶列造成的假「不一樣」
+            const SIMILARITY_THRESHOLD = 0.73;
             const matchedImportedIndices = new Set();
             const reservedImportedIndices = new Set();
+            const nOcr = ocrCourses.length;
+            const matchIndexByOcr = new Array(nOcr).fill(-1);
+            const similarityByOcr = new Array(nOcr).fill(0);
 
-            const matchResults = ocrCourses.map(ocrCourse => {
-                let bestMatchIndex = -1;
-                let bestSimilarity = 0;
-
-                allCoursesData.forEach((course, index) => {
-                    if (reservedImportedIndices.has(index)) return;
-                    const similarity = window.calculateSimilarity(course.name, ocrCourse.name);
-                    if (similarity > bestSimilarity) {
-                        bestSimilarity = similarity;
-                        bestMatchIndex = index;
+            // 第一階段：課名正規化後完全相同者優先鎖定（相似度視為 1）
+            ocrCourses.forEach((ocrCourse, oi) => {
+                const oKey = normalizeCourseNameKeyForTable(ocrCourse.name);
+                if (!oKey) return;
+                for (let ei = 0; ei < allCoursesData.length; ei++) {
+                    if (reservedImportedIndices.has(ei)) continue;
+                    if (normalizeCourseNameKeyForTable(allCoursesData[ei].name) === oKey) {
+                        matchIndexByOcr[oi] = ei;
+                        similarityByOcr[oi] = 1;
+                        reservedImportedIndices.add(ei);
+                        matchedImportedIndices.add(ei);
+                        break;
                     }
-                });
+                }
+            });
 
-                const isMatch = bestMatchIndex > -1 && bestSimilarity >= SIMILARITY_THRESHOLD;
+            // 第二階段：每輪只配對「當下信心最高」的一筆（最佳與次佳差距最大者優先），配完重算，減少兩門課搶列造成成績對調
+            while (true) {
+                let pickOi = -1;
+                let pickEi = -1;
+                let pickSim = -1;
+                let pickMargin = -1;
+                for (let oi = 0; oi < nOcr; oi++) {
+                    if (matchIndexByOcr[oi] !== -1) continue;
+                    const ocrCourse = ocrCourses[oi];
+                    let top1 = null;
+                    let top2 = null;
+                    for (let ei = 0; ei < allCoursesData.length; ei++) {
+                        if (reservedImportedIndices.has(ei)) continue;
+                        const sim = window.calculateSimilarity(allCoursesData[ei].name, ocrCourse.name);
+                        if (!top1 || sim > top1.sim) {
+                            top2 = top1;
+                            top1 = { ei, sim };
+                        } else if (!top2 || sim > top2.sim) {
+                            top2 = { ei, sim };
+                        }
+                    }
+                    if (!top1 || top1.sim < SIMILARITY_THRESHOLD) continue;
+                    const margin = top1.sim - (top2 ? top2.sim : 0);
+                    if (margin > pickMargin || (margin === pickMargin && top1.sim > pickSim)) {
+                        pickMargin = margin;
+                        pickSim = top1.sim;
+                        pickOi = oi;
+                        pickEi = top1.ei;
+                    }
+                }
+                if (pickOi < 0 || pickEi < 0) break;
+                matchIndexByOcr[pickOi] = pickEi;
+                similarityByOcr[pickOi] = pickSim;
+                reservedImportedIndices.add(pickEi);
+                matchedImportedIndices.add(pickEi);
+            }
+
+            const matchResults = ocrCourses.map((ocrCourse, oi) => {
+                const bestMatchIndex = matchIndexByOcr[oi];
+                const bestSimilarity = similarityByOcr[oi];
+                const isMatch = bestMatchIndex > -1;
                 const importedCourse = isMatch ? allCoursesData[bestMatchIndex] : null;
-                const importedGrade = normalizeCompareText(importedCourse ? importedCourse.grade : '');
-                const ocrGrade = normalizeCompareText(ocrCourse.grade);
-                const importedCredits = normalizeCompareCredits(importedCourse ? importedCourse.credits : '');
-                const ocrCredits = normalizeCompareCredits(ocrCourse.credits);
-                const gradeDiff = Boolean(importedCourse) && importedGrade !== ocrGrade;
-                const creditsDiff = Boolean(importedCourse) && importedCredits !== ocrCredits;
+                const compareGrade = ocrCourse.compare_grade !== false;
+                const gradeDiff = Boolean(importedCourse) && compareGrade
+                    && !gradesEqualForTranscript(importedCourse ? importedCourse.grade : '', ocrCourse.grade);
+                const creditsDiff = false;
                 const isSame = isMatch && creditsAndGradeEqual(importedCourse, ocrCourse);
                 const action = !isMatch ? 'add' : (isSame ? 'same' : 'update');
-
-                if (isMatch) {
-                    matchedImportedIndices.add(bestMatchIndex);
-                    reservedImportedIndices.add(bestMatchIndex);
-                }
 
                 return {
                     ocrCourse,
@@ -5465,43 +5592,32 @@
 
                 if (item.action === 'update') {
                     const importedGrade = item.importedCourse?.grade || '-';
-                    const importedCredits = item.importedCourse?.credits || '-';
                     const ocrGrade = item.ocrCourse.grade || '-';
-                    const ocrCredits = item.ocrCourse.credits || '-';
+                    const ocrCompareGrade = item.ocrCourse.compare_grade !== false;
                     const diffBadges = [
-                        item.gradeDiff ? '<span class="badge bg-warning text-dark me-1">成績不同</span>' : '',
-                        item.creditsDiff ? '<span class="badge bg-info text-dark">學分不同</span>' : ''
+                        item.gradeDiff ? '<span class="badge bg-warning text-dark me-1">成績不同</span>' : ''
                     ].join('');
+                    const gradeAfterCell = ocrCompareGrade
+                        ? `<strong class="text-primary ${gradeTextClass(ocrGrade)}">${escapeHtml(ocrGrade)}</strong>`
+                        : '<span class="text-muted small">—（成績單無成績欄，不比對）</span>';
 
+                    const ocrLabel = (item.ocrCourse.ocr_raw_name && String(item.ocrCourse.ocr_raw_name).trim())
+                        ? `圖上：${escapeHtml(item.ocrCourse.ocr_raw_name.trim())} → 標準：${escapeHtml(item.ocrCourse.name)}`
+                        : `OCR：${escapeHtml(item.ocrCourse.name)}`;
                     diffRows.push(`
                         <tr>
                             <td class="text-center"><span class="badge bg-warning text-dark">不一樣</span></td>
                             <td>
                                 <div><strong>${escapeHtml(item.matchName)}</strong></div>
-                                <div class="small text-muted">OCR：${escapeHtml(item.ocrCourse.name)} (${score}%)</div>
+                                <div class="small text-muted">${ocrLabel}（${score}%）</div>
                                 <div class="mt-1">${diffBadges}</div>
                             </td>
-                            <td class="small text-muted">${escapeHtml(importedCredits)}</td>
-                            <td class="small"><strong class="text-primary">${escapeHtml(ocrCredits)}</strong></td>
                             <td class="small"><span class="${gradeTextClass(importedGrade)}">${escapeHtml(importedGrade)}</span></td>
-                            <td class="small"><strong class="text-primary ${gradeTextClass(ocrGrade)}">${escapeHtml(ocrGrade)}</strong></td>
-                        </tr>
-                    `);
-                } else if (item.action === 'add') {
-                    diffRows.push(`
-                        <tr>
-                            <td class="text-center"><span class="badge bg-primary">AI 多抓的</span></td>
-                            <td>
-                                <div><strong>${escapeHtml(item.ocrCourse.name)}</strong></div>
-                                <div class="small text-muted">Excel 裡沒有這門課</div>
-                            </td>
-                            <td class="small text-muted">-</td>
-                            <td class="small"><strong class="text-primary">${escapeHtml(item.ocrCourse.credits || '-')}</strong></td>
-                            <td class="small text-muted">-</td>
-                            <td class="small"><strong class="text-primary ${gradeTextClass(item.ocrCourse.grade || '-')}">${escapeHtml(item.ocrCourse.grade || '-')}</strong></td>
+                            <td class="small">${gradeAfterCell}</td>
                         </tr>
                     `);
                 }
+                // 「AI 多抓的」不列入預覽表格（依需求不顯示）
             });
 
             missingImportedCourses.forEach(item => {
@@ -5512,8 +5628,6 @@
                             <div><strong>${escapeHtml(item.course.name)}</strong></div>
                             <div class="small text-muted">AI 沒辨識到這門課</div>
                         </td>
-                        <td class="small"><strong>${escapeHtml(item.course.credits || '-')}</strong></td>
-                        <td class="small text-muted">-</td>
                         <td class="small"><span class="${gradeTextClass(item.course.grade || '-')}"><strong>${escapeHtml(item.course.grade || '-')}</strong></span></td>
                         <td class="small text-muted">-</td>
                     </tr>
@@ -5524,34 +5638,27 @@
             const addCount = matchResults.filter(item => item.action === 'add').length;
             const sameCount = matchResults.filter(item => item.action === 'same').length;
             const missingCount = missingImportedCourses.length;
-            const applicableDiffCount = updateCount + addCount;
-            const totalDiffCount = applicableDiffCount + missingCount;
+            const applicableDiffCount = updateCount;
+            const tableDiffCount = updateCount + missingCount;
 
             const previewHtml = `
                 <div class="text-start">
                     <div class="row g-2 mb-3 text-center">
-                        <div class="col-6 col-md-3">
+                        <div class="col-12 col-md-4">
                             <div class="border rounded p-2 bg-light">
                                 <div class="small text-muted">相符</div>
                                 <div class="fw-bold text-success">${sameCount}</div>
                                 <div class="small text-muted">筆（與 Excel 一致）</div>
                             </div>
                         </div>
-                        <div class="col-6 col-md-3">
+                        <div class="col-12 col-md-4">
                             <div class="border rounded p-2 bg-light">
                                 <div class="small text-muted">不一樣</div>
                                 <div class="fw-bold text-warning">${updateCount}</div>
                                 <div class="small text-muted">筆</div>
                             </div>
                         </div>
-                        <div class="col-6 col-md-3">
-                            <div class="border rounded p-2 bg-light">
-                                <div class="small text-muted">AI 多抓的</div>
-                                <div class="fw-bold text-primary">${addCount}</div>
-                                <div class="small text-muted">筆</div>
-                            </div>
-                        </div>
-                        <div class="col-6 col-md-3">
+                        <div class="col-12 col-md-4">
                             <div class="border rounded p-2 bg-light">
                                 <div class="small text-muted">Excel 才有</div>
                                 <div class="fw-bold text-secondary">${missingCount}</div>
@@ -5559,18 +5666,16 @@
                             </div>
                         </div>
                     </div>
-                    <p class="small text-muted mb-2">以<strong>Excel「已修習必修科目」</strong>為正確答案；AI 只辨識成績單上<strong>第一學年到第三學年的必修</strong>並比對。有不一樣的地方可以在下面課程表手動改，或按「套用」一次更新。</p>
-                    ${totalDiffCount > 0 ? `
+                    <p class="small text-muted mb-2">以<strong>Excel「已修習必修科目」</strong>為正確答案；AI 只辨識成績單上<strong>第一學年到第三學年的必修</strong>。<strong>僅比對成績</strong>（不比對學分）；若成績單無成績欄則不比對成績。有不一樣的地方可在課程表手動改，或按「套用」更新成績。</p>
+                    ${tableDiffCount > 0 ? `
                         <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
                             <table class="table table-sm table-bordered align-middle">
                                 <thead class="table-light sticky-top">
                                     <tr>
                                         <th width="15%">狀態</th>
                                         <th>課程</th>
-                                        <th width="12%">學分（修改前）</th>
-                                        <th width="12%">學分（修改後）</th>
-                                        <th width="12%">成績（修改前）</th>
-                                        <th width="12%">成績（修改後）</th>
+                                        <th width="18%">成績（修改前／Excel）</th>
+                                        <th width="18%">成績（修改後／OCR）</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -5579,7 +5684,11 @@
                             </table>
                         </div>
                         <div class="small text-muted mt-2">
-                            說明：<strong>Excel</strong>＝正確資料；<strong>不一樣</strong>＝AI 和 Excel 不同，可手動改或按套用；<strong>Excel 才有</strong>＝只有 Excel 有、AI 沒認到，不會被刪掉。
+                            說明：<strong>Excel</strong>＝正確資料；<strong>不一樣</strong>＝成績與 Excel 不同（不比學分）；<strong>Excel 才有</strong>＝只有 Excel 有、AI 沒認到，不會被刪掉。
+                        </div>
+                    ` : addCount > 0 ? `
+                        <div class="alert alert-secondary small mb-2">
+                            <i class="bi bi-info-circle"></i> 與 Excel 相較，沒有「不一樣」或「Excel 才有」的項目須在此列表顯示。成績單上其餘辨識列已略過、不列出。
                         </div>
                     ` : `
                         <div class="alert alert-success mb-2">
@@ -5589,7 +5698,7 @@
                     <div class="form-check mt-2">
                         <input class="form-check-input" type="checkbox" id="onlyUpdateCheck" checked>
                         <label class="form-check-label small" for="onlyUpdateCheck">
-                            只修正「不一樣」的（以 Excel 為準），<strong>不新增</strong> AI 多抓的課
+                            只修正「不一樣」的（以 Excel 為準），不新增成績單上多出的科目
                         </label>
                     </div>
                 </div>
@@ -5619,7 +5728,7 @@
                 }));
 
                 matchResults.forEach(item => {
-                    const { ocrCourse, matchIndex, action, gradeDiff, creditsDiff } = item;
+                    const { ocrCourse, matchIndex, action, gradeDiff } = item;
 
                     if (action === 'update') {
                         let changed = false;
@@ -5652,7 +5761,7 @@
                 applyFilterAndSearch();
                 saveFormData(); 
 
-                Swal.fire('比對完成', `已套用：修正 ${updatedCount} 筆（未新增任何 AI 多抓的科目）。Excel 才有 ${missingCount} 筆僅供參考，可隨時在課程表手動改。`, 'success');
+                Swal.fire('比對完成', `已套用：修正 ${updatedCount} 筆。Excel 才有 ${missingCount} 筆僅供參考，可隨時在課程表手動改。`, 'success');
                 
                 // Highlight updated rows
                 // 🟢 [修正] 明確指定要捲動到的課程表格 (courseTableBody 的父表格)
