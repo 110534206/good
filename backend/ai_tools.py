@@ -1011,7 +1011,7 @@ JSON 物件鍵名必須完全一致：
 2. 只收錄第一學年～第三學年（依圖上學期／學年欄位判斷）；第四學年（含）以後不要輸出；無法判斷學年的列不要輸出。
 3. **課名**：`name` 禁止自創與圖片無關的課程；除清單歸併外，應忠實反映圖上科目（含行銷、作業系統、攝影等任何出現在圖上的必修課）。
 4. **成績**：`grade` 只允許來自圖片，禁止臆測。
-5. 禁止補全圖上沒有的文字；看不清的欄位用 null。
+5. 禁止補全圖上沒有的文字；看不清的欄位用 null。若同一門必修課分上下學期（或分段）各出現一列，可分行輸出；系統會自動取成績較高者合併為該科目一筆。
 6. 若整張圖不是成績單或過於模糊：courses 輸出 []，confidence 請給 0～30。
 7. 若成績單根本沒有「學分」欄，transcript_has_credits_column 必為 false；此時若 name 恰為清單課名，可把 `credits` 填清單應修學分；若 name 非清單課且圖上無學分，則 credits 為 null。
 8. 若成績單根本沒有「成績／等第」欄，transcript_has_grade_column 必為 false，且每筆 grade 必為 null。
@@ -1033,6 +1033,159 @@ def _transcript_courses_to_markdown(courses):
         gr_disp = "" if gr is None or gr == "" else str(gr).replace("|", "\\|")
         lines.append(f"| {name} | {cr_disp} | {gr_disp} |")
     return "\n".join(lines)
+
+
+def _compact_course_name_key(name):
+    """與前端 normalizeCourseNameKeyForTable 一致：去空白、小寫。"""
+    if not name:
+        return ""
+    return re.sub(r"[\s\u3000]+", "", str(name).strip().lower())
+
+
+def _course_base_merge_key(name):
+    """
+    同一門課分上下學期／(一)(二) 等時的基底鍵，用於合併列並取較高成績（如會計概論、硬體裝修）。
+    """
+    s = _compact_course_name_key(name)
+    if not s:
+        return ""
+    patterns = (
+        r"\([上下]\)$",
+        r"（[上下]）$",
+        r"\([一二三四五六七八九十0-9]+\)$",
+        r"（[一二三四五六七八九十0-9]+）$",
+        r"\([IiⅠⅡⅢⅣ]+\)$",
+        r"（[IiⅠⅡⅢⅣ]+）$",
+        r"上學期$",
+        r"下學期$",
+        r"第[一二三四1-4]學期$",
+    )
+    for _ in range(24):
+        hit = False
+        for p in patterns:
+            ns = re.sub(p, "", s, flags=re.UNICODE)
+            if ns != s:
+                s = ns
+                hit = True
+                break
+        if not hit:
+            break
+    return s
+
+
+def _transcript_grade_rank_for_merge(grade_str):
+    """成績可比較數值（越大越好），供上下學期合併取高。"""
+    if grade_str is None:
+        return float("-inf")
+    s = str(grade_str).strip().replace("分", "")
+    if not s or s.lower() == "null":
+        return float("-inf")
+    letter_to_score = {"優": 95.0, "甲": 85.0, "乙": 75.0, "丙": 65.0, "丁": 55.0}
+    if s in letter_to_score:
+        return letter_to_score[s]
+    if re.match(r"^(通過|合格)$", s, re.I):
+        return 70.0
+    cleaned = re.sub(r"[^\d.\-]", "", s)
+    if cleaned:
+        try:
+            return float(cleaned)
+        except ValueError:
+            pass
+    letter_map = {
+        "a+": 98.0,
+        "a": 95.0,
+        "a-": 92.0,
+        "b+": 88.0,
+        "b": 85.0,
+        "b-": 82.0,
+        "c+": 78.0,
+        "c": 75.0,
+        "c-": 72.0,
+        "d+": 68.0,
+        "d": 65.0,
+        "d-": 62.0,
+        "e": 55.0,
+        "f": 40.0,
+    }
+    k = s.lower()
+    return letter_map[k] if k in letter_map else float("-inf")
+
+
+def _merge_transcript_rows_same_course_semester(rows):
+    """
+    辨識結果中同一基底課名多列（上下學期等）合併為一筆，成績取較高者；維持原列順序（以首列代表）。
+    """
+    if not isinstance(rows, list) or len(rows) < 2:
+        return rows
+
+    buckets = {}
+    bucket_order = []
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        nm = row.get("name") or ""
+        bkey = _course_base_merge_key(nm) or f"__single_{idx}__"
+        if bkey not in buckets:
+            buckets[bkey] = []
+            bucket_order.append(bkey)
+        buckets[bkey].append((idx, row))
+
+    merged_by_key = {}
+    for bkey in bucket_order:
+        items = buckets[bkey]
+        if len(items) < 2:
+            merged_by_key[bkey] = None
+            continue
+        best_row = items[0][1]
+        best_r = _transcript_grade_rank_for_merge(best_row.get("grade"))
+        merged_grade = ""
+        for _, r in items:
+            g = r.get("grade")
+            gs = "" if g is None else str(g).strip()
+            if gs and gs.lower() != "null":
+                if not merged_grade:
+                    merged_grade = gs
+                elif _transcript_grade_rank_for_merge(gs) > _transcript_grade_rank_for_merge(merged_grade):
+                    merged_grade = gs
+            tr = _transcript_grade_rank_for_merge(g)
+            if tr > best_r:
+                best_r = tr
+                best_row = r
+            elif tr == best_r and tr == float("-inf"):
+                pass
+
+        merged = dict(best_row)
+        merged["name"] = best_row.get("name") or merged.get("name")
+        merged["grade"] = merged_grade if merged_grade else ""
+        thg_any = any(bool(it[1].get("compare_grade")) for it in items)
+        merged["compare_grade"] = bool(thg_any) and bool(str(merged.get("grade") or "").strip())
+
+        raw_parts = []
+        for _, r in items:
+            o = (r.get("ocr_raw_name") or "").strip()
+            if o and o not in raw_parts:
+                raw_parts.append(o)
+        if raw_parts:
+            merged["ocr_raw_name"] = "；".join(raw_parts)
+
+        merged_by_key[bkey] = merged
+
+    new_rows = []
+    emitted_multi = set()
+    for idx, row in enumerate(rows):
+        if not isinstance(row, dict):
+            new_rows.append(row)
+            continue
+        bkey = _course_base_merge_key(row.get("name") or "") or f"__single_{idx}__"
+        m = merged_by_key.get(bkey)
+        if m is None:
+            new_rows.append(row)
+            continue
+        if bkey in emitted_multi:
+            continue
+        emitted_multi.add(bkey)
+        new_rows.append(m)
+    return new_rows
 
 
 def _normalize_transcript_json_payload(parsed):
@@ -1117,6 +1270,8 @@ def _normalize_transcript_json_payload(parsed):
             "transcript_has_credits_column": bool(thc),
             "transcript_has_grade_column": bool(thg),
         })
+
+    out = _merge_transcript_rows_same_course_semester(out)
 
     meta = {
         "transcript_has_credits_column": bool(thc),

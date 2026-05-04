@@ -1232,6 +1232,36 @@
       return String(name || '').replace(/[\s\u3000]+/g, '').trim().toLowerCase();
     }
 
+    /**
+     * 同一門課分上下學期／(一)(二) 等時的「基底鍵」，用於合併成績取高（如會計概論、硬體裝修）。
+     * 僅剝除常見尾綴，避免誤刪課名本體。
+     */
+    function courseNameBaseKeyForSemesterMerge(name) {
+      let s = normalizeCourseNameKeyForTable(name);
+      if (!s) return '';
+      const patterns = [
+        /[（(][上下][）)]$/u,
+        /[（(][一二三四五六七八九十0-9]{1,3}[）)]$/u,
+        /[（(][IiⅠⅡⅢⅣ][）)]$/u,
+        /上學期$/u,
+        /下學期$/u,
+        /第[一二三四1-4]學期$/u,
+      ];
+      for (let guard = 0; guard < 24; guard++) {
+        let hit = false;
+        for (const re of patterns) {
+          const next = s.replace(re, '');
+          if (next !== s) {
+            s = next;
+            hit = true;
+            break;
+          }
+        }
+        if (!hit) break;
+      }
+      return s;
+    }
+
     /** 將當前課程表輸入同步回 allCoursesData（分頁時僅當頁有 DOM，需靠 data-course-index） */
     function syncCourseTableInputsToAllCoursesData() {
       const rows = document.querySelectorAll('#courseTableBody tr');
@@ -5446,6 +5476,115 @@
             return false;
         }
 
+        /** 成績單合併／取高用：可比較的數值（越大越好） */
+        function transcriptGradeRank(value) {
+            const t = normalizeGradeToken(value);
+            if (!t) return -Infinity;
+            if (t === 'pass') return 70;
+            const n = parseFloat(t);
+            if (!Number.isNaN(n)) return n;
+            const L = {
+                'a+': 98, 'a': 95, 'a-': 92, 'b+': 88, 'b': 85, 'b-': 82,
+                'c+': 78, 'c': 75, 'c-': 72, 'd+': 68, 'd': 65, 'd-': 62, 'e': 55, 'f': 40
+            };
+            const k = String(t).toLowerCase();
+            if (L[k] != null) return L[k];
+            return -Infinity;
+        }
+
+        function pickHigherTranscriptGrade(a, b) {
+            const ra = transcriptGradeRank(a);
+            const rb = transcriptGradeRank(b);
+            const sa = String(a ?? '').trim();
+            const sb = String(b ?? '').trim();
+            if (ra === -Infinity && rb === -Infinity) return sb || sa;
+            if (ra === -Infinity) return sb;
+            if (rb === -Infinity) return sa;
+            if (ra > rb) return sa;
+            if (rb > ra) return sb;
+            return sa;
+        }
+
+        /**
+         * OCR 多筆為同一門課（上下學期等）時合併為一筆，成績取較高者，供比對 Excel。
+         */
+        function mergeOcrCoursesBySemesterSplit(ocrCourses) {
+            const list = Array.isArray(ocrCourses) ? ocrCourses.map(c => ({ ...c })) : [];
+            if (list.length < 2) return list;
+
+            const groups = new Map();
+            list.forEach((c, i) => {
+                const b = courseNameBaseKeyForSemesterMerge(c.name);
+                const key = b || `__single_${i}__`;
+                if (!groups.has(key)) groups.set(key, { items: [], minIdx: i });
+                const g = groups.get(key);
+                g.items.push(c);
+                g.minIdx = Math.min(g.minIdx, i);
+            });
+
+            const keys = [...groups.keys()].sort((a, b) => groups.get(a).minIdx - groups.get(b).minIdx);
+            const out = [];
+            for (const k of keys) {
+                const { items } = groups.get(k);
+                if (items.length === 1) {
+                    out.push(items[0]);
+                    continue;
+                }
+                let mergedGrade = '';
+                items.forEach(it => {
+                    mergedGrade = pickHigherTranscriptGrade(mergedGrade, it.grade || '');
+                });
+                let best = items[0];
+                let bestR = transcriptGradeRank(items[0].grade);
+                for (let j = 1; j < items.length; j++) {
+                    const r = transcriptGradeRank(items[j].grade);
+                    if (r > bestR) {
+                        bestR = r;
+                        best = items[j];
+                    }
+                }
+                const merged = { ...best };
+                merged.grade = mergedGrade;
+                merged.compare_grade = items.some(it => it.compare_grade !== false) && String(merged.grade || '').trim() !== '';
+                const raws = items.map(it => String(it.ocr_raw_name || '').trim()).filter(Boolean);
+                if (raws.length) merged.ocr_raw_name = [...new Set(raws)].join('；');
+                out.push(merged);
+            }
+            return out;
+        }
+
+        /**
+         * Excel 範本中同基底鍵多列（上下學期分行）時，成績統一為其中最高分。
+         * @returns {boolean} 是否有變更
+         */
+        function propagateMaxGradeAcrossSemesterSplitRows(courses) {
+            if (!Array.isArray(courses) || courses.length < 2) return false;
+            const keyToIndices = new Map();
+            courses.forEach((c, i) => {
+                const k = courseNameBaseKeyForSemesterMerge(c.name);
+                if (!k) return;
+                if (!keyToIndices.has(k)) keyToIndices.set(k, []);
+                keyToIndices.get(k).push(i);
+            });
+            let changed = false;
+            keyToIndices.forEach(indices => {
+                if (indices.length < 2) return;
+                let best = '';
+                indices.forEach(i => {
+                    best = pickHigherTranscriptGrade(best, courses[i].grade || '');
+                });
+                indices.forEach(i => {
+                    const cur = String(courses[i].grade || '').trim();
+                    const next = String(best || '').trim();
+                    if (cur !== next) {
+                        courses[i].grade = best;
+                        changed = true;
+                    }
+                });
+            });
+            return changed;
+        }
+
         /** 課名比對鍵：去空白、全形空白後比對，降低誤配 */
         /** AI 成績單比對（v2）：不比對學分，僅看成績是否一致 */
         function creditsAndGradeEqual(importedCourse, ocrCourse) {
@@ -5481,6 +5620,9 @@
             // 先將畫面上「已修習專業核心科目」表格輸入同步到 allCoursesData（含分頁：依列 data-course-index），再依科目名與 OCR 比對成績
             syncCourseTableInputsToAllCoursesData();
 
+            // 成績單上同一門課分上下學期等多列時，先合併為一筆並取較高成績再與 Excel 比對
+            ocrCourses = mergeOcrCoursesBySemesterSplit(ocrCourses.map(c => ({ ...c })));
+
             // 相似度門檻：僅用於「非完全同名」的列；完全同名先配對，可減少相似課互搶列造成的假「不一樣」
             const SIMILARITY_THRESHOLD = 0.73;
             const matchedImportedIndices = new Set();
@@ -5496,6 +5638,23 @@
                 for (let ei = 0; ei < allCoursesData.length; ei++) {
                     if (reservedImportedIndices.has(ei)) continue;
                     if (normalizeCourseNameKeyForTable(allCoursesData[ei].name) === oKey) {
+                        matchIndexByOcr[oi] = ei;
+                        similarityByOcr[oi] = 1;
+                        reservedImportedIndices.add(ei);
+                        matchedImportedIndices.add(ei);
+                        break;
+                    }
+                }
+            });
+
+            // 第一階段補：課名整段不同但「上下學期基底鍵」相同者（如 會計概論(上) 對 Excel 會計概論），視為同一門鎖定
+            ocrCourses.forEach((ocrCourse, oi) => {
+                if (matchIndexByOcr[oi] !== -1) return;
+                const oBase = courseNameBaseKeyForSemesterMerge(ocrCourse.name);
+                if (!oBase) return;
+                for (let ei = 0; ei < allCoursesData.length; ei++) {
+                    if (reservedImportedIndices.has(ei)) continue;
+                    if (courseNameBaseKeyForSemesterMerge(allCoursesData[ei].name) === oBase) {
                         matchIndexByOcr[oi] = ei;
                         similarityByOcr[oi] = 1;
                         reservedImportedIndices.add(ei);
@@ -5751,7 +5910,9 @@
                     }
                 });
 
-                if (applicableDiffCount === 0) {
+                const propagated = propagateMaxGradeAcrossSemesterSplitRows(allCoursesData);
+
+                if (applicableDiffCount === 0 && !propagated) {
                     return;
                 }
 
