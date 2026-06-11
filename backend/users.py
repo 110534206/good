@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, session, redirect, url_for, reques
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import get_db
-from semester import is_student_in_application_phase, should_show_intern_experience, should_show_image_recognize, is_internship_semester_started
+from semester import is_student_in_application_phase, should_show_intern_experience, should_show_image_recognize, is_internship_semester_started, is_weekly_journal_open, get_student_internship_config
 import os
 import re 
 from ai_tools import perform_ocr_on_file, create_ocr_docx # Import new helpers
@@ -1202,7 +1202,29 @@ def intern_student_page():
     if 'username' not in session or session.get('role') != 'student':
         return redirect(url_for('auth_bp.login_page'))
     if request.path.endswith('/intern_weekly'):
-        return render_template('user_shared/intern_weekly.html')
+        weekly_journal_open = False
+        intern_start_date = None
+        try:
+            conn = get_db()
+            cursor = conn.cursor(dictionary=True)
+            weekly_journal_open = is_weekly_journal_open(cursor, session['user_id'])
+            config = get_student_internship_config(cursor, session['user_id'])
+            if config and config.get('intern_start_date'):
+                start_date = config['intern_start_date']
+                intern_start_date = (
+                    start_date.strftime('%Y-%m-%d')
+                    if hasattr(start_date, 'strftime')
+                    else str(start_date)[:10]
+                )
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+        return render_template(
+            'user_shared/intern_weekly.html',
+            weekly_journal_open=weekly_journal_open,
+            intern_start_date=intern_start_date,
+        )
     return render_template('user_shared/intern_achievement.html')
 
 

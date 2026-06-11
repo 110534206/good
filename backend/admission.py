@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session, render_template, redirect, send_file
 from config import get_db
 from datetime import datetime, timedelta
-from semester import get_current_semester_code, get_current_semester_id, get_flow_semester_id, get_flow_semester_code, get_internship_semester_dates
+from semester import get_current_semester_code, get_current_semester_id, get_flow_semester_id, get_flow_semester_code, get_internship_semester_dates, get_internship_semester_code
 from notification import create_notification
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -704,19 +704,14 @@ def get_my_admission():
                     teacher_name = teacher_info.get('name')
                     teacher_email = teacher_info.get('email')
             
-            # 實習期間：依 internship_configs 取得（作業在 1131、實習在 1132，應顯示 1132 的實習起訖）
-            # 若有 matching_results.semester_id 對應的學期則用該實習學期；否則依學生屆別取一筆 config
+            # 實習期間：依 internship_configs 取得（作業在 1131、實習在 1132，應顯示 1132）
             semester_code = None
             if offer_info.get('semester_id'):
-                cursor.execute("SELECT code FROM semesters WHERE id = %s LIMIT 1", (offer_info['semester_id'],))
-                srow = cursor.fetchone()
-                if srow:
-                    semester_code = srow.get('code')
+                semester_code = get_internship_semester_code(cursor, offer_info['semester_id'])
             _start = offer_info.get('internship_start_date')
             _end = offer_info.get('internship_end_date')
             semester_start_date = _start.strftime('%Y-%m-%d') if _start and hasattr(_start, 'strftime') else (str(_start)[:10] if _start else None)
             semester_end_date = _end.strftime('%Y-%m-%d') if _end and hasattr(_end, 'strftime') else (str(_end)[:10] if _end else None)
-            offer_semester_id = offer_info.get('offer_semester_id') if isinstance(offer_info.get('offer_semester_id'), int) else None
             cursor.execute("SELECT role, admission_year, username FROM users WHERE id = %s", (student_id,))
             user_row = cursor.fetchone()
             admission_year_val = None
@@ -737,10 +732,9 @@ def get_my_admission():
                     FROM internship_configs ic
                     LEFT JOIN semesters s ON s.id = ic.semester_id
                     WHERE (ic.user_id = %s OR (ic.user_id IS NULL AND ic.admission_year = %s))
-                      AND (ic.semester_id = %s OR %s IS NULL)
-                    ORDER BY ic.user_id DESC, ic.semester_id DESC
+                    ORDER BY ic.user_id DESC
                     LIMIT 1
-                """, (student_id, admission_year_val, offer_semester_id, offer_semester_id))
+                """, (student_id, admission_year_val))
                 ic_row = cursor.fetchone()
                 if ic_row:
                     semester_start_date = ic_row.get('intern_start_date')

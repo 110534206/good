@@ -3,18 +3,37 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>智慧實習平台 | 實習週記</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
   <style>
+    :root {
+      --primary: #0454a3;
+      --primary-light: #3b82f6;
+      --page-bg: #f4f7fb;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #dce3ef;
+      --shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
+      --shadow-soft: 0 8px 20px rgba(15, 23, 42, 0.06);
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       font-family: "Noto Sans TC", -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #f7f9fc;
-      margin: 0;
-      padding-top: 4.5rem; /* 頂端固定列預留空間（與實習心得一致） */
+      background: radial-gradient(circle at 15% 20%, rgba(91, 123, 255, 0.12), transparent 35%),
+                  radial-gradient(circle at 85% 0%, rgba(4, 84, 163, 0.12), transparent 35%),
+                  linear-gradient(180deg, #f9fbff 0%, #eef3fb 50%, #f6f7fb 100%);
+      color: var(--text);
+      min-height: 100vh;
+      padding-top: 4.5rem;
     }
+
     header {
-      background: #0454a3;
+      background: var(--primary);
       color: #fff;
       padding: 1rem 2rem;
       position: fixed;
@@ -24,28 +43,26 @@
       z-index: 1000;
       box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
     }
+
     .topbar {
       max-width: 1800px;
       margin: 0 auto;
-      padding: 0 8px;
       display: flex;
       align-items: center;
       justify-content: center;
       position: relative;
     }
-    .topbar h1 {
-      font-size: 1.5rem;
-      margin: 0;
-      color: #fff;
-    }
+
+    .topbar h1 { font-size: 1.5rem; margin: 0; color: #fff; }
+
     .top-bar-left {
       position: absolute;
       left: 0;
       display: flex;
       align-items: center;
-      justify-content: center;
       height: 100%;
     }
+
     #menu-btn {
       width: 30px;
       height: 22px;
@@ -57,16 +74,15 @@
       border: none;
       padding: 0;
     }
+
     #menu-btn span {
       display: block;
       width: 100%;
       height: 3px;
       background-color: white;
       border-radius: 2px;
-      transition: all 0.3s ease;
     }
 
-    /* 側邊選單（與實習心得、成果頁一致風格） */
     #side-menu {
       position: fixed;
       top: 0;
@@ -83,16 +99,13 @@
       z-index: 1200;
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
       color: white;
-      user-select: none;
     }
+
     #side-menu.open { transform: translateX(0); }
-    #side-menu h2 {
-      margin: 0 0 1.5rem 0;
-      font-weight: 700;
-      font-size: 1.6rem;
-    }
+
+    #side-menu h2 { margin: 0 0 1.5rem; font-size: 1.6rem; }
+
     #side-menu a {
       display: block;
       width: 100%;
@@ -101,12 +114,10 @@
       color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
-      transition: background-color 0.2s ease;
     }
-    #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.15);
-      color: #fff;
-    }
+
+    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.15); color: #fff; }
+
     #close-btn {
       position: absolute;
       top: 1.5rem;
@@ -116,117 +127,536 @@
       border: none;
       color: white;
       cursor: pointer;
-      line-height: 1;
     }
 
     main {
-      max-width: 1600px;
+      max-width: 1400px;
       margin: 0 auto;
-      padding: 24px 24px 40px;
+      padding: 24px 20px 48px;
     }
-    .page-header {
+
+    .weekly-notice {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
+      align-items: flex-start;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+      padding: 1rem 1.25rem;
+      background: linear-gradient(135deg, #e8f4fc 0%, #f0f7ff 100%);
+      border: 1px solid #b8daff;
+      border-radius: 12px;
+      color: #004085;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .weekly-notice i.bi { font-size: 1.25rem; color: #0066cc; flex-shrink: 0; }
+
+    /* 課程資訊卡片 */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
       margin-bottom: 20px;
     }
-    .page-header-title {
-      font-size: 1.4rem;
-      font-weight: 600;
-      color: #0f172a;
+
+    .summary-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      box-shadow: var(--shadow-soft);
     }
-    .page-header-subtitle {
+
+    .summary-card .label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .summary-card .value {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    .progress-bar-wrap {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+    }
+
+    .progress-header strong { color: var(--primary); }
+
+    .progress-track {
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--primary-light));
+      border-radius: 999px;
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+
+    /* 主工作區：上列表 + 下表單 */
+    .weekly-workspace {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .panel-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 1.05rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(180deg, #fafbff 0%, #fff 100%);
+    }
+
+    .panel-header i { color: var(--primary-light); }
+
+    /* 週次列表（分頁，不滾動） */
+    .week-list-panel {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .week-list {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      padding: 14px 12px 8px;
+      min-height: 100px;
+    }
+
+    .week-list-empty {
+      padding: 32px 16px;
+      text-align: center;
+      color: var(--muted);
       font-size: 0.95rem;
+    }
+
+    .week-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 8px;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+      min-width: 0;
+    }
+
+    .week-item:hover {
+      background: #f0f7ff;
+      border-color: #bfdbfe;
+    }
+
+    .week-item.active {
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+      border-color: #93c5fd;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    }
+
+    .week-item-num {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: #e2e8f0;
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .week-item.active .week-item-num {
+      background: var(--primary-light);
+      color: #fff;
+    }
+
+    .week-item.done .week-item-num {
+      background: #dcfce7;
+      color: #16a34a;
+    }
+
+    .week-item.returned .week-item-num {
+      background: #ffedd5;
+      color: #ea580c;
+    }
+
+    .week-item-body { width: 100%; min-width: 0; }
+
+    .week-item-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.35;
+      word-break: break-all;
+    }
+
+    .week-item-meta {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .week-badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 999px;
+      flex-shrink: 0;
+    }
+
+    .week-badge.pending { background: #f1f5f9; color: #64748b; }
+    .week-badge.submitted { background: #e0f2fe; color: #0369a1; }
+    .week-badge.reviewed { background: #dcfce7; color: #15803d; }
+    .week-badge.returned { background: #ffedd5; color: #c2410c; }
+
+    .week-pager {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px 12px 14px;
+      border-top: 1px solid var(--border);
+      background: #fafbff;
+    }
+
+    .week-pager-btn {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--primary);
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .week-pager-btn:hover:not(:disabled) {
+      background: #eff6ff;
+      border-color: #93c5fd;
+    }
+
+    .week-pager-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .week-pager-info {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--muted);
+      min-width: 72px;
+      text-align: center;
+    }
+
+    /* 右側編輯區 */
+    .editor-panel { min-height: 520px; display: flex; flex-direction: column; }
+
+    .editor-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 24px;
+      color: var(--muted);
+      text-align: center;
+      gap: 12px;
+    }
+
+    .editor-empty i { font-size: 3rem; color: #cbd5e1; }
+
+    .editor-empty h3 { font-size: 1.1rem; color: #475569; font-weight: 600; }
+
+    .editor-content { display: none; flex-direction: column; flex: 1; }
+    .editor-content.show { display: flex; }
+
+    .editor-head {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #fafbff 0%, #fff 100%);
+    }
+
+    .editor-head h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+
+    .editor-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .meta-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.82rem;
+      color: #475569;
+      background: #f1f5f9;
+      padding: 5px 10px;
+      border-radius: 999px;
+    }
+
+    .meta-chip i { color: var(--primary-light); font-size: 0.85rem; }
+
+    .editor-body {
+      flex: 1;
+      padding: 20px 22px;
+      overflow-y: auto;
+    }
+
+    .form-section {
+      margin-bottom: 20px;
+    }
+
+    .form-section-label {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .form-section-label .required { color: #ef4444; }
+
+    .form-control, .form-control:focus {
+      border-radius: 10px;
+      border-color: var(--border);
+      font-size: 0.95rem;
+    }
+
+    .form-control:focus {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    textarea.form-control {
+      min-height: 140px;
+      resize: vertical;
+      line-height: 1.65;
+    }
+
+    .form-control.readonly-field {
+      background: #f8fafc;
       color: #64748b;
     }
-    .btn-primary-round {
-      border-radius: 999px;
-      padding: 8px 18px;
+
+    .file-upload-zone {
+      border: 2px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      background: #f8fafc;
+      transition: border-color 0.2s;
+      cursor: pointer;
+    }
+
+    .file-upload-zone:hover { border-color: #93c5fd; background: #f0f7ff; }
+
+    .file-upload-zone i { font-size: 1.8rem; color: #94a3b8; display: block; margin-bottom: 8px; }
+
+    .file-upload-zone p { font-size: 0.88rem; color: var(--muted); margin: 0; }
+
+    .file-existing {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: #eff6ff;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      font-size: 0.9rem;
+    }
+
+    .file-existing a { color: var(--primary-light); text-decoration: none; word-break: break-all; }
+    .file-existing a:hover { text-decoration: underline; }
+
+    .teacher-section {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin-top: 8px;
+    }
+
+    .teacher-section-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #475569;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .teacher-section-title i { color: var(--primary-light); }
+
+    .teacher-section .form-section-label { color: var(--muted); }
+
+    .editor-footer {
+      padding: 16px 22px;
+      border-top: 1px solid var(--border);
+      background: #fafbff;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn-save {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      border: none;
+      color: #fff;
+      padding: 10px 28px;
+      border-radius: 10px;
+      font-weight: 600;
       font-size: 0.95rem;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-    }
-    .weekly-container-card {
-      border-radius: 16px;
-      border: 1px solid #d4d4d8;
-      background: #ffffff;
-      padding: 16px 22px 22px;
-      box-shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
-    }
-    .intern-summary-card {
-      margin-bottom: 12px;
-    }
-    .intern-summary-title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: #0f172a;
-      margin-bottom: 8px;
-    }
-    .intern-summary-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 1.1rem;
-    }
-    .intern-summary-table thead th {
-      background: #3b82f6;
-      color: #fff;
-      padding: 8px 10px;
-      text-align: center;
-      font-weight: 600;
-    }
-    .intern-summary-table tbody td {
-      padding: 6px 10px;
-      text-align: center;
-      background: #fff;
-      border-bottom: 1px solid #e5e7eb;
-      color: #0f172a;
+      transition: transform 0.15s, box-shadow 0.15s;
     }
 
-
-    /* 週記列表表格風格（參考你提供的截圖） */
-    .weekly-table-card {
-      padding: 4px 0 0;
-    }
-    .weekly-table-card-title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: #0f172a;
-      margin-bottom: 12px;
-    }
-    .weekly-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 1.1rem;
-    }
-    .weekly-table thead th {
-      background: #3b82f6;
+    .btn-save:hover {
       color: #fff;
-      padding: 8px 10px;
-      text-align: center;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(4, 84, 163, 0.3);
     }
-    .weekly-table tbody td {
-      padding: 6px 10px;
-      text-align: center;
-      border-bottom: 1px solid #e5e7eb;
-      color: #0f172a;
+
+    .btn-save:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .view-only-banner {
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      color: #92400e;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      margin-bottom: 16px;
+      display: none;
+      align-items: center;
+      gap: 8px;
     }
-    .weekly-table tbody tr:nth-child(odd) {
-      background-color: #edf2ff;
+
+    .view-only-banner.show { display: flex; }
+
+    .editor-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--border);
+      background: #fafbff;
     }
-    .weekly-table tbody tr:nth-child(even) {
-      background-color: #ffffff;
-    }
-    .weekly-table tbody tr:hover {
-      background-color: #e0f2fe;
-    }
-    .weekly-status-done {
-      color: #16a34a;
+
+    .editor-tab {
+      position: relative;
+      padding: 12px 18px;
+      border: none;
+      background: none;
+      font-size: 0.92rem;
       font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.2s, border-color 0.2s;
     }
-    .weekly-status-empty {
-      color: #9ca3af;
+
+    .editor-tab:hover { color: var(--primary); }
+
+    .editor-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary-light);
+    }
+
+    .editor-tab i { font-size: 1rem; }
+
+    .editor-tab-badge {
+      font-size: 0.68rem;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #dcfce7;
+      color: #15803d;
+      font-weight: 700;
+    }
+
+    .editor-tab-panel { display: none; }
+    .editor-tab-panel.active { display: block; }
+
+    .review-empty-hint {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .review-empty-hint i {
+      font-size: 2.2rem;
+      color: #cbd5e1;
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    @media (max-width: 992px) {
+      .week-list { grid-template-columns: repeat(3, 1fr); }
+      .summary-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 576px) {
+      .week-list { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
@@ -236,9 +666,7 @@
     <div class="topbar">
       <div class="top-bar-left">
         <button id="menu-btn" aria-label="開啟選單">
-          <span></span>
-          <span></span>
-          <span></span>
+          <span></span><span></span><span></span>
         </button>
       </div>
       <h1>實習週記</h1>
@@ -262,112 +690,165 @@
   </nav>
 
   <main>
-    <section class="weekly-container-card" aria-label="實習課程與週記">
-      <section class="intern-summary-card" aria-label="實習課程資訊">
-        <div class="intern-summary-title">實習課程資訊</div>
-        <table class="intern-summary-table">
-          <thead>
-            <tr>
-              <th style="width: 15%;">學期別</th>
-              <th style="width: 35%;">課程名稱</th>
-              <th style="width: 50%;">實習單位</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td id="weeklySemester">—</td>
-              <td id="weeklyCourseName">—</td>
-              <td id="weeklyCompanyName">—</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section class="weekly-table-card" aria-label="實習週記列表">
-        <div class="weekly-table-card-title">實習週記列表</div>
-        <div class="table-responsive">
-          <table class="weekly-table">
-            <thead>
-              <tr>
-                <th style="width: 8%;">序號</th>
-                <th style="width: 32%;">標題</th>
-                <th style="width: 18%;">應繳日期</th>
-                <th style="width: 18%;">實際繳交</th>
-                <th style="width: 14%;">批閱狀態</th>
-                <th style="width: 10%;">操作</th>
-              </tr>
-            </thead>
-            <tbody id="weeklyTableBody">
-              <!-- 週記列表將由 JavaScript 動態載入 -->
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </section>
-  </main>
-
-  <!-- 週記填寫 / 檢視 Modal -->
-  <div class="modal fade" id="weeklyDetailModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">實習週記內容</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">學期別</label>
-            <input type="text" class="form-control" id="detailSemester" readonly>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">標題</label>
-            <input type="text" class="form-control" id="detailTitle" placeholder="請輸入本週週記標題">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">實習單位</label>
-            <input type="text" class="form-control" id="detailCompany" readonly>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">實習工作記要</label>
-            <textarea class="form-control" id="detailWorkNotes" rows="4" placeholder="請描述本週主要工作內容與任務"></textarea>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">學習心得</label>
-            <textarea class="form-control" id="detailReflection" rows="4" placeholder="請分享本週的收穫、感想或需要改進之處"></textarea>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">上傳檔案</label>
-            <div id="detailFileLink" style="display:none; margin-bottom:8px;">
-              <a href="#" id="detailFileAnchor" target="_blank" style="word-break:break-all;"></a>
-            </div>
-            <input type="file" class="form-control" id="detailFileInput">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">填寫日期</label>
-            <input type="text" class="form-control" id="detailFilledAt" style="background-color:#e2e2e2;" readonly>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">老師評語</label>
-            <textarea class="form-control" id="detailTeacherComment" style="background-color:#e2e2e2; height:150px; resize:none;" readonly></textarea>
-          </div>
-          <div class="mb-0">
-            <label class="form-label">老師批閱時間</label>
-            <input type="text" class="form-control" id="detailReviewedAt" style="background-color:#e2e2e2;" readonly>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
-          <button type="button" class="btn btn-primary" id="saveWeeklyBtn">儲存</button>
-        </div>
+    {% if not weekly_journal_open %}
+    <div class="weekly-notice" role="status">
+      <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
+      <div>
+        <strong>系統尚未開放填寫</strong><br>
+        實習週記將於實習學期開放後填寫。
+        {% if intern_start_date %}預計開放日期：<strong>{{ intern_start_date }}</strong>。{% endif %}
       </div>
     </div>
-  </div>
+    {% endif %}
 
-  <!-- Bootstrap JS（供 Modal 使用） -->
+    <section class="summary-grid" aria-label="實習課程資訊">
+      <div class="summary-card">
+        <div class="label"><i class="bi bi-calendar3"></i> 學期別</div>
+        <div class="value" id="weeklySemester">—</div>
+      </div>
+      <div class="summary-card">
+        <div class="label"><i class="bi bi-book"></i> 課程名稱</div>
+        <div class="value" id="weeklyCourseName">—</div>
+      </div>
+      <div class="summary-card">
+        <div class="label"><i class="bi bi-building"></i> 實習單位</div>
+        <div class="value" id="weeklyCompanyName">—</div>
+      </div>
+    </section>
+
+    <div class="progress-bar-wrap" id="progressWrap" style="display:none;">
+      <div class="progress-header">
+        <span>繳交進度</span>
+        <strong id="progressText">0 / 0 筆</strong>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+    </div>
+
+    <div class="weekly-workspace">
+      <!-- 左：週次列表 -->
+      <aside class="panel-card week-list-panel">
+        <div class="panel-header">
+          <i class="bi bi-list-check"></i> 週記列表
+        </div>
+        <div class="week-list" id="weekListContainer">
+          <div class="week-list-empty">載入中…</div>
+        </div>
+        <div class="week-pager" id="weekPager" style="display:none;">
+          <button type="button" class="week-pager-btn" id="weekPagerPrev" aria-label="上一筆">
+            <i class="bi bi-chevron-left"></i>
+          </button>
+          <span class="week-pager-info" id="weekPagerInfo">1 / 1</span>
+          <button type="button" class="week-pager-btn" id="weekPagerNext" aria-label="下一筆">
+            <i class="bi bi-chevron-right"></i>
+          </button>
+        </div>
+      </aside>
+
+      <!-- 右：填寫表單 -->
+      <section class="panel-card editor-panel">
+        <div class="editor-empty" id="editorEmpty">
+          <i class="bi bi-journal-text"></i>
+          <h3>請從上方選擇週次</h3>
+          <p>點選週記項目後，即可在此填寫或檢視內容</p>
+        </div>
+
+        <div class="editor-content" id="editorContent">
+          <div class="editor-head">
+            <h2 id="editorTitle">—</h2>
+            <div class="editor-meta">
+              <span class="meta-chip"><i class="bi bi-calendar3"></i> <span id="detailSemester">—</span></span>
+              <span class="meta-chip"><i class="bi bi-building"></i> <span id="detailCompany">—</span></span>
+              <span class="meta-chip"><i class="bi bi-clock"></i> 應填 <span id="detailDueDate">—</span></span>
+            </div>
+          </div>
+
+          <nav class="editor-tabs" role="tablist" aria-label="週記表單分頁">
+            <button type="button" class="editor-tab active" id="tabStudent" role="tab"
+              aria-selected="true" aria-controls="panelStudent" data-tab="student">
+              <i class="bi bi-pencil-square"></i> 學生填寫
+            </button>
+            <button type="button" class="editor-tab" id="tabReview" role="tab"
+              aria-selected="false" aria-controls="panelReview" data-tab="review">
+              <i class="bi bi-person-check"></i> 批閱資訊
+              <span class="editor-tab-badge" id="reviewTabBadge" style="display:none;">已批閱</span>
+            </button>
+          </nav>
+
+          <div class="editor-body">
+            <input type="hidden" id="detailTitle" />
+
+            <div class="editor-tab-panel active" id="panelStudent" role="tabpanel" aria-labelledby="tabStudent">
+              <div class="view-only-banner" id="viewOnlyBanner">
+                <i class="bi bi-eye"></i> 此週記已繳交，目前為檢視模式
+              </div>
+
+              <div class="form-section">
+                <div class="form-section-label">
+                  <i class="bi bi-briefcase"></i> 實習工作記要 <span class="required">*</span>
+                </div>
+                <textarea class="form-control" id="detailWorkNotes" rows="6"
+                  placeholder="請描述本週主要工作內容、負責任務與完成情形…"></textarea>
+              </div>
+
+              <div class="form-section">
+                <div class="form-section-label">
+                  <i class="bi bi-lightbulb"></i> 學習心得 <span class="required">*</span>
+                </div>
+                <textarea class="form-control" id="detailReflection" rows="6"
+                  placeholder="請分享本週的收穫、感想，或需要改進之處…"></textarea>
+              </div>
+
+              <div class="form-section" id="fileSection" style="margin-bottom:0;">
+                <div class="form-section-label"><i class="bi bi-paperclip"></i> 附件上傳</div>
+                <div id="detailFileLink" class="file-existing" style="display:none;">
+                  <i class="bi bi-file-earmark"></i>
+                  <a href="#" id="detailFileAnchor" target="_blank"></a>
+                </div>
+                <label class="file-upload-zone" id="fileUploadLabel" for="detailFileInput">
+                  <i class="bi bi-cloud-arrow-up"></i>
+                  <p>點擊選擇檔案，或拖曳至此上傳</p>
+                </label>
+                <input type="file" class="d-none" id="detailFileInput" />
+              </div>
+            </div>
+
+            <div class="editor-tab-panel" id="panelReview" role="tabpanel" aria-labelledby="tabReview">
+              <div class="review-empty-hint" id="reviewEmptyHint" style="display:none;">
+                <i class="bi bi-hourglass-split"></i>
+                尚未繳交週記，批閱資訊將於繳交後由老師填寫
+              </div>
+              <div id="reviewFields">
+                <div class="form-section">
+                  <div class="form-section-label"><i class="bi bi-calendar-check"></i> 填寫日期</div>
+                  <input type="text" class="form-control readonly-field" id="detailFilledAt" readonly placeholder="尚未填寫" />
+                </div>
+                <div class="form-section">
+                  <div class="form-section-label"><i class="bi bi-chat-left-text"></i> 老師評語</div>
+                  <textarea class="form-control readonly-field" id="detailTeacherComment" rows="6" readonly
+                    placeholder="老師批閱後將顯示評語"></textarea>
+                </div>
+                <div class="form-section" style="margin-bottom:0;">
+                  <div class="form-section-label"><i class="bi bi-clock-history"></i> 老師批閱時間</div>
+                  <input type="text" class="form-control readonly-field" id="detailReviewedAt" readonly placeholder="尚未批閱" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="editor-footer" id="editorFooter">
+            <button type="button" class="btn btn-save" id="saveWeeklyBtn">
+              <i class="bi bi-check-lg"></i> 儲存週記
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
   <script>
-    // 開關側邊選單（與其他頁面一致）
     (function () {
       const menuBtn = document.getElementById('menu-btn');
       const sideMenu = document.getElementById('side-menu');
@@ -384,123 +865,279 @@
       }
     })();
 
-    // 之後會改成由後端回傳實際週記資料
-    // allWeeks: 根據學期別與學期起訖日，自動產生的「每兩週一筆」週記清單
+    const weeklyJournalOpen = {{ 'true' if weekly_journal_open else 'false' }};
+
     let allWeeks = [];
     let currentWeekId = null;
     let currentCompanyId = null;
+    let weekListPage = 0;
+    const WEEKS_PER_PAGE = 5;
 
-    const weeklyTableBody = document.getElementById('weeklyTableBody');
+    const weekListContainer = document.getElementById('weekListContainer');
+    const weekPager = document.getElementById('weekPager');
+    const weekPagerPrev = document.getElementById('weekPagerPrev');
+    const weekPagerNext = document.getElementById('weekPagerNext');
+    const weekPagerInfo = document.getElementById('weekPagerInfo');
+    const editorEmpty = document.getElementById('editorEmpty');
+    const editorContent = document.getElementById('editorContent');
+    const editorTitle = document.getElementById('editorTitle');
+    const viewOnlyBanner = document.getElementById('viewOnlyBanner');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressText = document.getElementById('progressText');
+    const progressFill = document.getElementById('progressFill');
+    let activeEditorTab = 'student';
 
-    function renderWeeklyTable(weeks) {
-      if (!weeklyTableBody) return;
-      weeklyTableBody.innerHTML = '';
-      if (!weeks || weeks.length === 0) {
-        weeklyTableBody.innerHTML = `
-          <tr>
-            <td colspan="6" class="weekly-status-empty">目前尚未有任何週記紀錄。</td>
-          </tr>
-        `;
-        return;
-      }
-      weeks.forEach((w, idx) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${idx + 1}</td>
-          <td>${w.title || ''}</td>
-          <td>${w.due_date || '—'}</td>
-          <td>${w.filled_at || '—'}</td>
-          <td>
-            <span class="${w.status === 'returned' ? 'weekly-status-empty' : w.reviewed ? 'weekly-status-done' : 'weekly-status-empty'}"
-                  style="${w.status === 'returned' ? 'color:#e67e22;font-weight:600;' : ''}">
-              ${w.status === 'returned' ? '退回修改' : w.reviewed ? '已批閱' : '未批閱'}
-            </span>
-          </td>
-          <td>
-            <button type="button"
-                    class="btn ${w.status === 'returned' ? 'btn-outline-warning' : w.filled_at ? 'btn-outline-secondary' : 'btn-outline-primary'}" style="padding:6px 18px; font-size:1rem;"
-                    onclick="handleWeeklyAction(${w.id || 'null'})">
-              ${w.status === 'returned' ? '修改' : w.filled_at ? '檢視' : '填寫'}
-            </button>
-          </td>
-        `;
-        weeklyTableBody.appendChild(tr);
+    function switchEditorTab(tabName) {
+      activeEditorTab = tabName;
+      document.querySelectorAll('.editor-tab').forEach(btn => {
+        const isActive = btn.dataset.tab === tabName;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
       });
+      document.getElementById('panelStudent')?.classList.toggle('active', tabName === 'student');
+      document.getElementById('panelReview')?.classList.toggle('active', tabName === 'review');
+      const footer = document.getElementById('editorFooter');
+      const saveBtn = document.getElementById('saveWeeklyBtn');
+      if (footer && saveBtn) {
+        footer.style.display = (tabName === 'student' && saveBtn.style.display !== 'none') ? '' : 'none';
+      }
     }
 
-    function handleWeeklyAction(id) {
-      if (!id) {
-        alert('尚未取得此週記的代號。');
+    function toChineseWeekNum(n) {
+      const digits = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+      if (n <= 0) return String(n);
+      if (n < 10) return digits[n];
+      if (n === 10) return '十';
+      if (n < 20) return '十' + digits[n - 10];
+      if (n < 30) return '二十' + digits[n - 20];
+      if (n === 30) return '三十';
+      return String(n);
+    }
+
+    /** 兩週一筆：第 1 筆 → 第一、二週實習週記，第 2 筆 → 第三、四週… */
+    function weeklyTitleLabel(periodIndex) {
+      const idx = Number(periodIndex) || 0;
+      if (idx <= 0) return '實習週記';
+      const weekStart = (idx - 1) * 2 + 1;
+      const weekEnd = idx * 2;
+      return `第${toChineseWeekNum(weekStart)}、${toChineseWeekNum(weekEnd)}週實習週記`;
+    }
+
+    function weekStatusBadge(w) {
+      if (w.status === 'returned') return { cls: 'returned', text: '退回修改' };
+      if (w.reviewed || w.status === 'reviewed') return { cls: 'reviewed', text: '已批閱' };
+      if (w.filled_at) return { cls: 'submitted', text: '已繳交' };
+      return { cls: 'pending', text: '待填寫' };
+    }
+
+    function isWeekDue(week) {
+      if (!week?.due_date) return false;
+      const due = parseLocalDate(week.due_date);
+      if (!due) return false;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      due.setHours(0, 0, 0, 0);
+      return due.getTime() <= today.getTime();
+    }
+
+    function getVisibleWeeks(weeks) {
+      if (!weeks) return [];
+      return weeks.filter(isWeekDue);
+    }
+
+    function updateProgress(weeks) {
+      const visible = getVisibleWeeks(weeks);
+      if (!visible.length) {
+        progressWrap.style.display = 'none';
         return;
       }
+      const submitted = visible.filter(w => w.filled_at).length;
+      const total = visible.length;
+      const pct = Math.round((submitted / total) * 100);
+      progressWrap.style.display = '';
+      progressText.textContent = `${submitted} / ${total} 筆`;
+      progressFill.style.width = pct + '%';
+    }
+
+    function buildWeekListItem(w) {
+      const badge = weekStatusBadge(w);
+      const item = document.createElement('div');
+      item.className = 'week-item';
+      if (w.id === currentWeekId) item.classList.add('active');
+      if (w.filled_at && w.status !== 'returned') item.classList.add('done');
+      if (w.status === 'returned') item.classList.add('returned');
+      item.dataset.weekId = w.id;
+      item.innerHTML = `
+        <div class="week-item-num">${w.week_index}</div>
+        <div class="week-item-body">
+          <div class="week-item-title">${weeklyTitleLabel(w.week_index)}</div>
+          <div class="week-item-meta">應填 ${w.due_date || '—'}</div>
+        </div>
+        <span class="week-badge ${badge.cls}">${badge.text}</span>
+      `;
+      item.addEventListener('click', () => selectWeek(w.id));
+      return item;
+    }
+
+    function getWeekListPageCount(visibleWeeks) {
+      return Math.max(1, Math.ceil(visibleWeeks.length / WEEKS_PER_PAGE));
+    }
+
+    function syncWeekListPage(visibleWeeks) {
+      const totalPages = getWeekListPageCount(visibleWeeks);
+      if (currentWeekId) {
+        const idx = visibleWeeks.findIndex(w => w.id === currentWeekId);
+        if (idx >= 0) weekListPage = Math.floor(idx / WEEKS_PER_PAGE);
+      }
+      weekListPage = Math.max(0, Math.min(weekListPage, totalPages - 1));
+    }
+
+    function updateWeekPager(visibleWeeks) {
+      const totalPages = getWeekListPageCount(visibleWeeks);
+      const showPager = visibleWeeks.length > WEEKS_PER_PAGE;
+      if (weekPager) weekPager.style.display = showPager ? '' : 'none';
+
+      if (!showPager) return;
+
+      if (weekPagerInfo) weekPagerInfo.textContent = `${weekListPage + 1} / ${totalPages}`;
+      if (weekPagerPrev) weekPagerPrev.disabled = weekListPage <= 0;
+      if (weekPagerNext) weekPagerNext.disabled = weekListPage >= totalPages - 1;
+    }
+
+    function goListPage(pageIndex) {
+      const visibleWeeks = getVisibleWeeks(allWeeks);
+      const totalPages = getWeekListPageCount(visibleWeeks);
+      if (pageIndex < 0 || pageIndex >= totalPages) return;
+      weekListPage = pageIndex;
+      const start = pageIndex * WEEKS_PER_PAGE;
+      const pageItems = visibleWeeks.slice(start, start + WEEKS_PER_PAGE);
+      if (pageItems.length) {
+        selectWeek(pageItems[0].id);
+      } else {
+        renderWeekList(allWeeks);
+      }
+    }
+
+    function renderWeekList(weeks) {
+      if (!weekListContainer) return;
+      weekListContainer.innerHTML = '';
+
+      if (!weeklyJournalOpen) {
+        if (weekPager) weekPager.style.display = 'none';
+        weekListContainer.innerHTML = '<div class="week-list-empty">系統尚未開放填寫</div>';
+        return;
+      }
+      if (!weeks || weeks.length === 0) {
+        if (weekPager) weekPager.style.display = 'none';
+        weekListContainer.innerHTML = '<div class="week-list-empty">目前尚未有任何週記紀錄</div>';
+        updateProgress(weeks);
+        return;
+      }
+
+      const visibleWeeks = getVisibleWeeks(weeks);
+      if (visibleWeeks.length === 0) {
+        if (weekPager) weekPager.style.display = 'none';
+        weekListContainer.innerHTML = '<div class="week-list-empty">目前尚無已到期的週記</div>';
+        updateProgress(weeks);
+        return;
+      }
+
+      syncWeekListPage(visibleWeeks);
+      const start = weekListPage * WEEKS_PER_PAGE;
+      visibleWeeks.slice(start, start + WEEKS_PER_PAGE).forEach(w => {
+        weekListContainer.appendChild(buildWeekListItem(w));
+      });
+      updateWeekPager(visibleWeeks);
+
+      updateProgress(weeks);
+    }
+
+    function selectWeek(id) {
+      if (!weeklyJournalOpen || !id) return;
       currentWeekId = id;
       const week = allWeeks.find(w => w.id === id);
-      const semesterEl = document.getElementById('detailSemester');
-      const titleEl = document.getElementById('detailTitle');
-      const companyEl = document.getElementById('detailCompany');
+      if (!week) return;
+
+      renderWeekList(allWeeks);
+
+      editorEmpty.style.display = 'none';
+      editorContent.classList.add('show');
+
+      const title = weeklyTitleLabel(week.week_index);
+      editorTitle.textContent = title;
+      document.getElementById('detailTitle').value = title;
+      document.getElementById('detailSemester').textContent = document.getElementById('weeklySemester')?.textContent || '—';
+      document.getElementById('detailCompany').textContent = week.company || document.getElementById('weeklyCompanyName')?.textContent || '—';
+      document.getElementById('detailDueDate').textContent = week.due_date || '—';
+
       const workEl = document.getElementById('detailWorkNotes');
       const reflectionEl = document.getElementById('detailReflection');
       const fileInput = document.getElementById('detailFileInput');
       const fileLinkDiv = document.getElementById('detailFileLink');
       const fileAnchor = document.getElementById('detailFileAnchor');
+      const fileSection = document.getElementById('fileSection');
+      const fileUploadLabel = document.getElementById('fileUploadLabel');
       const filledDateEl = document.getElementById('detailFilledAt');
       const teacherCommentEl = document.getElementById('detailTeacherComment');
       const reviewedAtEl = document.getElementById('detailReviewedAt');
-
-      if (week) {
-        titleEl.value = week.title || '';
-        companyEl.value = week.company || (document.getElementById('weeklyCompanyName')?.textContent || '');
-        workEl.value = week.work_notes || '';
-        reflectionEl.value = week.reflection || '';
-        if (week.file_name && week.file_path) {
-          fileAnchor.href = '/' + week.file_path;
-          fileAnchor.textContent = week.file_name;
-          fileLinkDiv.style.display = '';
-        } else {
-          fileLinkDiv.style.display = 'none';
-        }
-        filledDateEl.value = week.filled_at || '';
-        teacherCommentEl.value = week.teacher_comment || '';
-        reviewedAtEl.value = week.reviewed_at || '';
-      } else {
-        titleEl.value = '';
-        companyEl.value = document.getElementById('weeklyCompanyName')?.textContent || '';
-        workEl.value = '';
-        reflectionEl.value = '';
-        fileLinkDiv.style.display = 'none';
-        if (fileInput) fileInput.value = '';
-        filledDateEl.value = '';
-        teacherCommentEl.value = '';
-        reviewedAtEl.value = '';
-      }
-
-      semesterEl.value = document.getElementById('weeklySemester')?.textContent || '';
-
-      const isReturned = !!(week && week.status === 'returned');
-      const isViewOnly = !!(week && week.filled_at) && !isReturned;
       const saveBtn = document.getElementById('saveWeeklyBtn');
 
-      titleEl.readOnly = isViewOnly;
+      workEl.value = week.work_notes || '';
+      reflectionEl.value = week.reflection || '';
+      filledDateEl.value = week.filled_at || '';
+      filledDateEl.placeholder = week.filled_at ? '' : '尚未填寫';
+      teacherCommentEl.value = week.teacher_comment || '';
+      teacherCommentEl.placeholder = week.teacher_comment ? '' : '老師批閱後將顯示評語';
+      reviewedAtEl.value = week.reviewed_at || '';
+      reviewedAtEl.placeholder = week.reviewed_at ? '' : '尚未批閱';
+
+      if (week.file_name && week.file_path) {
+        fileAnchor.href = '/' + week.file_path;
+        fileAnchor.textContent = week.file_name;
+        fileLinkDiv.style.display = '';
+      } else {
+        fileLinkDiv.style.display = 'none';
+      }
+      if (fileInput) fileInput.value = '';
+
+      const isReturned = week.status === 'returned';
+      const isViewOnly = !!week.filled_at && !isReturned;
+
       workEl.readOnly = isViewOnly;
       reflectionEl.readOnly = isViewOnly;
+      viewOnlyBanner.classList.toggle('show', isViewOnly);
 
       if (isViewOnly) {
-        titleEl.style.backgroundColor = '#e2e2e2';
-        workEl.style.backgroundColor = '#e2e2e2';
-        reflectionEl.style.backgroundColor = '#e2e2e2';
-        if (fileInput) fileInput.style.display = 'none';
-        if (saveBtn) saveBtn.style.display = 'none';
+        workEl.classList.add('readonly-field');
+        reflectionEl.classList.add('readonly-field');
+        fileSection.style.display = week.file_name ? '' : 'none';
+        fileUploadLabel.style.display = 'none';
+        saveBtn.style.display = 'none';
       } else {
-        titleEl.style.backgroundColor = '';
-        workEl.style.backgroundColor = '';
-        reflectionEl.style.backgroundColor = '';
-        if (fileInput) fileInput.style.display = '';
-        if (saveBtn) saveBtn.style.display = '';
+        workEl.classList.remove('readonly-field');
+        reflectionEl.classList.remove('readonly-field');
+        fileSection.style.display = '';
+        fileUploadLabel.style.display = '';
+        saveBtn.style.display = '';
       }
 
-      const modalEl = document.getElementById('weeklyDetailModal');
-      const modal = new bootstrap.Modal(modalEl);
-      modal.show();
+      const reviewBadge = document.getElementById('reviewTabBadge');
+      const reviewEmptyHint = document.getElementById('reviewEmptyHint');
+      const reviewFields = document.getElementById('reviewFields');
+      const hasReview = !!(week.teacher_comment || week.reviewed_at || week.reviewed || week.status === 'reviewed');
+      if (reviewBadge) {
+        reviewBadge.style.display = hasReview ? '' : 'none';
+        reviewBadge.textContent = week.status === 'returned' ? '退回' : '已批閱';
+        reviewBadge.style.background = week.status === 'returned' ? '#ffedd5' : '#dcfce7';
+        reviewBadge.style.color = week.status === 'returned' ? '#c2410c' : '#15803d';
+      }
+      if (reviewEmptyHint && reviewFields) {
+        const showEmpty = !week.filled_at;
+        reviewEmptyHint.style.display = showEmpty ? '' : 'none';
+        reviewFields.style.display = showEmpty ? 'none' : '';
+      }
+
+      switchEditorTab('student');
     }
 
     async function saveWeekly() {
@@ -509,19 +1146,20 @@
         return;
       }
       const week = allWeeks.find(w => w.id === currentWeekId);
-      if (!week) {
-        alert('找不到對應的週記週次。');
-        return;
-      }
+      if (!week) return;
+
       const semester = (document.getElementById('weeklySemester')?.textContent || '').trim();
       const title = document.getElementById('detailTitle').value.trim();
       const workNotes = document.getElementById('detailWorkNotes').value.trim();
       const reflection = document.getElementById('detailReflection').value.trim();
 
-      if (!title || !workNotes || !reflection) {
-        alert('標題、實習工作記要與學習心得請勿留白。');
+      if (!workNotes || !reflection) {
+        alert('實習工作記要與學習心得請勿留白。');
         return;
       }
+
+      const saveBtn = document.getElementById('saveWeeklyBtn');
+      saveBtn.disabled = true;
 
       try {
         const formData = new FormData();
@@ -538,10 +1176,7 @@
           formData.append('file', fileInput.files[0]);
         }
 
-        const resp = await fetch('/intern_weekly/api/save', {
-          method: 'POST',
-          body: formData
-        });
+        const resp = await fetch('/intern_weekly/api/save', { method: 'POST', body: formData });
         const data = await resp.json();
         if (!data.success) {
           alert(data.message || '儲存週記失敗');
@@ -557,16 +1192,19 @@
         week.status = 'submitted';
         week.reviewed = false;
 
-        renderWeeklyTable(allWeeks);
+        renderWeekList(allWeeks);
+        selectWeek(currentWeekId);
 
-        const modalEl = document.getElementById('weeklyDetailModal');
-        const modalInstance = bootstrap.Modal.getInstance(modalEl);
-        if (modalInstance) modalInstance.hide();
-
-        alert('週記已儲存完成。');
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#15803d;color:#fff;padding:12px 20px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:9999;font-size:.95rem;display:flex;align-items:center;gap:8px;';
+        toast.innerHTML = '<i class="bi bi-check-circle-fill"></i> 週記已儲存';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2500);
       } catch (e) {
         console.warn('儲存週記失敗', e);
         alert('儲存週記失敗，請稍後再試。');
+      } finally {
+        saveBtn.disabled = false;
       }
     }
 
@@ -575,40 +1213,43 @@
       const courseEl = document.getElementById('weeklyCourseName');
       const companyEl = document.getElementById('weeklyCompanyName');
       if (!semesterEl || !courseEl || !companyEl) return;
+
       try {
         const res = await fetch('/admission/api/get_my_admission', { credentials: 'include' });
         const data = await res.json();
         if (!data || !data.success || !data.admission) return;
+
         const a = data.admission;
         const semesterCode = a.semester || a.semester_code || '—';
         semesterEl.textContent = semesterCode;
-        const courseName = a.course_name || a.course || a.courseTitle || '實習課程';
-        courseEl.textContent = courseName;
+        courseEl.textContent = a.course_name || a.course || a.courseTitle || '實習課程';
         companyEl.textContent = a.company_name || '—';
         currentCompanyId = a.company_id || null;
 
-        // 根據學期別與學期起訖日，自動產生每兩週一筆的週記清單
+        if (!weeklyJournalOpen) {
+          renderWeekList([]);
+          return;
+        }
+
         allWeeks = await generateWeeksBySemester(semesterCode);
 
-        // 從後端載入已儲存的週記內容，合併到 allWeeks
         try {
-          const listRes = await fetch(`/intern_weekly/api/my_list?semester=${encodeURIComponent(semesterCode)}`, {
-            credentials: 'include'
-          });
+          const listRes = await fetch(`/intern_weekly/api/my_list?semester=${encodeURIComponent(semesterCode)}`, { credentials: 'include' });
           const listData = await listRes.json();
-          if (listData && listData.success && Array.isArray(listData.weeklies)) {
+          if (listData?.success && Array.isArray(listData.weeklies)) {
             listData.weeklies.forEach(rec => {
               const target = allWeeks.find(w => w.week_index === rec.week_index);
               if (target) {
-                target.title = rec.title || '';
+                target.title = weeklyTitleLabel(rec.week_index);
                 target.work_notes = rec.work_notes || '';
                 target.reflection = rec.reflection || '';
-                target.due_date = rec.due_date || target.due_date;
                 target.filled_at = rec.filled_at || '';
                 target.status = rec.status || '';
                 target.reviewed = rec.status === 'reviewed';
                 target.teacher_comment = rec.teacher_comment || '';
                 target.reviewed_at = rec.reviewed_at || '';
+                target.file_name = rec.file_name || '';
+                target.file_path = rec.file_path || '';
               }
             });
           }
@@ -616,10 +1257,25 @@
           console.warn('載入既有週記紀錄失敗', e);
         }
 
-        renderWeeklyTable(allWeeks);
+        renderWeekList(allWeeks);
+
+        const visibleWeeks = getVisibleWeeks(allWeeks);
+        const firstPending = visibleWeeks.find(w => !w.filled_at || w.status === 'returned');
+        if (firstPending) {
+          selectWeek(firstPending.id);
+        } else if (visibleWeeks.length > 0) {
+          selectWeek(visibleWeeks[visibleWeeks.length - 1].id);
+        }
       } catch (e) {
         console.warn('載入實習課程資訊失敗', e);
       }
+    }
+
+    function parseLocalDate(str) {
+      if (!str) return null;
+      const parts = String(str).slice(0, 10).split('-').map(Number);
+      if (parts.length !== 3 || parts.some(n => Number.isNaN(n))) return null;
+      return new Date(parts[0], parts[1] - 1, parts[2]);
     }
 
     async function generateWeeksBySemester(semesterCode) {
@@ -627,29 +1283,23 @@
       try {
         const res = await fetch('/intern_weekly/api/intern_period', { credentials: 'include' });
         const data = await res.json();
-        if (!data || !data.success || !data.start_date) return [];
+        if (!data?.success || !data.start_date) return [];
 
-        const start = new Date(data.start_date);
-        const end = data.end_date ? new Date(data.end_date) : null;
-
-        if (isNaN(start.getTime())) return [];
+        const start = parseLocalDate(data.start_date);
+        const end = data.end_date ? parseLocalDate(data.end_date) : null;
+        if (!start || isNaN(start.getTime())) return [];
 
         const weeks = [];
         let index = 1;
         let cursor = new Date(start.getTime());
 
+        /* 以兩週為一單位：應填日期 = 各週期起始日（如 2025-02-17、2025-03-03 …） */
         while (!end || cursor <= end) {
-          const periodEnd = new Date(cursor.getTime());
-          periodEnd.setDate(periodEnd.getDate() + 13);
-          if (end && periodEnd > end) {
-            periodEnd.setTime(end.getTime());
-          }
-
           weeks.push({
             id: index,
             week_index: index,
-            title: '',
-            due_date: formatDate(periodEnd),
+            title: weeklyTitleLabel(index),
+            due_date: formatDate(cursor),
             filled_at: '',
             reviewed: false
           });
@@ -658,7 +1308,6 @@
           cursor.setDate(cursor.getDate() + 14);
           if (end && cursor > end) break;
         }
-
         return weeks;
       } catch (e) {
         console.warn('產生實習週記清單時發生錯誤', e);
@@ -673,20 +1322,29 @@
       return `${y}-${m}-${day}`;
     }
 
-    function formatMonthDay(d) {
-      const m = d.getMonth() + 1;
-      const day = d.getDate();
-      return `${m}/${day}`;
-    }
-
     document.addEventListener('DOMContentLoaded', () => {
-      loadInternSummary();
-      const saveBtn = document.getElementById('saveWeeklyBtn');
-      if (saveBtn) {
-        saveBtn.addEventListener('click', saveWeekly);
+      if (!weeklyJournalOpen) renderWeekList([]);
+
+      document.querySelectorAll('.editor-tab').forEach(btn => {
+        btn.addEventListener('click', () => switchEditorTab(btn.dataset.tab));
+      });
+
+      weekPagerPrev?.addEventListener('click', () => goListPage(weekListPage - 1));
+      weekPagerNext?.addEventListener('click', () => goListPage(weekListPage + 1));
+
+      const fileInput = document.getElementById('detailFileInput');
+      const fileUploadLabel = document.getElementById('fileUploadLabel');
+      if (fileInput && fileUploadLabel) {
+        fileInput.addEventListener('change', () => {
+          if (fileInput.files.length > 0) {
+            fileUploadLabel.querySelector('p').textContent = '已選擇：' + fileInput.files[0].name;
+          }
+        });
       }
+
+      loadInternSummary();
+      document.getElementById('saveWeeklyBtn')?.addEventListener('click', saveWeekly);
     });
   </script>
 </body>
 </html>
-

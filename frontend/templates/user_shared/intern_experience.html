@@ -3,58 +3,65 @@
 
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>智慧實習平台 | 實習心得分享</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
+    :root {
+      --primary: #0454a3;
+      --primary-light: #3b82f6;
+      --page-bg: #f4f7fb;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #dce3ef;
+      --shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
+      --shadow-soft: 0 8px 20px rgba(15, 23, 42, 0.06);
     }
 
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: "Noto Sans TC", sans-serif;
-      background: #f7f9fc;
-      margin: 0;
-      padding: 0;
-      padding-top: 4.5rem; /* 預留固定頂端列高度（與 look_company 一致） */
+      font-family: "Noto Sans TC", -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 15% 20%, rgba(91, 123, 255, 0.12), transparent 35%),
+                  radial-gradient(circle at 85% 0%, rgba(4, 84, 163, 0.12), transparent 35%),
+                  linear-gradient(180deg, #f9fbff 0%, #eef3fb 50%, #f6f7fb 100%);
+      color: var(--text);
+      min-height: 100vh;
+      padding-top: 4.5rem;
     }
 
     header {
-      background: #0454a3;
-      color: white;
+      background: var(--primary);
+      color: #fff;
       padding: 1rem 2rem;
-      font-size: 1.5rem;
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
+      top: 0; left: 0; right: 0;
       z-index: 1000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      box-shadow: 0 8px 20px rgba(0, 68, 148, 0.35);
     }
 
     .topbar {
-      max-width: 1800px;
+      max-width: 1400px;
       margin: 0 auto;
-      padding: 18px 24px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      color: #fff;
+      justify-content: center;
+      position: relative;
     }
 
-    /* 三條線選單按鈕樣式 - 與 look_company.html 一致 */
+    .topbar h1 { font-size: 1.5rem; margin: 0; color: #fff; }
+
     .top-bar-left {
       position: absolute;
-      top: 50%;
-      left: 1rem;
-      transform: translateY(-50%);
-      z-index: 1100;
+      left: 0;
+      display: flex;
+      align-items: center;
+      height: 100%;
     }
 
-    .top-bar-left #menu-btn {
+    #menu-btn {
       width: 30px;
       height: 22px;
       cursor: pointer;
@@ -66,20 +73,17 @@
       padding: 0;
     }
 
-    .top-bar-left #menu-btn span {
+    #menu-btn span {
       display: block;
       width: 100%;
       height: 3px;
       background-color: white;
       border-radius: 2px;
-      transition: all 0.3s ease;
     }
 
-    /* 側邊選單樣式（參考 intern_achievement） */
     #side-menu {
       position: fixed;
-      top: 0;
-      left: 0;
+      top: 0; left: 0;
       height: 100vh;
       width: 320px;
       max-width: 80vw;
@@ -92,341 +96,754 @@
       z-index: 1200;
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
       color: white;
-      user-select: none;
     }
 
-    #side-menu.open {
-      transform: translateX(0);
-    }
-
-    #side-menu .menu-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      margin-bottom: 0;
-    }
-
-    #side-menu h2 {
-      margin: 0 0 1.5rem 0;
-      font-weight: 700;
-      font-size: 1.6rem;
-      color: #fff;
-      padding: 0;
-      line-height: 2.4rem;
-      height: 2.4rem;
-      display: flex;
-      align-items: center;
-    }
-
-    #close-btn {
-      position: absolute;
-      top: 2rem;
-      right: 1.6rem;
-      font-size: 2.8rem;
-      font-weight: normal;
-      background: none;
-      border: none;
-      color: #fff;
-      cursor: pointer;
-      line-height: 2.4rem;
-      height: 2.5rem;
-      width: 2.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-      padding: 0;
-      margin: 0;
-    }
+    #side-menu.open { transform: translateX(0); }
+    #side-menu h2 { margin: 0 0 1.5rem; font-size: 1.6rem; }
 
     #side-menu a {
       display: block;
       width: 100%;
       padding: 0.6rem 0;
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       color: #e2e8f0;
       text-decoration: none;
       border-radius: 4px;
-      transition: background-color 0.2s ease;
     }
 
-    #side-menu a:hover {
-      background-color: rgba(255, 255, 255, 0.18);
+    #side-menu a:hover { background-color: rgba(255, 255, 255, 0.15); color: #fff; }
+
+    #close-btn {
+      position: absolute;
+      top: 1.5rem;
+      right: 1.5rem;
+      font-size: 2rem;
+      background: none;
+      border: none;
+      color: white;
+      cursor: pointer;
+    }
+
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px 20px 48px;
+    }
+
+    .page-intro {
+      margin-bottom: 20px;
+    }
+
+    .page-intro h2 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .page-intro h2 .bi {
+      color: var(--primary);
+      margin-right: 4px;
+    }
+
+    .page-intro p {
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    .content-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .exp-tabs {
+      display: flex;
+      gap: 8px;
+      padding: 16px 20px 0;
+      background: linear-gradient(180deg, #fafbff 0%, #fff 100%);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .exp-tab {
+      padding: 10px 20px;
+      border: none;
+      background: transparent;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--muted);
+      border-radius: 10px 10px 0 0;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .exp-tab:hover { color: var(--primary); }
+    .exp-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary-light);
+      background: #fff;
+    }
+
+    .tab-pane-body { padding: 20px 22px 28px; }
+
+    .filter-bar {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .filter-bar .form-control,
+    .filter-bar .form-select {
+      border-radius: 10px;
+      border-color: var(--border);
+      font-size: 0.92rem;
+    }
+
+    .filter-bar .form-control:focus,
+    .filter-bar .form-select:focus {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    .btn-search {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      border: none;
       color: #fff;
+      border-radius: 10px;
+      font-weight: 600;
+      padding: 10px 16px;
+      width: 100%;
     }
 
-    .card:hover {
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    .btn-search:hover { color: #fff; opacity: 0.92; }
+
+    .btn-add-exp {
+      background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+      border: none;
+      color: #fff;
+      border-radius: 10px;
+      font-weight: 600;
+      padding: 10px 22px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
 
-    .card .card-body {
-      min-height: 120px;
+    .btn-add-exp:hover { color: #fff; opacity: 0.92; }
+
+    /* 主從式工作區 */
+    .exp-workspace {
+      display: grid;
+      grid-template-columns: minmax(300px, 380px) 1fr;
+      gap: 16px;
+      min-height: 560px;
     }
-  
-/* ===== 美化樣式開始 ===== */
 
-.card {
-  border-radius: 18px;
-  border: none;
-}
+    .panel-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow-soft);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
 
-.experience-card {
-  transition: all .25s ease;
-}
+    .panel-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 0.98rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(180deg, #fafbff 0%, #fff 100%);
+      flex-shrink: 0;
+    }
 
-.experience-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 14px 30px rgba(0,0,0,.15);
-}
+    .panel-header i { color: var(--primary-light); }
 
-.btn {
-  border-radius: 999px;
-}
+    .list-count {
+      margin-left: auto;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: #f1f5f9;
+      padding: 3px 10px;
+      border-radius: 999px;
+    }
 
-.modal-content {
-  border-radius: 20px;
-  border: none;
-}
+    .exp-list-panel { min-height: 0; }
 
-#side-menu {
-  border-radius: 0;
-}
-/* ===== 美化樣式結束 ===== */
+    .exp-list-scroll {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+      max-height: 520px;
+    }
 
+    .exp-list-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: none;
+      border-bottom: 1px solid #eef2f7;
+      background: #fff;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
 
-/* ===== 業界等級進階美化 ===== */
+    .exp-list-item:hover { background: #f8fafc; }
 
-/* 字體與整體閱讀性 */
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-               "PingFang TC", "Noto Sans TC", sans-serif;
-}
+    .exp-list-item.active {
+      background: linear-gradient(90deg, #eff6ff 0%, #f8fbff 100%);
+      border-left: 3px solid var(--primary-light);
+      padding-left: 13px;
+    }
 
-/* 標籤頁樣式 - 與 approve_company.html 一致 */
-.nav-tabs .nav-link {
-  color: #6c757d;
-}
+    .exp-list-item-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
 
-.nav-tabs .nav-link.active {
-  color: #0066cc;
-  border-color: #0066cc #0066cc #fff;
-}
+    .exp-list-item-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.35;
+      margin: 0;
+    }
 
-/* 搜尋區卡片 */
-.filter-card {
-  background: transparent;
-  border-radius: 0;
-  padding: 18px;
-  border: none;
-  margin-bottom: 0;
-}
+    .exp-list-item-sub {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
 
-/* Tab content border - 與 approve_company.html 一致 */
-.tab-content.border {
-  border-color: #0066cc !important;
-}
+    .exp-list-item-preview {
+      font-size: 0.82rem;
+      color: #64748b;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
 
-/* 心得卡片細節 */
-.experience-card h6 {
-  font-size: 1rem;
-  font-weight: 700;
-}
-.experience-card p {
-  line-height: 1.6;
-}
-.experience-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 18px;
-  pointer-events: none;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,.04);
-}
+    .exp-list-item-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.76rem;
+      color: var(--muted);
+    }
 
-/* 按鈕樣式 - 與 approve_company.html 一致 */
-.btn-outline-primary {
-  --bs-btn-color: #0066cc;
-  --bs-btn-border-color: #0066cc;
-  --bs-btn-hover-bg: #0066cc;
-  --bs-btn-hover-color: #fff;
-}
+    .exp-list-item-foot .exp-rating { color: #f59e0b; font-weight: 600; }
 
-.btn-primary {
-  background-color: #0066cc;
-  border-color: #0066cc;
-}
+    .exp-list-empty {
+      padding: 40px 16px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
 
-.btn-primary:hover {
-  background-color: #0052a3;
-  border-color: #0052a3;
-}
+    .exp-list-empty i {
+      font-size: 2rem;
+      color: #cbd5e1;
+      display: block;
+      margin-bottom: 10px;
+    }
 
-.btn-success {
-  background: #28a745;
-  border-color: #28a745;
-}
+    .exp-pager {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px 12px 14px;
+      border-top: 1px solid var(--border);
+      background: #fafbff;
+      flex-shrink: 0;
+    }
 
-/* Modal 資訊層級 */
-.modal-title {
-  font-weight: 700;
-}
-.modal-body h5 {
-  font-weight: 700;
-  margin-bottom: 8px;
-}
+    .exp-pager-btn {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--primary);
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, border-color 0.2s;
+    }
 
-/* 側邊選單像產品後台 */
-#side-menu h2 {
-  letter-spacing: 1px;
-}
+    .exp-pager-btn:hover:not(:disabled) {
+      background: #eff6ff;
+      border-color: #93c5fd;
+    }
 
-/* 實習心得分享主內容容器額外下移一些 */
-.intern-experience-container {
-  margin-top: 6rem;
-  margin-bottom: 3rem;
-}
+    .exp-pager-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
 
-/* ===== 業界等級美化結束 ===== */
+    .exp-pager-info {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--muted);
+      min-width: 72px;
+      text-align: center;
+    }
 
-</style>
+    .exp-detail-panel { min-height: 560px; }
+
+    .detail-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 24px;
+      color: var(--muted);
+      text-align: center;
+      gap: 10px;
+    }
+
+    .detail-empty i { font-size: 3rem; color: #cbd5e1; }
+
+    .detail-empty h3 {
+      font-size: 1.1rem;
+      color: #475569;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .detail-empty p { font-size: 0.9rem; margin: 0; }
+
+    .detail-content {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .detail-content.show { display: flex; }
+
+    .detail-head {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, #fafbff 0%, #fff 100%);
+      flex-shrink: 0;
+    }
+
+    .detail-head-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .detail-head h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text);
+      margin: 0;
+      line-height: 1.35;
+    }
+
+    .detail-job {
+      font-size: 0.92rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .detail-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .meta-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.82rem;
+      color: #475569;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 999px;
+      padding: 5px 12px;
+    }
+
+    .meta-chip i { color: var(--primary-light); }
+
+    .detail-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 22px 24px;
+    }
+
+    .detail-rating-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      font-size: 0.95rem;
+    }
+
+    .detail-rating-row .stars { color: #f59e0b; letter-spacing: 1px; }
+
+    .detail-content-text {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      line-height: 1.8;
+      color: #334155;
+      white-space: pre-wrap;
+      font-size: 0.95rem;
+    }
+
+    .detail-time {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-top: 16px;
+      margin-bottom: 0;
+    }
+
+    .btn-del-exp {
+      border-radius: 10px;
+      font-size: 0.85rem;
+      padding: 6px 14px;
+      flex-shrink: 0;
+    }
+
+    .status-badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      flex-shrink: 0;
+    }
+
+    .status-badge.approved { background: #dcfce7; color: #15803d; }
+    .status-badge.pending { background: #fef3c7; color: #b45309; }
+    .status-badge.rejected { background: #fee2e2; color: #b91c1c; }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--muted);
+    }
+
+    .empty-state i {
+      font-size: 2.5rem;
+      color: #cbd5e1;
+      display: block;
+      margin-bottom: 12px;
+    }
+
+    .withdrawn-notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 1rem 1.25rem;
+      background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%);
+      border: 1px solid #fcd34d;
+      border-radius: 12px;
+      color: #92400e;
+      font-size: 0.95rem;
+      margin-bottom: 20px;
+    }
+
+    .modal-content {
+      border-radius: 16px;
+      border: none;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .modal-header {
+      border-bottom: 1px solid var(--border);
+      padding: 18px 22px;
+    }
+
+    .modal-header.add-header {
+      background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
+      color: #fff;
+      border-bottom: none;
+    }
+
+    .modal-header.add-header .btn-close {
+      filter: brightness(0) invert(1);
+    }
+
+    .modal-title { font-weight: 700; }
+
+    .modal-body { padding: 22px; }
+
+    .form-control, .form-select {
+      border-radius: 10px;
+      border-color: var(--border);
+    }
+
+    .form-control:focus, .form-select:focus {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    .readonly-field { background: #f8fafc !important; color: #64748b; }
+
+    @media (max-width: 992px) {
+      .exp-workspace {
+        grid-template-columns: 1fr;
+        min-height: auto;
+      }
+
+      .exp-list-scroll { max-height: 300px; }
+      .exp-detail-panel { min-height: 400px; }
+    }
+
+    @media (max-width: 768px) {
+      .exp-tabs { flex-wrap: wrap; }
+    }
+  </style>
 </head>
 
-<body class="p-0" data-user-id="{{ user_id or 0 }}" data-initial-company-id="{{ initial_company_id or '' }}">
+<body data-user-id="{{ user_id or 0 }}" data-initial-company-id="{{ initial_company_id or '' }}">
   <header>
-    <div class="top-bar-left">
-      <div id="menu-btn" title="選單" role="button" tabindex="0" aria-label="開啟側邊選單">
-        <span></span><span></span><span></span>
+    <div class="topbar">
+      <div class="top-bar-left">
+        <button id="menu-btn" type="button" aria-label="開啟選單">
+          <span></span><span></span><span></span>
+        </button>
       </div>
+      <h1>實習心得分享</h1>
     </div>
-    實習心得分享
   </header>
 
-  <div class="container intern-experience-container">
-    <!-- 分頁標籤 -->
-    <ul class="nav nav-tabs" id="experienceTabs" role="tablist">
-      <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all-experiences" type="button" role="tab" aria-controls="all-experiences" aria-selected="true">
-          所有心得
+  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
+    <button id="close-btn" type="button" aria-label="關閉功能選單">×</button>
+    <h2>功能選單</h2>
+    <a href="/student_home">首頁</a>
+    <a href="/profile">個人資料</a>
+    <a href="/resume_folders">履歷管理</a>
+    <a href="/fill_preferences">填寫志願序</a>
+    <a href="/look_company">投遞履歷</a>
+    <a href="/notifications">通知</a>
+    <a href="/interview_schedule">行事曆</a>
+    <a href="/intern_achievement">學生媒合結果</a>
+    <a href="/intern_weekly">實習週記</a>
+    <a href="/intern_experience">實習心得</a>
+    <a href="/logout">登出</a>
+  </nav>
+
+  <main>
+    <section class="page-intro">
+      <h2><i class="bi bi-chat-square-heart"></i> 實習心得交流</h2>
+      <p>瀏覽學長姐的實習經驗，或分享你的實習故事</p>
+    </section>
+
+    <section class="content-card">
+      <div class="exp-tabs" role="tablist">
+        <button class="exp-tab active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all-experiences"
+          type="button" role="tab" aria-controls="all-experiences" aria-selected="true">
+          <i class="bi bi-grid"></i> 所有心得
         </button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="my-tab" data-bs-toggle="tab" data-bs-target="#my-experiences" type="button" role="tab" aria-controls="my-experiences" aria-selected="false">
-          我的心得
+        <button class="exp-tab" id="my-tab" data-bs-toggle="tab" data-bs-target="#my-experiences"
+          type="button" role="tab" aria-controls="my-experiences" aria-selected="false">
+          <i class="bi bi-person-lines-fill"></i> 我的心得
         </button>
-      </li>
-    </ul>
-
-    <!-- 分頁內容 -->
-    <div class="tab-content border p-3 bg-white" id="experienceTabContent">
-      <!-- 所有心得分頁（退實習生仍可瀏覽，查看其他人的心得） -->
-      <div class="tab-pane fade show active" id="all-experiences" role="tabpanel" aria-labelledby="all-tab">
-        <div class="filter-card"><div class="row g-3">
-          <div class="col-md-3">
-            <input id="searchKeyword" class="form-control" placeholder="搜尋公司名稱...">
-          </div>
-          <div class="col-md-3">
-            <select id="filterCompany" class="form-select">
-              <option value="">選擇公司</option>
-            </select>
-          </div>
-          <div class="col-md-2">
-            <select id="filterYear" class="form-select">
-              <option value="">選擇學年</option>
-            </select>
-          </div>
-          <div class="col-md-2">
-            <button id="btnSearch" class="btn btn-primary w-100">搜尋</button>
-          </div>
-        </div></div>
-        <div id="experienceList" class="row g-3 mt-3"></div>
-        <nav aria-label="所有心得分頁" id="allExperiencesPagination" class="mt-4"></nav>
       </div>
 
-      <!-- 我的心得分頁 -->
-      <div class="tab-pane fade" id="my-experiences" role="tabpanel" aria-labelledby="my-tab">
-        <div class="filter-card"><div class="row g-3">
-          <div class="col-md-12 text-end">
-            <button id="btnAddExperience" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal">+ 上傳心得</button>
+      <div class="tab-content" id="experienceTabContent">
+        <div class="tab-pane fade show active" id="all-experiences" role="tabpanel" aria-labelledby="all-tab">
+          <div class="tab-pane-body">
+            <div class="filter-bar">
+              <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                  <label class="form-label small text-muted mb-1"><i class="bi bi-search"></i> 關鍵字</label>
+                  <input id="searchKeyword" class="form-control" placeholder="搜尋公司名稱…">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small text-muted mb-1"><i class="bi bi-building"></i> 公司</label>
+                  <select id="filterCompany" class="form-select">
+                    <option value="">選擇公司</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label small text-muted mb-1"><i class="bi bi-calendar3"></i> 學年</label>
+                  <select id="filterYear" class="form-select">
+                    <option value="">選擇學年</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <button id="btnSearch" class="btn btn-search w-100"><i class="bi bi-search"></i> 搜尋</button>
+                </div>
+              </div>
+            </div>
+            <div class="exp-workspace">
+              <aside class="panel-card exp-list-panel">
+                <div class="panel-header">
+                  <i class="bi bi-list-ul"></i> 心得列表
+                  <span class="list-count" id="allListCount"></span>
+                </div>
+                <div class="exp-list-scroll" id="experienceList"></div>
+                <div class="exp-pager" id="allExperiencesPagination" style="display:none;" aria-label="所有心得分頁"></div>
+              </aside>
+              <section class="panel-card exp-detail-panel">
+                <div class="detail-empty" id="allDetailEmpty">
+                  <i class="bi bi-journal-text"></i>
+                  <h3>請從列表選擇心得</h3>
+                  <p>點選列表項目後，即可在此閱讀完整內容</p>
+                </div>
+                <div class="detail-content" id="allDetailContent">
+                  <div class="detail-head">
+                    <div class="detail-head-top">
+                      <div>
+                        <h2 id="allDetailCompany">—</h2>
+                        <div class="detail-job" id="allDetailJob">—</div>
+                      </div>
+                    </div>
+                    <div class="detail-meta">
+                      <span class="meta-chip"><i class="bi bi-person"></i> <span id="allDetailAuthor">—</span></span>
+                      <span class="meta-chip"><i class="bi bi-calendar3"></i> 學年 <span id="allDetailYear">—</span></span>
+                      <span class="meta-chip"><i class="bi bi-cash-stack"></i> <span id="allDetailSalary">—</span></span>
+                    </div>
+                  </div>
+                  <div class="detail-body">
+                    <div class="detail-rating-row" id="allDetailRating"></div>
+                    <div class="detail-content-text" id="allDetailText"></div>
+                    <p class="detail-time"><i class="bi bi-clock"></i> 發表時間：<span id="allDetailCreated"></span></p>
+                  </div>
+                </div>
+              </section>
+            </div>
           </div>
-        </div></div>
-        <div id="withdrawnNotice" style="display: none; text-align: center; font-size: 1.4rem; color: #6c757d; padding: 80px 0;">您已退實習，無法新增心得。</div>
-        <div id="myExperienceList" class="row g-3 mt-3"></div>
-        <nav aria-label="我的心得分頁" id="myExperiencesPagination" class="mt-4"></nav>
-      </div>
-    </div>
-  </div>
+        </div>
 
-  <!-- 查看心得 Modal -->
-  <div class="modal fade" id="viewModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">心得內容</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <h5 id="modalCompany"></h5>
-          <p class="text-muted">職缺：<span id="modalJob"></span>｜薪資：<span id="modalSalary"></span>｜發表者：<span id="modalAuthor"></span>｜學年：<span
-              id="modalYear"></span></p>
-          <p id="modalContent"></p>
-          <p class="text-muted small">發表時間：<span id="modalCreated"></span></p>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+        <div class="tab-pane fade" id="my-experiences" role="tabpanel" aria-labelledby="my-tab">
+          <div class="tab-pane-body">
+            <div class="d-flex justify-content-end mb-3">
+              <button id="btnAddExperience" class="btn btn-add-exp" data-bs-toggle="modal" data-bs-target="#addModal">
+                <i class="bi bi-plus-lg"></i> 上傳心得
+              </button>
+            </div>
+            <div id="withdrawnNotice" class="withdrawn-notice" style="display:none;">
+              <i class="bi bi-exclamation-triangle-fill"></i>
+              <span>您已退實習，無法新增心得，但仍可瀏覽「所有心得」。</span>
+            </div>
+            <div class="exp-workspace">
+              <aside class="panel-card exp-list-panel">
+                <div class="panel-header">
+                  <i class="bi bi-list-ul"></i> 我的心得
+                  <span class="list-count" id="myListCount"></span>
+                </div>
+                <div class="exp-list-scroll" id="myExperienceList"></div>
+                <div class="exp-pager" id="myExperiencesPagination" style="display:none;" aria-label="我的心得分頁"></div>
+              </aside>
+              <section class="panel-card exp-detail-panel">
+                <div class="detail-empty" id="myDetailEmpty">
+                  <i class="bi bi-journal-plus"></i>
+                  <h3>請從列表選擇心得</h3>
+                  <p>點選列表項目後，即可在此檢視或管理您的心得</p>
+                </div>
+                <div class="detail-content" id="myDetailContent">
+                  <div class="detail-head">
+                    <div class="detail-head-top">
+                      <div>
+                        <h2 id="myDetailCompany">—</h2>
+                        <div class="detail-job" id="myDetailJob">—</div>
+                      </div>
+                      <div class="d-flex align-items-center gap-2">
+                        <span id="myDetailStatus"></span>
+                        <button type="button" class="btn btn-outline-danger btn-del-exp" id="myDetailDeleteBtn" style="display:none;">
+                          <i class="bi bi-trash"></i> 刪除
+                        </button>
+                      </div>
+                    </div>
+                    <div class="detail-meta">
+                      <span class="meta-chip"><i class="bi bi-calendar3"></i> 學年 <span id="myDetailYear">—</span></span>
+                      <span class="meta-chip"><i class="bi bi-cash-stack"></i> <span id="myDetailSalary">—</span></span>
+                    </div>
+                  </div>
+                  <div class="detail-body">
+                    <div class="detail-rating-row" id="myDetailRating"></div>
+                    <div class="detail-content-text" id="myDetailText"></div>
+                    <p class="detail-time"><i class="bi bi-clock"></i> 發表時間：<span id="myDetailCreated"></span></p>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  </div>
+    </section>
+  </main>
 
   <!-- 新增心得 Modal -->
   <div class="modal fade" id="addModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
       <div class="modal-content">
-        <div class="modal-header bg-success text-white">
-          <h5 class="modal-title">新增實習心得</h5>
+        <div class="modal-header add-header">
+          <h5 class="modal-title"><i class="bi bi-plus-circle"></i> 新增實習心得</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
           <form id="addForm">
-            <div class="mb-3">
-              <label class="form-label">公司</label>
-              <input type="text" class="form-control" id="company_name_display" readonly style="background-color: #e9ecef;">
-              <input type="hidden" id="company_id" required>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">公司</label>
+                <input type="text" class="form-control readonly-field" id="company_name_display" readonly>
+                <input type="hidden" id="company_id" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">職缺</label>
+                <input type="text" class="form-control readonly-field" id="job_title_display" readonly>
+                <input type="hidden" id="job_id" required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">學年</label>
+                <input type="text" class="form-control readonly-field" id="year" readonly required>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">評分 (1~5)</label>
+                <select class="form-select" id="rating" required>
+                  <option value="">請選擇評分</option>
+                  <option value="1">1 分</option>
+                  <option value="2">2 分</option>
+                  <option value="3">3 分</option>
+                  <option value="4">4 分</option>
+                  <option value="5">5 分</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="form-label">心得內容</label>
+                <textarea class="form-control" id="content" rows="6" required placeholder="分享你的實習經驗、學習收穫與建議…"></textarea>
+              </div>
             </div>
-
-            <div class="mb-3">
-              <label class="form-label">職缺</label>
-              <input type="text" class="form-control" id="job_title_display" readonly style="background-color: #e9ecef;">
-              <input type="hidden" id="job_id" required>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">學年</label>
-              <input type="text" class="form-control" id="year" placeholder="學年" readonly required style="background-color: #e9ecef;">
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">評分 (1~5)</label>
-              <select class="form-select" id="rating" required>
-                <option value="">請選擇評分</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-              </select>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">心得內容</label>
-              <textarea class="form-control" id="content" rows="5" required></textarea>
-            </div>
-
-            <div class="d-flex justify-content-end">
-              <button type="submit" class="btn btn-success px-4">送出</button>
+            <div class="d-flex justify-content-end mt-4">
+              <button type="submit" class="btn btn-add-exp px-4"><i class="bi bi-send"></i> 送出</button>
             </div>
           </form>
         </div>
@@ -449,10 +866,35 @@ body {
     // 是否已退實習（退實習後不可新增心得，既有心得唯讀）
     let isWithdrawn = false;
     
-    // 分頁狀態
+    // 分頁與選取狀態
     let allExperiencesPage = 1;
     let myExperiencesPage = 1;
-    const perPage = 12;
+    const perPage = 10;
+    let allExperiencesCache = [];
+    let myExperiencesCache = [];
+    let selectedAllExpId = null;
+    let selectedMyExpId = null;
+
+    const TAB_CONFIG = {
+      all: {
+        listId: 'experienceList',
+        countId: 'allListCount',
+        pagerId: 'allExperiencesPagination',
+        emptyId: 'allDetailEmpty',
+        contentId: 'allDetailContent',
+        showDelete: false,
+        showStatus: false
+      },
+      my: {
+        listId: 'myExperienceList',
+        countId: 'myListCount',
+        pagerId: 'myExperiencesPagination',
+        emptyId: 'myDetailEmpty',
+        contentId: 'myDetailContent',
+        showDelete: true,
+        showStatus: true
+      }
+    };
 
     // 產生民國年下拉 (近 6 年)
     async function populateYearSelect(selectId) {
@@ -644,104 +1086,183 @@ body {
     // 載入職缺的函數（已不再需要，因為職缺資訊直接從錄取資訊中獲取）
     // 此函數保留以備不時之需，但現在不會被調用
 
-    // 渲染心得卡片
-    function renderExperienceCard(item, container, showDelete = false) {
-      const company = item.company_name || '未填寫公司';
-      const job = item.job_title ? `／${item.job_title}` : '';
-      const yearText = item.year ? `${item.year}` : '--';
-      const rating = item.rating ? item.rating : '--';
-      // 判斷審核狀態（僅在「我的心得」分頁顯示）
-      const isPublic = item.is_public === 1 || item.is_public === '1' || item.is_public === true;
-      // 判斷是否已退件：檢查 status = 'rejected' 或 is_rejected 或 is_public === 2
-      const isRejected = (item.status && item.status.toLowerCase() === 'rejected') ||
-                         item.is_rejected === true || item.is_rejected === 1 || item.is_rejected === '1' || 
-                         item.is_public === 2 || item.is_public === '2';
-      let statusBadge = '';
-      if (showDelete) {
-        if (isRejected) {
-          statusBadge = `<span class="badge bg-danger">已退件</span>`;
-        } else if (isPublic) {
-          statusBadge = `<span class="badge bg-success">已通過</span>`;
-        } else {
-          statusBadge = `<span class="badge bg-warning">待審核</span>`;
-        }
-      }
-      // 只在明確傳入 showDelete = true 時才顯示刪除按鈕（僅在「我的心得」分頁）
-      const card = document.createElement('div');
-      card.className = 'col-md-4';
-      card.innerHTML = `
-        <div class="card experience-card p-3 position-relative">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-              <h6 class="mb-0">${company} ${job}</h6>
-              ${statusBadge}
-            </div>
-            <p class="text-muted mb-2">學年 ${yearText} ｜ 評分 ${rating} ⭐</p>
-            <p class="small text-truncate">${(item.content || '').slice(0, 200)}</p>
-            <div class="mt-3 d-flex justify-content-between align-items-center">
-              <button class="btn btn-outline-primary btn-sm" onclick="viewExp(${item.id})">查看</button>
-              ${showDelete ? `
-                <button class="btn btn-danger btn-sm" onclick="deleteExp(${item.id})">刪除</button>
-              ` : ''}
-            </div>
-          </div>
-        </div>`;
-      container.appendChild(card);
+    function escapeHtml(text) {
+      return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    // 渲染分頁控件
-    function renderPagination(containerId, currentPage, totalPages, onPageChange) {
+    function getExperienceStatus(item) {
+      const isPublic = item.is_public === 1 || item.is_public === '1' || item.is_public === true;
+      const isRejected = (item.status && item.status.toLowerCase() === 'rejected') ||
+        item.is_rejected === true || item.is_rejected === 1 || item.is_rejected === '1' ||
+        item.is_public === 2 || item.is_public === '2';
+      if (isRejected) return { key: 'rejected', label: '已退件', className: 'rejected' };
+      if (isPublic) return { key: 'approved', label: '已通過', className: 'approved' };
+      return { key: 'pending', label: '待審核', className: 'pending' };
+    }
+
+    function getRatingStars(rating) {
+      if (!rating && rating !== 0) return { stars: '—', value: '—' };
+      const num = parseInt(rating, 10) || 0;
+      return { stars: '★'.repeat(Math.min(5, num)), value: rating };
+    }
+
+    function getStatusBadgeHtml(item, showStatus) {
+      if (!showStatus) return '';
+      const status = getExperienceStatus(item);
+      return `<span class="status-badge ${status.className}">${status.label}</span>`;
+    }
+
+    function buildListItem(item, tab, selectedId) {
+      const company = escapeHtml(item.company_name || '未填寫公司');
+      const job = item.job_title ? escapeHtml(item.job_title) : '';
+      const yearText = item.year ? `${item.year}` : '—';
+      const { stars, value: rating } = getRatingStars(item.rating);
+      const preview = escapeHtml((item.content || '').replace(/\s+/g, ' ').trim());
+      const cfg = TAB_CONFIG[tab];
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `exp-list-item${String(selectedId) === String(item.id) ? ' active' : ''}`;
+      btn.dataset.id = item.id;
+      btn.innerHTML = `
+        <div class="exp-list-item-head">
+          <h6 class="exp-list-item-title">${company}</h6>
+          ${getStatusBadgeHtml(item, cfg.showStatus)}
+        </div>
+        ${job ? `<div class="exp-list-item-sub">${job}</div>` : ''}
+        <div class="exp-list-item-preview">${preview || '（無內容）'}</div>
+        <div class="exp-list-item-foot">
+          <span><i class="bi bi-calendar3"></i> ${yearText}</span>
+          <span class="exp-rating"><i class="bi bi-star-fill"></i> ${stars} (${rating})</span>
+        </div>`;
+      btn.addEventListener('click', () => selectExperience(item.id, tab));
+      return btn;
+    }
+
+    function renderListEmpty(container, message, icon) {
+      container.innerHTML = `
+        <div class="exp-list-empty">
+          <i class="bi bi-${icon}"></i>
+          <p>${escapeHtml(message)}</p>
+        </div>`;
+    }
+
+    function renderExperienceList(items, tab, selectedId) {
+      const cfg = TAB_CONFIG[tab];
+      const container = document.getElementById(cfg.listId);
+      const countEl = document.getElementById(cfg.countId);
+      if (!container) return;
+
+      container.innerHTML = '';
+      if (countEl) countEl.textContent = items.length ? `${items.length} 筆` : '';
+
+      if (!items.length) {
+        renderListEmpty(container, tab === 'my' ? '尚無心得' : '找不到符合條件的心得', tab === 'my' ? 'journal-plus' : 'inbox');
+        clearDetailPanel(tab);
+        return;
+      }
+
+      items.forEach(item => container.appendChild(buildListItem(item, tab, selectedId)));
+    }
+
+    function renderCompactPagination(containerId, currentPage, totalPages, onPageChange) {
       const container = document.getElementById(containerId);
       if (!container) return;
-      
+
       if (totalPages <= 1) {
+        container.style.display = 'none';
         container.innerHTML = '';
         return;
       }
-      
-      let html = '<ul class="pagination justify-content-center">';
-      
-      // 上一頁按鈕
-      html += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">`;
-      html += `<a class="page-link" href="#" onclick="event.preventDefault(); ${currentPage > 1 ? `onPageChange(${currentPage - 1})` : ''}">上一頁</a>`;
-      html += '</li>';
-      
-      // 頁碼按鈕
-      const maxVisible = 5;
-      let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-      let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-      
-      if (endPage - startPage < maxVisible - 1) {
-        startPage = Math.max(1, endPage - maxVisible + 1);
+
+      container.style.display = 'flex';
+      container.innerHTML = `
+        <button type="button" class="exp-pager-btn" data-action="prev" aria-label="上一頁" ${currentPage <= 1 ? 'disabled' : ''}>
+          <i class="bi bi-chevron-left"></i>
+        </button>
+        <span class="exp-pager-info">${currentPage} / ${totalPages}</span>
+        <button type="button" class="exp-pager-btn" data-action="next" aria-label="下一頁" ${currentPage >= totalPages ? 'disabled' : ''}>
+          <i class="bi bi-chevron-right"></i>
+        </button>`;
+
+      container.querySelector('[data-action="prev"]')?.addEventListener('click', () => {
+        if (currentPage > 1) onPageChange(currentPage - 1);
+      });
+      container.querySelector('[data-action="next"]')?.addEventListener('click', () => {
+        if (currentPage < totalPages) onPageChange(currentPage + 1);
+      });
+    }
+
+    function clearDetailPanel(tab) {
+      const cfg = TAB_CONFIG[tab];
+      document.getElementById(cfg.emptyId).style.display = '';
+      document.getElementById(cfg.contentId).classList.remove('show');
+      if (tab === 'all') selectedAllExpId = null;
+      if (tab === 'my') selectedMyExpId = null;
+    }
+
+    function renderDetailPanel(item, tab) {
+      const cfg = TAB_CONFIG[tab];
+      const prefix = tab;
+      document.getElementById(cfg.emptyId).style.display = 'none';
+      document.getElementById(cfg.contentId).classList.add('show');
+
+      const company = item.company_name || '未填寫公司';
+      const job = item.job_title || '—';
+      const year = item.year || '—';
+      const salary = item.job_salary || '—';
+      const { stars, value: rating } = getRatingStars(item.rating);
+
+      document.getElementById(`${prefix}DetailCompany`).textContent = company;
+      document.getElementById(`${prefix}DetailJob`).textContent = job;
+      document.getElementById(`${prefix}DetailYear`).textContent = year;
+      document.getElementById(`${prefix}DetailSalary`).textContent = salary;
+      document.getElementById(`${prefix}DetailText`).textContent = item.content || '';
+      document.getElementById(`${prefix}DetailCreated`).textContent = formatDateTime(item.created_at) || '—';
+      document.getElementById(`${prefix}DetailRating`).innerHTML =
+        `<span class="stars">${stars}</span><span>${rating} / 5</span>`;
+
+      if (tab === 'all') {
+        document.getElementById('allDetailAuthor').textContent = item.author || '—';
       }
-      
-      if (startPage > 1) {
-        html += `<li class="page-item"><a class="page-link" href="#" onclick="event.preventDefault(); onPageChange(1)">1</a></li>`;
-        if (startPage > 2) {
-          html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+
+      if (tab === 'my') {
+        const statusEl = document.getElementById('myDetailStatus');
+        const deleteBtn = document.getElementById('myDetailDeleteBtn');
+        statusEl.innerHTML = getStatusBadgeHtml(item, true);
+        const canDelete = cfg.showDelete && !isWithdrawn;
+        if (deleteBtn) {
+          deleteBtn.style.display = canDelete ? '' : 'none';
+          deleteBtn.onclick = () => deleteExp(item.id);
         }
       }
-      
-      for (let i = startPage; i <= endPage; i++) {
-        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">`;
-        html += `<a class="page-link" href="#" onclick="event.preventDefault(); onPageChange(${i})">${i}</a>`;
-        html += '</li>';
+
+      if (window.matchMedia('(max-width: 992px)').matches) {
+        document.getElementById(cfg.contentId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
-      
-      if (endPage < totalPages) {
-        if (endPage < totalPages - 1) {
-          html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-        }
-        html += `<li class="page-item"><a class="page-link" href="#" onclick="event.preventDefault(); onPageChange(${totalPages})">${totalPages}</a></li>`;
+    }
+
+    function selectExperience(id, tab) {
+      const cache = tab === 'all' ? allExperiencesCache : myExperiencesCache;
+      const item = cache.find(row => String(row.id) === String(id));
+      if (!item) return;
+
+      if (tab === 'all') selectedAllExpId = id;
+      else selectedMyExpId = id;
+
+      renderExperienceList(cache, tab, id);
+      renderDetailPanel(item, tab);
+    }
+
+    function syncSelectionAfterLoad(tab, items) {
+      const selectedId = tab === 'all' ? selectedAllExpId : selectedMyExpId;
+      const stillExists = selectedId && items.some(row => String(row.id) === String(selectedId));
+      if (stillExists) {
+        selectExperience(selectedId, tab);
+      } else if (items.length) {
+        selectExperience(items[0].id, tab);
+      } else {
+        clearDetailPanel(tab);
       }
-      
-      // 下一頁按鈕
-      html += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">`;
-      html += `<a class="page-link" href="#" onclick="event.preventDefault(); ${currentPage < totalPages ? `onPageChange(${currentPage + 1})` : ''}">下一頁</a>`;
-      html += '</li>';
-      
-      html += '</ul>';
-      container.innerHTML = html;
     }
 
     // 載入心得列表（所有心得）；退實習生仍可查看其他人的心得，不因 isWithdrawn 而阻擋
@@ -772,30 +1293,31 @@ body {
         const data = await res.json();
         console.log('[載入心得] API 回應:', data);
         
-        const list = document.getElementById('experienceList');
-        list.innerHTML = '';
-
         if (data.success && data.data && data.data.length > 0) {
-          data.data.forEach(item => {
-            // 在「所有心得」頁面，即使是自己上傳的心得也不顯示刪除按鈕
-            renderExperienceCard(item, list, false);
-          });
-          
-          // 渲染分頁控件
+          allExperiencesCache = data.data;
+          syncSelectionAfterLoad('all', allExperiencesCache);
+
           if (data.total_pages && data.total_pages > 0) {
-            renderPagination('allExperiencesPagination', data.page, data.total_pages, (page) => {
+            renderCompactPagination('allExperiencesPagination', data.page, data.total_pages, (page) => {
+              allExperiencesPage = page;
               loadExperiences(page);
             });
+          } else {
+            document.getElementById('allExperiencesPagination').style.display = 'none';
           }
         } else {
-          list.innerHTML = '<p class="text-muted">找不到資料</p>';
-          document.getElementById('allExperiencesPagination').innerHTML = '';
+          allExperiencesCache = [];
+          renderExperienceList([], 'all', null);
+          clearDetailPanel('all');
+          document.getElementById('allExperiencesPagination').style.display = 'none';
         }
       } catch (error) {
         console.error('[載入心得] 發生錯誤:', error);
+        allExperiencesCache = [];
         const list = document.getElementById('experienceList');
-        list.innerHTML = `<p class="text-danger">載入失敗: ${error.message}<br>請檢查網路連線或重新整理頁面</p>`;
-        document.getElementById('allExperiencesPagination').innerHTML = '';
+        renderListEmpty(list, `載入失敗：${error.message}`, 'exclamation-circle');
+        clearDetailPanel('all');
+        document.getElementById('allExperiencesPagination').style.display = 'none';
       }
     }
 
@@ -822,42 +1344,36 @@ body {
         const data = await res.json();
         console.log('[載入我的心得] API 回應:', data);
         
-        const list = document.getElementById('myExperienceList');
-        list.innerHTML = '';
-
         if (data.success && data.data && data.data.length > 0) {
-          data.data.forEach(item => {
-            // 調試：打印退件狀態
-            if (item.is_public === 2 || item.is_public === '2' || item.is_rejected) {
-              console.log('[退件心得]', {
-                id: item.id,
-                company: item.company_name,
-                is_public: item.is_public,
-                is_rejected: item.is_rejected
-              });
-            }
-            renderExperienceCard(item, list, !isWithdrawn); // 已退實習時不顯示刪除按鈕（唯讀）
-          });
-          
-          // 渲染分頁控件
+          myExperiencesCache = data.data;
+          syncSelectionAfterLoad('my', myExperiencesCache);
+
           if (data.total_pages && data.total_pages > 0) {
-            renderPagination('myExperiencesPagination', data.page, data.total_pages, (page) => {
+            renderCompactPagination('myExperiencesPagination', data.page, data.total_pages, (page) => {
+              myExperiencesPage = page;
               loadMyExperiences(page);
             });
+          } else {
+            document.getElementById('myExperiencesPagination').style.display = 'none';
           }
         } else {
-          if (isWithdrawn) {
-            list.innerHTML = '';
-          } else {
-            list.innerHTML = '<p class="text-muted">您還沒有上傳任何心得</p>';
-          }
-          document.getElementById('myExperiencesPagination').innerHTML = '';
+          myExperiencesCache = [];
+          const list = document.getElementById('myExperienceList');
+          const emptyMsg = isWithdrawn
+            ? '尚無心得紀錄'
+            : '您還沒有上傳任何心得，點右上角「上傳心得」開始分享';
+          renderListEmpty(list, emptyMsg, 'journal-plus');
+          document.getElementById('myListCount').textContent = '';
+          clearDetailPanel('my');
+          document.getElementById('myExperiencesPagination').style.display = 'none';
         }
       } catch (error) {
         console.error('[載入我的心得] 發生錯誤:', error);
+        myExperiencesCache = [];
         const list = document.getElementById('myExperienceList');
-        list.innerHTML = `<p class="text-danger">載入失敗: ${error.message}<br>請檢查網路連線或重新整理頁面</p>`;
-        document.getElementById('myExperiencesPagination').innerHTML = '';
+        renderListEmpty(list, `載入失敗：${error.message}`, 'exclamation-circle');
+        clearDetailPanel('my');
+        document.getElementById('myExperiencesPagination').style.display = 'none';
       }
     }
 
@@ -888,25 +1404,7 @@ body {
       }
     }
 
-    // 取得單篇內容並顯示
-    async function viewExp(id) {
-      const res = await fetch(`/intern_experience/api/view/${id}`);
-      const data = await res.json();
-      if (data.success && data.data) {
-        document.getElementById('modalCompany').innerText = data.data.company_name || '未填寫公司';
-        document.getElementById('modalJob').innerText = data.data.job_title || '';
-        document.getElementById('modalSalary').innerText = data.data.job_salary || '—';
-        document.getElementById('modalAuthor').innerText = data.data.author || '';
-        document.getElementById('modalYear').innerText = data.data.year || '';
-        document.getElementById('modalContent').innerText = data.data.content || '';
-        document.getElementById('modalCreated').innerText = formatDateTime(data.data.created_at) || '';
-        new bootstrap.Modal(document.getElementById('viewModal')).show();
-      } else {
-        alert('取得內容失敗');
-      }
-    }
-
-    // 刪除心得（按鈕出現在自己的心得卡片）
+    // 刪除心得（詳情面板）
     async function deleteExp(id) {
       const confirmed = await showConfirmModal(
         '刪除心得',
@@ -920,7 +1418,7 @@ body {
       const data = await res.json();
       if (data.success) {
         await showResultModal('刪除心得', '心得已刪除。');
-        // 重新載入兩個分頁的心得
+        selectedMyExpId = null;
         loadExperiences();
         loadMyExperiences();
       } else {
@@ -1070,11 +1568,13 @@ body {
     // 綁定篩選事件 - 所有心得分頁
     document.getElementById('btnSearch').addEventListener('click', function() {
       allExperiencesPage = 1;
+      selectedAllExpId = null;
       loadExperiences();
     });
     document.getElementById('filterCompany').addEventListener('change', function () {
       selectedCompanyId = this.value;
       allExperiencesPage = 1;
+      selectedAllExpId = null;
       loadExperiences();
     });
 
@@ -1085,17 +1585,27 @@ body {
     const allTab = document.getElementById('all-tab');
     const myTab = document.getElementById('my-tab');
     
+    function syncExpTabActive(targetId) {
+      document.querySelectorAll('.exp-tab').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-bs-target') === targetId);
+      });
+    }
+
     allTab.addEventListener('shown.bs.tab', function () {
+      syncExpTabActive('#all-experiences');
       loadExperiences();
     });
-    
+
     myTab.addEventListener('shown.bs.tab', function () {
+      syncExpTabActive('#my-experiences');
       loadMyExperiences();
     });
 
     // 支援 Enter 鍵搜尋
     document.getElementById('searchKeyword').addEventListener('keypress', function (e) {
       if (e.key === 'Enter') {
+        allExperiencesPage = 1;
+        selectedAllExpId = null;
         loadExperiences();
       }
     });
@@ -1168,23 +1678,6 @@ body {
       }
     });
   </script>
-
-  <!-- 側邊選單 -->
-  <nav id="side-menu" aria-hidden="true" role="navigation" aria-label="功能選單">
-      <button id="close-btn" aria-label="關閉功能選單">×</button>
-    <h2>功能選單</h2>
-    <a href="/student_home">首頁</a>
-    <a href="/profile">個人資料</a>
-    <a href="/resume_folders">履歷管理</a>
-    <a href="/fill_preferences">填寫志願序</a>
-    <a href="/look_company">投遞履歷</a>
-    <a href="/notifications">通知</a>
-    <a href="/interview_schedule">行事曆</a>
-    <a href="/intern_achievement">學生媒合結果</a>
-    <a href="/intern_weekly">實習週記</a>
-    <a href="/intern_experience">實習心得</a>
-    <a href="/logout">登出</a>
-  </nav>
 </body>
 
 </html>

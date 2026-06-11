@@ -192,6 +192,23 @@ def get_internship_semester_dates(cursor, flow_semester_id):
 
 
 # =========================================================
+# Helper: 依流程學期取得「實習學期」代碼（1131 → 1132）
+# =========================================================
+def get_internship_semester_code(cursor, flow_semester_id):
+    """流程學期 id → 實習學期代碼。上學期（末位 1）對應同學年下學期（末位 2）。"""
+    if not flow_semester_id:
+        return None
+    cursor.execute("SELECT code FROM semesters WHERE id = %s", (flow_semester_id,))
+    row = cursor.fetchone()
+    if not row:
+        return None
+    code = str(row.get("code") or "").strip()
+    if len(code) < 4:
+        return None
+    return code[:-1] + "2" if code[-1] == "1" else code
+
+
+# =========================================================
 # Helper: 公司開放狀態使用的學期代碼（實習在下學期，媒合在上學期完成，故下學期沿用上學期開放）
 # =========================================================
 def get_semester_code_for_company_openings(cursor):
@@ -244,7 +261,7 @@ def get_student_internship_config(cursor, user_id):
                 pass
     if admission_year_val is not None:
         cursor.execute(
-            """SELECT semester_id, intern_end_date FROM internship_configs
+            """SELECT semester_id, intern_start_date, intern_end_date FROM internship_configs
                WHERE (user_id = %s OR (user_id IS NULL AND admission_year = %s))
                ORDER BY user_id DESC
                LIMIT 1""",
@@ -252,7 +269,7 @@ def get_student_internship_config(cursor, user_id):
         )
     else:
         cursor.execute(
-            """SELECT semester_id, intern_end_date FROM internship_configs WHERE user_id = %s LIMIT 1""",
+            """SELECT semester_id, intern_start_date, intern_end_date FROM internship_configs WHERE user_id = %s LIMIT 1""",
             (user_id,)
         )
     return cursor.fetchone()
@@ -279,6 +296,23 @@ def is_student_in_application_phase(cursor, user_id):
         return True
     prev_id = get_previous_semester_id(cursor, internship_semester_id)
     return prev_id is not None and current_semester_id == prev_id
+
+
+# =========================================================
+# Helper: 實習週記是否已開放填寫（當前學期 = 該生實習學期）
+# =========================================================
+def is_weekly_journal_open(cursor, user_id):
+    """實習週記開放條件：當前學期（is_active=1）等於該生 internship_configs.semester_id。"""
+    current_semester_id = get_current_semester_id(cursor)
+    if not current_semester_id:
+        return False
+    config = get_student_internship_config(cursor, user_id)
+    if not config:
+        return False
+    internship_semester_id = config.get("semester_id")
+    if not internship_semester_id:
+        return False
+    return current_semester_id == internship_semester_id
 
 
 # =========================================================
